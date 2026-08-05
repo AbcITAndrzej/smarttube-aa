@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Safe defaults used by all original TV flavors. -->
+    <bool name="mobile_touch_navigation_enabled">false</bool>
+    <bool name="mobile_haptic_feedback_enabled">false</bool>
+    <bool name="mobile_settings_ui_adaptation_enabled">false</bool>
+    <integer name="mobile_ui_scale_percent">100</integer>
+    <integer name="mobile_navigation_step_dp">64</integer>
+    <integer name="mobile_edge_width_dp">28</integer>
+    <integer name="mobile_edge_back_trigger_dp">72</integer>
+    <integer name="mobile_min_touch_target_dp">48</integer>
+    <integer name="mobile_min_text_sp">16</integer>
+    <integer name="mobile_tablet_min_short_side_dp">600</integer>
+    <integer name="mobile_tablet_settings_pane_max_width_dp">720</integer>
+</resources>

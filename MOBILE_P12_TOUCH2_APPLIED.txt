@@ -1,0 +1,9 @@
+﻿SmartTube Mobile P12 Touch2
+- successful P11 original UI retained
+- collapsed sidebar uses full content width
+- edge swipe/back opens sidebar
+- left swipe or content-side tap closes sidebar
+- settings/info are immersive fullscreen
+- player top-area tap toggles controls
+- horizontal player swipe seeks
+- screen-off playback keeps engine and a bounded partial wake lock

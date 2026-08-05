@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="mobile_screen_horizontal_padding">24dp</dimen>
+    <dimen name="mobile_media_thumbnail_width">224dp</dimen>
+    <dimen name="mobile_media_thumbnail_height">126dp</dimen>
+    <dimen name="mobile_media_card_min_height">142dp</dimen>
+    <dimen name="mobile_setting_row_min_height">80dp</dimen>
+</resources>

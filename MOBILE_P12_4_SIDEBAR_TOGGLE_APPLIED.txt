@@ -1,0 +1,10 @@
+﻿SmartTube Mobile P12.4 Sidebar Toggle SAFE
+Applied: 2026-07-30 13:50:53
+
+- new round hamburger button before the search button
+- one tap opens the left sidebar
+- next tap closes the left sidebar
+- existing edge swipe and outside-tap behavior remains active
+- uses the existing Leanback headers transition and P12 dock cleanup
+- P12.3 center play/pause remains untouched
+- version suffix: -mobile-p12-touch2-hf4

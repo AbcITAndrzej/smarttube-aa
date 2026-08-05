@@ -1,0 +1,373 @@
+package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.legacy;
+
+import android.app.Activity;
+import android.content.Context;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.View;
+import com.google.android.exoplayer2.C;
+import com.google.android.exoplayer2.DefaultRenderersFactory;
+import com.google.android.exoplayer2.ExoPlaybackException;
+import com.google.android.exoplayer2.Player;
+import com.google.android.exoplayer2.SimpleExoPlayer;
+import com.google.android.exoplayer2.trackselection.AdaptiveTrackSelection;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
+import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.ChatReceiver;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.SeekBarSegment;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.ExoPlayerInitializer;
+import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
+import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.background.MobileMediaSessionManager;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBackgroundPlaybackRepository;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlaybackRepository;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Native-mobile bridge to SmartTube's existing playback controllers. It implements PlaybackView
+ * without importing Leanback, while the real video surface is an ExoPlayer PlayerView supplied by
+ * LegacyMobilePlayerViewBinder.
+ */
+public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepository,
+        MobileBackgroundPlaybackRepository, PlaybackView,
+        com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.PlayerView {
+    private static final long SNAPSHOT_INTERVAL_MS = 500;
+    private final Context applicationContext;
+    private final LegacyMediaIndex index;
+    private final LegacyErrorMapper errors;
+    private final LegacyTrackMapper trackMapper = new LegacyTrackMapper();
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final MobileMediaSessionManager mediaSessionManager;
+    private WeakReference<Context> hostContext = new WeakReference<>(null);
+    private WeakReference<com.google.android.exoplayer2.ui.PlayerView> surface = new WeakReference<>(null);
+    private Listener listener;
+    private PlaybackPresenter presenter;
+    private ExoPlayerController controller;
+    private ExoPlayerInitializer initializer;
+    private DefaultTrackSelector trackSelector;
+    private SimpleExoPlayer player;
+    private Video video;
+    private boolean initialized;
+    private boolean engineBlocked;
+    private boolean overlayShown;
+    private boolean suggestionsShown;
+    private boolean controlsShown = true;
+    private boolean buffering;
+    private int resizeMode;
+    private String qualityInfo = "";
+    private String pendingMediaId;
+    private long pendingStartPositionMs;
+
+    private final Player.EventListener stateListener = new Player.EventListener() {
+        @Override public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
+            buffering = playbackState == Player.STATE_BUFFERING;
+            emitSnapshot();
+        }
+
+        @Override public void onPlayerError(ExoPlaybackException error) {
+            Listener current = listener;
+            if (current != null) current.onPlaybackError(errors.playback(error));
+        }
+    };
+
+    private final Runnable ticker = new Runnable() {
+        @Override public void run() {
+            if (player == null) return;
+            emitSnapshot();
+            main.postDelayed(this, SNAPSHOT_INTERVAL_MS);
+        }
+    };
+
+    public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index, LegacyErrorMapper errors) {
+        this.applicationContext = context.getApplicationContext();
+        this.index = index;
+        this.errors = errors;
+        this.mediaSessionManager = new MobileMediaSessionManager(applicationContext,
+                new MobileMediaSessionManager.PlaybackControl() {
+                    @Override public void playFromSystem() { setPlayWhenReady(true); }
+                    @Override public void pauseFromSystem() { setPlayWhenReady(false); }
+                    @Override public void seekToFromSystem(long positionMs) {
+                        setPositionMs(Math.max(0L, positionMs));
+                        emitSnapshot();
+                    }
+                    @Override public void setVolumeMultiplier(float multiplier) {
+                        setVolume(Math.max(0f, Math.min(1f, multiplier)));
+                    }
+                });
+    }
+
+    void attachSurface(Context context, com.google.android.exoplayer2.ui.PlayerView playerView) {
+        hostContext = new WeakReference<>(context);
+        MobileDiagnostics.debug("DataPlayer", "attachSurface");
+        surface = new WeakReference<>(playerView);
+        playerView.setUseController(false);
+        playerView.setResizeMode(resizeMode);
+        ensureEngine();
+        // Refresh the singleton presenter's context after Activity recreation.
+        presenter = PlaybackPresenter.instance(context);
+        presenter.setView(this);
+        playerView.setPlayer(player);
+        if (pendingMediaId != null) {
+            String mediaId = pendingMediaId;
+            long startPositionMs = pendingStartPositionMs;
+            pendingMediaId = null;
+            pendingStartPositionMs = 0;
+            prepareNow(mediaId, startPositionMs);
+        }
+    }
+
+    void detachSurface(com.google.android.exoplayer2.ui.PlayerView playerView) {
+        if (playerView != null) playerView.setPlayer(null);
+        if (surface.get() == playerView) surface.clear();
+        hostContext.clear();
+    }
+
+    @Override public void setListener(Listener value) {
+        listener = value;
+        emitSnapshot();
+    }
+
+    @Override public void prepare(String mediaId, long startPositionMs) {
+        if (mediaId == null || mediaId.trim().isEmpty()) {
+            notifyError(new IllegalArgumentException("Missing media id"));
+            return;
+        }
+        // The ViewModel is created before Fragment.onViewCreated(), therefore the real PlayerView
+        // surface and Activity context may not exist yet. Defer engine startup until bind().
+        if (surface.get() == null || hostContext.get() == null) {
+            pendingMediaId = mediaId;
+            pendingStartPositionMs = Math.max(0, startPositionMs);
+            MobileDiagnostics.debug("DataPlayer", "prepare deferred until surface bind: " + mediaId);
+            return;
+        }
+        prepareNow(mediaId, startPositionMs);
+    }
+
+    private void prepareNow(String mediaId, long startPositionMs) {
+        try {
+            ensureEngine();
+            MobileDiagnostics.info("DataPlayer", "prepare mediaId=" + mediaId + " start=" + startPositionMs);
+            Video resolved = index.get(mediaId);
+            if (resolved == null) {
+                String raw = mediaId.startsWith("video:") ? mediaId.substring(6) : mediaId;
+                resolved = Video.from(raw);
+            }
+            resolved.pendingPosMs = Math.max(0, startPositionMs);
+            setVideo(resolved);
+            presenter.onNewVideo(resolved); // Deliberately avoids openVideo(), which starts the TV activity.
+            emitSnapshot();
+        } catch (Throwable error) {
+            notifyError(error);
+        }
+    }
+
+    @Override public void play() { mediaSessionManager.requestPlay(); }
+    @Override public void pause() { mediaSessionManager.pauseByUser(); }
+    @Override public void seekTo(long positionMs) { setPositionMs(Math.max(0, positionMs)); emitSnapshot(); }
+    @Override public void seekBy(long deltaMs) { seekTo(Math.max(0, getPositionMs() + deltaMs)); }
+    @Override public void setPlaybackSpeed(float speed) { setSpeed(speed); emitSnapshot(); }
+
+    @Override public void selectAudioTrack(String trackId) {
+        FormatItem item = trackMapper.find(getAudioFormats(), trackId);
+        if (item != null) setFormat(item);
+    }
+
+    @Override public void selectSubtitleTrack(String trackId) {
+        FormatItem item = trackMapper.find(getSubtitleFormats(), trackId);
+        if (item != null) setFormat(item);
+    }
+
+    @Override public void release() {
+        MobileDiagnostics.debug("DataPlayer", "release");
+        mediaSessionManager.release();
+        main.removeCallbacks(ticker);
+        if (presenter != null && initialized) {
+            presenter.onViewPaused();
+            presenter.onEngineReleased();
+            presenter.onViewDestroyed();
+            presenter.setView(null);
+        }
+        com.google.android.exoplayer2.ui.PlayerView view = surface.get();
+        if (view != null) view.setPlayer(null);
+        surface.clear();
+        if (player != null) player.removeListener(stateListener);
+        if (initializer != null) initializer.release();
+        if (controller != null) controller.release();
+        player = null;
+        controller = null;
+        initializer = null;
+        trackSelector = null;
+        presenter = null;
+        video = null;
+        initialized = false;
+        buffering = false;
+        listener = null;
+        pendingMediaId = null;
+        pendingStartPositionMs = 0;
+        hostContext.clear();
+    }
+
+    private void ensureEngine() {
+        if (initialized && player != null) return;
+        Context context = hostContext.get();
+        if (context == null) context = applicationContext;
+        MobileDiagnostics.debug("DataPlayer", "initialize engine");
+        initializer = new ExoPlayerInitializer(context);
+        trackSelector = new DefaultTrackSelector(new AdaptiveTrackSelection.Factory());
+        player = initializer.createPlayer(context, new DefaultRenderersFactory(context), trackSelector);
+        // Keep CPU and network awake while the mediaPlayback foreground service owns playback.
+        player.setHandleWakeLock(true);
+        player.addListener(stateListener);
+        presenter = PlaybackPresenter.instance(context);
+        presenter.setView(this);
+        controller = new ExoPlayerController(context, presenter);
+        controller.setTrackSelector(trackSelector);
+        controller.setPlayer(player);
+        controller.setPlayerView(this);
+        presenter.onViewCreated();
+        presenter.onViewInitialized();
+        presenter.onEngineInitialized();
+        presenter.onViewResumed();
+        com.google.android.exoplayer2.ui.PlayerView view = surface.get();
+        if (view != null) view.setPlayer(player);
+        initialized = true;
+        main.removeCallbacks(ticker);
+        main.post(ticker);
+    }
+
+    private void notifyError(Throwable error) {
+        MobileDiagnostics.error("DataPlayer", "player bridge failure", error);
+        Listener current = listener;
+        if (current != null) current.onPlaybackError(errors.playback(error));
+    }
+
+    private void emitSnapshot() {
+        long position = Math.max(0, getPositionMs());
+        long duration = Math.max(0, getDurationMs());
+        long buffered = player == null ? 0 : Math.max(0, player.getBufferedPosition());
+        List<MobileTrack> audio = controller == null ? Collections.emptyList()
+                : trackMapper.map(controller.getAudioFormats(), MobileTrack.Type.AUDIO);
+        List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
+                : trackMapper.map(controller.getSubtitleFormats(), MobileTrack.Type.SUBTITLE);
+        String id = video == null ? null : LegacyMediaMapper.stableId(video);
+        MobilePlaybackSnapshot snapshot = new MobilePlaybackSnapshot(id,
+                video == null ? "" : LegacyMediaMapper.safe(video.getTitleFull()),
+                video == null ? "" : LegacyMediaMapper.safe(video.getSecondTitleFull()),
+                containsMedia(), isPlaying(), buffering || isLoading(), position, duration, buffered,
+                getSpeed(), audio, subtitles);
+        mediaSessionManager.updatePlayback(snapshot);
+        Listener current = listener;
+        if (current != null) current.onPlaybackSnapshot(snapshot);
+    }
+
+    @Override public void setHostVisible(boolean visible) {
+        mediaSessionManager.setHostVisible(visible);
+    }
+
+    @Override public boolean isBackgroundPlaybackEnabled() {
+        return mediaSessionManager.isBackgroundPlaybackEnabled();
+    }
+
+    // PlaybackView / PlayerEngine delegation.
+    @Override public void openSabr(MediaItemFormatInfo info) { if (controller != null) controller.openSabr(info); }
+    @Override public void openDash(MediaItemFormatInfo info) { if (controller != null) controller.openDash(info); }
+    @Override public void openDash(InputStream manifest) { if (controller != null) controller.openDash(manifest); }
+    @Override public void openDashUrl(String url) { if (controller != null) controller.openDashUrl(url); }
+    @Override public void openHlsUrl(String url) { if (controller != null) controller.openHlsUrl(url); }
+    @Override public void openUrlList(List<String> urls) { if (controller != null) controller.openUrlList(urls); }
+    @Override public void openMerged(MediaItemFormatInfo info, String hls) { if (controller != null) controller.openMerged(info, hls); }
+    @Override public void openMerged(InputStream dash, String hls) { if (controller != null) controller.openMerged(dash, hls); }
+    @Override public long getPositionMs() { return controller == null ? 0 : controller.getPositionMs(); }
+    @Override public void setPositionMs(long positionMs) { if (controller != null) controller.setPositionMs(positionMs); }
+    @Override public long getDurationMs() { return controller == null ? 0 : controller.getDurationMs(); }
+    @Override public void setPlayWhenReady(boolean play) { if (controller != null) controller.setPlayWhenReady(play); }
+    @Override public boolean getPlayWhenReady() { return controller != null && controller.getPlayWhenReady(); }
+    @Override public boolean isPlaying() { return controller != null && controller.isPlaying(); }
+    @Override public boolean isLoading() { return controller != null && controller.isLoading(); }
+    @Override public List<FormatItem> getVideoFormats() { return controller == null ? Collections.emptyList() : controller.getVideoFormats(); }
+    @Override public List<FormatItem> getAudioFormats() { return controller == null ? Collections.emptyList() : controller.getAudioFormats(); }
+    @Override public List<FormatItem> getSubtitleFormats() { return controller == null ? Collections.emptyList() : controller.getSubtitleFormats(); }
+    @Override public void setFormat(FormatItem option) { if (controller != null) controller.selectFormat(option); emitSnapshot(); }
+    @Override public FormatItem getVideoFormat() { return controller == null ? null : controller.getVideoFormat(); }
+    @Override public FormatItem getAudioFormat() { return controller == null ? null : controller.getAudioFormat(); }
+    @Override public FormatItem getSubtitleFormat() { return controller == null ? null : controller.getSubtitleFormat(); }
+    @Override public boolean isEngineInitialized() { return player != null; }
+    @Override public void restartEngine() { Video current = video; long position = getPositionMs(); releaseEngineOnly(); if (current != null) prepare(LegacyMediaMapper.stableId(current), position); }
+    @Override public void reloadPlayback() { if (presenter != null) { presenter.onEngineReleased(); presenter.onEngineInitialized(); } }
+    @Override public void blockEngine(boolean block) { engineBlocked = block; }
+    @Override public boolean isEngineBlocked() { return engineBlocked; }
+    @Override public boolean isInPIPMode() { Context c = hostContext.get(); return Build.VERSION.SDK_INT >= 24 && c instanceof Activity && ((Activity)c).isInPictureInPictureMode(); }
+    @Override public boolean containsMedia() { return controller != null && controller.containsMedia(); }
+    @Override public void setSpeed(float speed) { if (controller != null) controller.setSpeed(speed); }
+    @Override public float getSpeed() { float value = controller == null ? 1f : controller.getSpeed(); return value <= 0 ? 1f : value; }
+    @Override public void setPitch(float pitch) { if (controller != null) controller.setPitch(pitch); }
+    @Override public float getPitch() { return controller == null ? 1f : controller.getPitch(); }
+    @Override public void setVolume(float volume) { if (controller != null) controller.setVolume(volume); }
+    @Override public float getVolume() { return controller == null ? 1f : controller.getVolume(); }
+    @Override public void setResizeMode(int mode) { resizeMode = mode; com.google.android.exoplayer2.ui.PlayerView v = surface.get(); if (v != null) v.setResizeMode(mode); }
+    @Override public int getResizeMode() { return resizeMode; }
+    @Override public void setZoomPercents(int percents) { }
+    @Override public void setAspectRatio(float ratio) { }
+    @Override public void setRotationAngle(int angle) { View v = surface.get(); if (v != null) v.setRotation(angle); }
+    @Override public void setVideoFlipEnabled(boolean enabled) { View v = surface.get(); if (v != null) v.setScaleX(enabled ? -1f : 1f); }
+    @Override public void setVideoGravity(int gravity) { View v = surface.get(); if (v != null && v.getLayoutParams() instanceof android.widget.FrameLayout.LayoutParams) ((android.widget.FrameLayout.LayoutParams)v.getLayoutParams()).gravity = gravity; }
+
+    // PlayerManager and PlayerUI state. Mobile controls own presentation, so TV-only operations are no-ops.
+    @Override public void setVideo(Video item) { video = item; if (controller != null) controller.setVideo(item); emitSnapshot(); }
+    @Override public Video getVideo() { return video; }
+    @Override public void finish() { release(); }
+    @Override public void finishReally() { release(); }
+    @Override public void showBackground(String url) { }
+    @Override public void showBackgroundColor(int colorResId) { }
+    @Override public void resetPlayerState() { if (controller != null) controller.resetPlayerState(); }
+    @Override public boolean isEmbed() { return true; }
+    @Override public void updateSuggestions(VideoGroup group) { }
+    @Override public void removeSuggestions(VideoGroup group) { }
+    @Override public int getSuggestionsIndex(VideoGroup group) { return -1; }
+    @Override public VideoGroup getSuggestionsByIndex(int index) { return null; }
+    @Override public void focusSuggestedItem(int index) { }
+    @Override public void focusSuggestedItem(Video video) { }
+    @Override public void resetSuggestedPosition() { }
+    @Override public boolean isSuggestionsEmpty() { return true; }
+    @Override public void clearSuggestions() { }
+    @Override public void showOverlay(boolean show) { overlayShown = show; }
+    @Override public boolean isOverlayShown() { return overlayShown; }
+    @Override public void showSuggestions(boolean show) { suggestionsShown = show; }
+    @Override public boolean isSuggestionsShown() { return suggestionsShown; }
+    @Override public void showControls(boolean show) { controlsShown = show; }
+    @Override public boolean isControlsShown() { return controlsShown; }
+    @Override public int getButtonState(int buttonId) { return BUTTON_OFF; }
+    @Override public void setButtonState(int buttonId, int buttonState) { }
+    @Override public void setChannelIcon(String iconUrl) { }
+    @Override public void setSeekPreviewTitle(String title) { }
+    @Override public void setNextTitle(Video nextVideo) { }
+    @Override public void showDebugInfo(boolean show) { }
+    @Override public void showSubtitles(boolean show) { }
+    @Override public void loadStoryboard() { }
+    @Override public void setTitle(String title) { }
+    @Override public void showProgressBar(boolean show) { buffering = show; emitSnapshot(); }
+    @Override public void setSeekBarSegments(List<SeekBarSegment> segments) { }
+    @Override public void updateEndingTime() { }
+    @Override public void setChatReceiver(ChatReceiver receiver) { }
+    @Override public void setQualityInfo(String info) { qualityInfo = info == null ? "" : info; }
+
+    private void releaseEngineOnly() {
+        main.removeCallbacks(ticker);
+        if (presenter != null && initialized) presenter.onEngineReleased();
+        if (player != null) player.removeListener(stateListener);
+        if (initializer != null) initializer.release();
+        if (controller != null) controller.release();
+        player = null; controller = null; initializer = null; trackSelector = null; initialized = false;
+    }
+}

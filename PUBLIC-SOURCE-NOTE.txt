@@ -1,0 +1,6 @@
+SmartTube AA public source snapshot
+
+This public tree is generated from the working project by SMARTUBE-GITHUB-HELPER-v1.bat.
+Generated build folders, local SDK settings and broken historical gitfiles are excluded.
+SharedModules and MediaServiceCore are included as regular source directories.
+Original LICENSE and upstream attribution files must remain in the repository.

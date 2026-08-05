@@ -1,0 +1,13 @@
+package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract;
+
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileBrowsePayload;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileError;
+
+public interface MobileBrowseRepository {
+    MobileRequest loadBrowse(String pageId, MobileResultCallback<MobileBrowsePayload> callback);
+
+    default MobileRequest loadItem(String itemId, MobileResultCallback<MobileBrowsePayload> callback) {
+        if (callback != null) callback.onError(MobileError.unconfigured("MobileBrowseRepository.loadItem"));
+        return MobileRequest.NONE;
+    }
+}

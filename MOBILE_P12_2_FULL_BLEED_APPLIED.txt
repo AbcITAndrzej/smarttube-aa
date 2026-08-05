@@ -1,0 +1,7 @@
+﻿SmartTube Mobile P12.2 Full Bleed
+- no visible Leanback headers shadow strip
+- edge swipe only; edge tap/double-tap disabled
+- actual portrait display width used for grid columns
+- short grids clamp to viewport edges
+- Android stretch overscroll disabled
+- compact settings cards

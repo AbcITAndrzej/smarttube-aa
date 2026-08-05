@@ -1,0 +1,8 @@
+﻿SmartTube Mobile P12.3 Center Play/Pause SAFE
+Applied: 2026-07-30 13:18:55
+
+- single tap in center 34 percent of video toggles pause/play
+- bottom 30 percent remains reserved for original controls
+- horizontal swipe seeking remains unchanged
+- 320 ms debounce prevents immediate pause/resume
+- project and kit overlay SHA256: 7e3f87830b90d56c2579a55c21912f2e4eb9916401da17d735e83994d1058709

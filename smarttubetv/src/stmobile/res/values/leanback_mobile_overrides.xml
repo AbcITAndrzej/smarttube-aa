@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Leanback defaults were designed for viewing from a sofa and use
+         14sp primary / 12sp secondary preference text. Mobile keeps the same
+         structure but makes every setting readable at arm's length. -->
+    <dimen name="lb_preference_item_primary_text_size">18sp</dimen>
+    <dimen name="lb_preference_item_secondary_text_size">16sp</dimen>
+    <dimen name="lb_preference_category_text_size">16sp</dimen>
+    <dimen name="lb_preference_decor_title_text_size">22sp</dimen>
+
+    <!-- Narrower horizontal padding leaves room for long translated labels,
+         while generous vertical spacing produces stable 56dp+ rows. -->
+    <dimen name="lb_preference_item_padding_start">16dp</dimen>
+    <dimen name="lb_preference_item_padding_end">16dp</dimen>
+    <dimen name="lb_preference_item_icon_margin_end">12dp</dimen>
+    <dimen name="lb_preference_item_primary_text_margin_bottom">4dp</dimen>
+    <dimen name="lb_preference_item_text_space_top">12dp</dimen>
+    <dimen name="lb_preference_item_text_space_bottom">12dp</dimen>
+    <dimen name="lb_preference_category_height">48dp</dimen>
+    <dimen name="lb_preference_decor_title_margin_end">16dp</dimen>
+
+    <!-- Kept as a safe fallback. The mobile layout starts MATCH_PARENT and
+         MobileUiCompatibility applies a 720dp maximum on tablets. -->
+    <dimen name="lb_settings_pane_width">720dp</dimen>
+</resources>

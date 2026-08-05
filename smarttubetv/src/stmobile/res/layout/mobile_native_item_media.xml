@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="4dp"
+    android:layout_marginBottom="4dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:minHeight="@dimen/mobile_media_card_min_height"
+    app:cardBackgroundColor="?attr/colorSurface"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="1dp"
+    app:rippleColor="?attr/colorControlHighlight"
+    app:strokeColor="@color/mobile_outline"
+    app:strokeWidth="1dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/mobile_media_card_min_height"
+        android:padding="8dp">
+
+        <com.google.android.material.imageview.ShapeableImageView
+            android:id="@+id/mobile_thumbnail"
+            android:layout_width="@dimen/mobile_media_thumbnail_width"
+            android:layout_height="@dimen/mobile_media_thumbnail_height"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.SmartTube.Mobile.Thumbnail" />
+
+        <TextView
+            android:id="@+id/mobile_duration"
+            style="@style/TextAppearance.SmartTube.Mobile.Duration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="4dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/mobile_duration_background"
+            android:minHeight="20dp"
+            android:paddingStart="5dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="5dp"
+            android:paddingBottom="2dp"
+            app:layout_constraintBottom_toBottomOf="@id/mobile_thumbnail"
+            app:layout_constraintEnd_toEndOf="@id/mobile_thumbnail" />
+
+        <TextView
+            android:id="@+id/mobile_title"
+            style="@style/TextAppearance.SmartTube.Mobile.TitleMedium"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/mobile_thumbnail"
+            app:layout_constraintTop_toTopOf="@id/mobile_thumbnail" />
+
+        <TextView
+            android:id="@+id/mobile_subtitle"
+            style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_marginTop="6dp"
+            android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="3"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/mobile_thumbnail"
+            app:layout_constraintTop_toBottomOf="@id/mobile_title" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</com.google.android.material.card.MaterialCardView>

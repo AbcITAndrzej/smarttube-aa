@@ -1,0 +1,58 @@
+package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.legacy;
+
+import android.content.Context;
+import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.*;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
+import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
+
+/** Production Part 7 provider connecting native mobile ViewModels to current SmartTube services. */
+public final class SmartTubeMobileNativeProvider implements MobileNativeDependencies.Provider {
+    private final MobileBrowseRepository browse;
+    private final MobileChannelRepository channel;
+    private final MobileSearchRepository search;
+    private final MobileSettingsRepository settings;
+    private final Context applicationContext;
+    private final LegacyMediaIndex index;
+    private final LegacyErrorMapper errors;
+    private final MobileImageLoader images = new LegacyGlideImageLoader();
+    private final MobilePlayerViewBinder binder = new LegacyMobilePlayerViewBinder();
+
+    public static SmartTubeMobileNativeProvider create(Context context) {
+        if (context == null) throw new IllegalArgumentException("context == null");
+        return new SmartTubeMobileNativeProvider(context.getApplicationContext());
+    }
+
+    private SmartTubeMobileNativeProvider(Context context) {
+        ServiceManager service = YouTubeServiceManager.instance();
+        if (service == null) throw new IllegalStateException("YouTubeServiceManager returned null");
+        MobileDiagnostics.info("DataProvider", "Installing SmartTube mobile data adapters");
+        applicationContext = context.getApplicationContext();
+        index = new LegacyMediaIndex();
+        errors = new LegacyErrorMapper();
+        LegacyMediaMapper mapper = new LegacyMediaMapper(index);
+        browse = new LegacyBrowseRepository(service.getContentService(),
+                service.getNotificationsService(), index, mapper, errors);
+        channel = new LegacyChannelRepository(service.getContentService(), index, mapper, errors);
+        search = new LegacySearchRepository(service.getContentService(), mapper, errors);
+        settings = new LegacySettingsRepository(applicationContext, errors);
+    }
+
+    @Override public MobileBrowseRepository browseRepository() { return browse; }
+    @Override public MobileChannelRepository channelRepository() { return channel; }
+    @Override public MobileSearchRepository searchRepository() { return search; }
+    @Override public MobileSettingsRepository settingsRepository() { return settings; }
+    @Override public MobilePlaybackRepository playbackRepository() {
+        // Playback owns Activity-bound surfaces and lifecycle callbacks, so it must never be shared
+        // between two Fragment/ViewModel lifecycles after configuration changes.
+        return new LegacyMobilePlaybackRepository(applicationContext, index, errors);
+    }
+
+    /** Dedicated Android Auto player. It may initialize ExoPlayer without Activity or PlayerView. */
+    public MobilePlaybackRepository automotivePlaybackRepository() {
+        return new LegacyMobilePlaybackRepository(applicationContext, index, errors, true);
+    }
+    @Override public MobileImageLoader imageLoader() { return images; }
+    @Override public MobilePlayerViewBinder playerViewBinder() { return binder; }
+}

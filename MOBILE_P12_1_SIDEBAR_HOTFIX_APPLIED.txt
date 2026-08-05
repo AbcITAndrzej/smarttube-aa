@@ -1,0 +1,7 @@
+﻿SmartTube Mobile P12.1 Sidebar Hotfix
+- removed invalid 12dp lb_browse_rows_margin_start override
+- restored original Leanback 265dp transition distance
+- headers dock becomes GONE after closing
+- swipe right or tap at left edge opens menu
+- swipe left or tap outside closes menu
+- player and P12 touch seeking unchanged

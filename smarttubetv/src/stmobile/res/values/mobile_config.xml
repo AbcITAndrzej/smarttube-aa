@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SmartTube Mobile P12.4 Menu</string>
+    <bool name="mobile_touch_navigation_enabled">true</bool>
+    <bool name="mobile_haptic_feedback_enabled">true</bool>
+    <bool name="mobile_settings_ui_adaptation_enabled">true</bool>
+
+    <!-- Part 2 used 88%, which made text and touch areas smaller. Keep the
+         original scale and adapt settings rows explicitly instead. -->
+    <integer name="mobile_ui_scale_percent">100</integer>
+
+    <integer name="mobile_navigation_step_dp">56</integer>
+    <integer name="mobile_edge_width_dp">24</integer>
+    <integer name="mobile_edge_back_trigger_dp">72</integer>
+
+    <!-- 48dp is Android's minimum; 56dp is deliberately more forgiving for
+         a TV layout operated with fingers. -->
+    <integer name="mobile_min_touch_target_dp">56</integer>
+    <integer name="mobile_min_text_sp">16</integer>
+    <integer name="mobile_tablet_min_short_side_dp">600</integer>
+    <integer name="mobile_tablet_settings_pane_max_width_dp">720</integer>
+</resources>

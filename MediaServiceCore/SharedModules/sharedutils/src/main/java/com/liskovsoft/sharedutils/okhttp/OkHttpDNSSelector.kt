@@ -1,0 +1,69 @@
+package com.liskovsoft.sharedutils.okhttp
+
+import okhttp3.Dns
+import java.net.Inet4Address
+import java.net.Inet6Address
+import java.net.InetAddress
+
+/**
+ * Fix for the [issue](https://github.com/facebook/react-native/issues/32730)
+ *
+ * See also:
+ * [1](https://gist.github.com/danmaas/c60af5fed9f55d2bc616ce302696540d)
+ * [2](https://github.com/square/okhttp/issues/6954)
+ * [3](https://github.com/yschimke/okurl/blob/b24caf077223cf54e2ab26589839e5ba2205c691/src/main/java/com/baulsupp/oksocial/network/DnsSelector.java)
+ * [4](https://stackoverflow.com/questions/64559405/how-do-i-force-my-android-app-to-use-ipv4-instead-of-ipv6)
+ */
+class OkHttpDNSSelector(private val mode: IPvMode) : Dns {
+
+    enum class IPvMode(val code: String) {
+        SYSTEM("system"),
+        IPV6_FIRST("ipv6"),
+        IPV4_FIRST("ipv4"),
+        IPV6_ONLY("ipv6only"),
+        IPV4_ONLY("ipv4only");
+
+        companion object {
+            @JvmStatic
+            fun fromString(ipMode: String): IPvMode =
+                IPvMode.values().find { it.code == ipMode } ?: throw Exception("Unknown value $ipMode")
+        }
+    }
+
+    override fun lookup(hostname: String): List<InetAddress> {
+        var addresses = Dns.SYSTEM.lookup(hostname)
+
+        // More memory efficient
+        addresses = when (mode) {
+            IPvMode.IPV6_FIRST -> addresses.sortedBy { it is Inet4Address }
+            IPvMode.IPV4_FIRST -> addresses.sortedBy { it is Inet6Address }
+            IPvMode.IPV6_ONLY -> addresses.filter { it is Inet6Address }
+            IPvMode.IPV4_ONLY -> addresses.filter { it is Inet4Address }
+            IPvMode.SYSTEM -> addresses
+        }
+
+        // More robust on Android TV (preserve ordering)?
+        //addresses = when (mode) {
+        //    IPvMode.IPV6_FIRST -> addresses.filterIsInstance<Inet6Address>() + addresses.filterIsInstance<Inet4Address>()
+        //    IPvMode.IPV4_FIRST -> addresses.filterIsInstance<Inet4Address>() + addresses.filterIsInstance<Inet6Address>()
+        //    IPvMode.IPV6_ONLY -> addresses.filterIsInstance<Inet6Address>()
+        //    IPvMode.IPV4_ONLY -> addresses.filterIsInstance<Inet4Address>()
+        //    IPvMode.SYSTEM -> addresses
+        //}
+
+        // Fastest, preserve ordering
+        //addresses = when (mode) {
+        //    IPvMode.IPV6_FIRST -> partition(addresses).let { it.second + it.first }
+        //    IPvMode.IPV4_FIRST -> partition(addresses).let { it.first + it.second }
+        //    IPvMode.IPV6_ONLY -> partition(addresses).second
+        //    IPvMode.IPV4_ONLY -> partition(addresses).first
+        //    IPvMode.SYSTEM -> addresses
+        //}
+
+        //logger.fine("DJMOKHTTP ($hostname): " + addresses.joinToString(", ") { it.toString() })
+
+        return addresses
+    }
+
+    private fun partition(addresses: List<InetAddress>) = addresses.partition { it is Inet4Address }
+}

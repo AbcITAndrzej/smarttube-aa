@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_native_preview_app_name">SmartTube — podgląd mobilny</string>
+    <string name="mobile_native_home">Start</string>
+    <string name="mobile_native_search">Szukaj</string>
+    <string name="mobile_native_search_hint">Szukaj filmów i kanałów</string>
+    <string name="mobile_native_settings">Ustawienia</string>
+    <string name="mobile_native_back">Wstecz</string>
+    <string name="mobile_native_retry">Spróbuj ponownie</string>
+    <string name="mobile_native_play">Odtwórz</string>
+    <string name="mobile_native_pause">Pauza</string>
+    <string name="mobile_native_audio">Dźwięk</string>
+    <string name="mobile_native_subtitles">Napisy</string>
+    <string name="mobile_native_rewind_10">−10 s</string>
+    <string name="mobile_native_forward_10">+10 s</string>
+    <string name="mobile_native_video_surface">Obszar odtwarzania filmu</string>
+    <string name="mobile_background_channel_name">Odtwarzanie w tle</string>
+    <string name="mobile_background_channel_description">Sterowanie dźwiękiem i filmem SmartTube odtwarzanym w tle</string>
+    <string name="mobile_background_play">Odtwórz</string>
+    <string name="mobile_background_pause">Pauza</string>
+    <string name="mobile_background_rewind">Cofnij o 10 sekund</string>
+    <string name="mobile_background_forward">Przewiń o 10 sekund</string>
+    <string name="mobile_background_stop">Zatrzymaj odtwarzanie</string>
+</resources>

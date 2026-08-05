@@ -1,0 +1,5 @@
+﻿SmartTube Mobile P11 Touch1
+- Original P9 TV UI and original player retained
+- Original SplashActivity launcher retained
+- Native RecyclerView/Leanback touch sequences enabled
+- Sidebar starts collapsed, but remains available with Back

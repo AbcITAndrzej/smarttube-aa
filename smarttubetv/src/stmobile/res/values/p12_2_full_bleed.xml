@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Match the complete Leanback headers width. No 5dp/50dp shadow strip. -->
+    <dimen name="lb_browse_rows_margin_start">270dp</dimen>
+
+    <!-- Compact phone settings grid: more columns and fewer vertical rows. -->
+    <dimen name="settings_image_size">46dp</dimen>
+    <dimen name="settings_image_padding">8dp</dimen>
+    <dimen name="settings_card_width">96dp</dimen>
+</resources>

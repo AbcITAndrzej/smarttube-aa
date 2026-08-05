@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mobile override of the Leanback settings root. The upstream layout uses a
+     fixed TV pane width. Start full-width on compact windows; the runtime
+     compatibility pass bounds it to 720dp on tablets. -->
+<androidx.leanback.preference.LeanbackSettingsRootView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settings_dialog_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <FrameLayout
+        android:id="@+id/settings_preference_fragment_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:elevation="@dimen/lb_preference_decor_elevation"
+        android:outlineProvider="bounds" />
+</androidx.leanback.preference.LeanbackSettingsRootView>

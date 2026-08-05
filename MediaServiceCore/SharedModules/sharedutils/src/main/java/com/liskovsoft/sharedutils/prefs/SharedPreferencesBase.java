@@ -1,0 +1,201 @@
+package com.liskovsoft.sharedutils.prefs;
+
+import android.content.Context;
+import android.content.SharedPreferences;
+
+import androidx.annotation.Nullable;
+import androidx.preference.PreferenceManager;
+
+import com.liskovsoft.sharedutils.helpers.FileHelpers;
+import com.liskovsoft.sharedutils.mylogger.Log;
+
+import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
+
+public class SharedPreferencesBase {
+    private static final String TAG = SharedPreferencesBase.class.getSimpleName();
+    private static final long PREF_MAX_SIZE_MB = 5;
+    private final SharedPreferences mPrefs;
+    private Context mContext;
+    private Map<String, Integer> mDataHashes;
+
+    public SharedPreferencesBase(Context context, String prefName) {
+        this(context, prefName, -1, false);
+    }
+
+    public SharedPreferencesBase(Context context, String prefName, boolean limitMaxSize) {
+        this(context, prefName, -1, limitMaxSize);
+    }
+
+    public SharedPreferencesBase(Context context, String prefName, int defValResId) {
+        this(context, prefName, defValResId, false);
+    }
+
+    public SharedPreferencesBase(Context context) {
+        this(context, null, -1, false);
+    }
+
+    public SharedPreferencesBase(Context context, int defValResId) {
+        this(context, null, defValResId, false);
+    }
+
+    public SharedPreferencesBase(Context context, String prefName, int defValResId, boolean limitMaxSize) {
+        if (limitMaxSize) {
+            limitMaxSize(context, prefName);
+        }
+
+        setContext(context);
+
+        if (prefName != null) {
+            mPrefs = context.getSharedPreferences(prefName, Context.MODE_PRIVATE);
+        } else {
+            prefName = context.getPackageName() + "_preferences";
+            mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+        }
+
+        // XML preference defaults are not supported for custom-named SharedPreferences. Use explicit code-based initialization instead.
+        //if (defValResId != -1) {
+        //    try {
+        //        PreferenceManager.setDefaultValues(context, prefName, Context.MODE_PRIVATE, defValResId, true);
+        //    } catch (NoSuchMethodError e) {
+        //        // NoSuchMethodError: No interface method putBoolean in class SharedPreferences$Editor (Android 7.0)
+        //        e.printStackTrace();
+        //    }
+        //}
+    }
+
+    /**
+     * Delete prefs which size exceeds a limit to prevent unconditional behavior
+     */
+    private void limitMaxSize(Context context, String prefName) {
+        File sharedPrefs = new File(context.getApplicationInfo().dataDir, "shared_prefs" + "/" + prefName + ".xml");
+
+        if (sharedPrefs.exists() && sharedPrefs.isFile()) {
+            long sizeMB = sharedPrefs.length() / 1024 / 1024;
+
+            if (sizeMB > PREF_MAX_SIZE_MB) {
+                Log.e(TAG, "Shared preference max size exceeded. Deleting...");
+                sharedPrefs.delete();
+            }
+        }
+    }
+
+    @Nullable
+    public Context getContext() {
+        return mContext;
+    }
+
+    private void setContext(Context context) {
+        if (context != null) {
+            mContext = context.getApplicationContext();
+        }
+    }
+
+    public void putLong(String key, long val) {
+        mPrefs.edit()
+                .putLong(key, val)
+                .apply();
+    }
+
+    public long getLong(String key, long defVal) {
+        return mPrefs.getLong(key, defVal);
+    }
+
+    public void putInt(String key, int val) {
+        mPrefs.edit()
+                .putInt(key, val)
+                .apply();
+    }
+
+    public int getInt(String key, int defVal) {
+        return mPrefs.getInt(key, defVal);
+    }
+
+    public void putBoolean(String key, boolean val) {
+        mPrefs.edit()
+                .putBoolean(key, val)
+                .apply();
+    }
+
+    public boolean getBoolean(String key, boolean defVal) {
+        return mPrefs.getBoolean(key, defVal);
+    }
+
+    public void putString(String key, String  val) {
+        mPrefs.edit()
+                .putString(key, val)
+                .apply();
+    }
+
+    public String getString(String key, String defVal) {
+        return mPrefs.getString(key, defVal);
+    }
+
+    public void clear() {
+        mPrefs.edit()
+                .clear()
+                .apply();
+    }
+
+    @Nullable
+    protected String getPrefsDir() {
+        return null;
+    }
+
+    final public String getData(String key) {
+        // Don't sync hash here. Hashes won't match.
+        File source = getStorageFile(key);
+        String data = FileHelpers.getFileContents(source);
+
+        // Migrate to plain files
+        if (data == null) {
+            data = getString(key, null);
+            putString(key, null);
+            setData(key, data);
+        }
+
+        return data;
+    }
+
+    final public void setData(String key, String data) {
+        if (checkData(key, data)) {
+            File destination = getStorageFile(key);
+            FileHelpers.stringToFile(data, destination);
+        }
+    }
+
+    private File getStorageFile(String key) {
+        String prefsDir = getPrefsDir();
+
+        if (prefsDir == null) {
+            throw new IllegalStateException(TAG + ": getPrefsDir() cannot be null. Probably, you forgot to override it.");
+        }
+
+        if (key == null) {
+            return null;
+        }
+
+        return new File(FileHelpers.getFilesDir(getContext()), prefsDir + "/" + key);
+    }
+
+    /**
+     * Check that the data has been modified.
+     */
+    private boolean checkData(String key, String data) {
+        if (mDataHashes == null) {
+            mDataHashes = new HashMap<>();
+        }
+
+        Integer oldHashCode = mDataHashes.get(key);
+        int newHashCode = data != null ? data.hashCode() : -1;
+
+        if (oldHashCode != null && oldHashCode == newHashCode) {
+            return false;
+        }
+
+        mDataHashes.put(key, newHashCode);
+
+        return true;
+    }
+}
