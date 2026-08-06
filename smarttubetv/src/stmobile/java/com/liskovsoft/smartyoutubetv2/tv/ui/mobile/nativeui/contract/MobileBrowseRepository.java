@@ -4,10 +4,17 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileBrowsePa
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileError;
 
 public interface MobileBrowseRepository {
+    interface ItemUpdateListener {
+        void onItemUpdated(String itemId, MobileBrowsePayload payload);
+    }
+
     MobileRequest loadBrowse(String pageId, MobileResultCallback<MobileBrowsePayload> callback);
 
     default MobileRequest loadItem(String itemId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback != null) callback.onError(MobileError.unconfigured("MobileBrowseRepository.loadItem"));
         return MobileRequest.NONE;
+    }
+
+    default void setItemUpdateListener(ItemUpdateListener listener) {
     }
 }

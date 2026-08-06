@@ -20,6 +20,7 @@ import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.media.MediaBrowserServiceCompat;
 
+import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBrowseRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlaybackRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileRequest;
@@ -123,6 +124,13 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private int shuffleMode = PlaybackStateCompat.SHUFFLE_MODE_NONE;
     private String lastAutoAdvancedFromBrowserId;
     private String lastPublishedQueueKey;
+    private String lastPublishedMetadataKey;
+    private String lastPublishedPlaybackControlsKey;
+    private int lastPublishedPlaybackState = Integer.MIN_VALUE;
+    private long lastPublishedPlaybackPositionMs;
+    private long lastPublishedPlaybackAtMs;
+    private long lastPublishedActiveQueueItemId = MediaSessionCompat.QueueItem.UNKNOWN_ID;
+    private float lastPublishedPlaybackSpeed;
     private long lastMetadataDurationMs;
     private long lastResumeSavePositionMs = -1L;
     private long forceZeroUntilMs;
@@ -154,6 +162,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
 
         provider = SmartTubeMobileNativeProvider.create(getApplicationContext());
         browseRepository = provider.browseRepository();
+        browseRepository.setItemUpdateListener((itemId, payload) -> mainHandler.post(
+                () -> applyBackgroundItemUpdate(itemId, payload)));
         playbackRepository = provider.automotivePlaybackRepository();
         MobileDiagnostics.info("P13-AA-Playback",
                 "headless audio repository created; Auto session is the only public session");
@@ -393,6 +403,9 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         }
         activeBrowseRequests.clear();
         lastPublishedQueueKey = null;
+        if (browseRepository != null) {
+            browseRepository.setItemUpdateListener(null);
+        }
         actionExecutor.shutdownNow();
         mainHandler.removeCallbacksAndMessages(null);
         if (playbackRepository != null) {
@@ -910,6 +923,45 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         }
 
         return result;
+    }
+
+    private void applyBackgroundItemUpdate(String itemId, MobileBrowsePayload payload) {
+        if (destroyed || itemId == null || payload == null) {
+            return;
+        }
+
+        String sourceId = ITEM_PREFIX + itemId;
+        String currentBrowserId = activeQueueIndex >= 0
+                && activeQueue != null && activeQueueIndex < activeQueue.size()
+                ? activeQueue.get(activeQueueIndex) : null;
+        try {
+            convertPayload(sourceId, payload);
+        } catch (Throwable error) {
+            MobileDiagnostics.error("P13-AA-Playlist",
+                    "background payload conversion failed source=" + sourceId, error);
+            return;
+        }
+
+        if (activeContainerId != null && currentBrowserId != null) {
+            List<String> completedQueue = queueByContainer.get(activeContainerId);
+            int completedIndex = completedQueue == null
+                    ? -1 : completedQueue.indexOf(currentBrowserId);
+            if (completedIndex >= 0) {
+                activeQueue = new ArrayList<>(completedQueue);
+                activeQueueIndex = completedIndex;
+                publishQueue(activeQueue);
+                updatePlaybackState(lastPlaybackState,
+                        lastPlaybackPositionMs, lastPlaybackSpeed);
+                MobileDiagnostics.info("P13-AA-Queue",
+                        "background queue expanded source=" + sourceId
+                                + " size=" + activeQueue.size()
+                                + " current=" + activeQueueIndex);
+            }
+        }
+
+        notifyChildrenChanged(sourceId);
+        MobileDiagnostics.info("P13-AA-Playlist",
+                "background playlist ready source=" + sourceId);
     }
 
     private List<MediaBrowserCompat.MediaItem> convertPlaylistPayload(MobileBrowsePayload payload) {
@@ -1579,6 +1631,14 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         long resolvedDuration = durationMs > 0L ? durationMs : item.getDurationMs();
         lastMetadataDurationMs = resolvedDuration;
 
+        String metadataKey = item.getId() + "|" + item.getTitle() + "|"
+                + item.getSubtitle() + "|" + item.getThumbnailUrl() + "|"
+                + resolvedDuration + "|liked=" + activeLiked;
+        if (metadataKey.equals(lastPublishedMetadataKey)) {
+            return;
+        }
+        lastPublishedMetadataKey = metadataKey;
+
         MediaMetadataCompat.Builder metadata = new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, item.getId())
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, item.getTitle())
@@ -1620,6 +1680,43 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         lastPlaybackPositionMs = Math.max(0L, positionMs);
         lastPlaybackSpeed = speed;
 
+        long activeQueueItemId = activeQueueIndex >= 0
+                && activeQueue != null && activeQueueIndex < activeQueue.size()
+                ? activeQueueIndex : MediaSessionCompat.QueueItem.UNKNOWN_ID;
+        String controlsKey = "liked=" + activeLiked
+                + "|repeat=" + repeatMode
+                + "|shuffle=" + shuffleMode
+                + "|autoNext=" + autoNextEnabled;
+        long now = System.currentTimeMillis();
+        boolean publish = lastPublishedPlaybackAtMs == 0L
+                || state != lastPublishedPlaybackState
+                || Float.compare(speed, lastPublishedPlaybackSpeed) != 0
+                || activeQueueItemId != lastPublishedActiveQueueItemId
+                || !controlsKey.equals(lastPublishedPlaybackControlsKey);
+
+        if (!publish) {
+            long expectedPosition = lastPublishedPlaybackPositionMs;
+            if (lastPublishedPlaybackState == PlaybackStateCompat.STATE_PLAYING
+                    && lastPublishedPlaybackSpeed > 0f) {
+                expectedPosition += (long) ((now - lastPublishedPlaybackAtMs)
+                        * lastPublishedPlaybackSpeed);
+            }
+            // Media controllers extrapolate a playing position from the last state. Avoid
+            // replacing PlaybackState on every snapshot because Android Auto then re-anchors
+            // its queue to the active row. A real seek/drift still gets published immediately.
+            long allowedDriftMs = state == PlaybackStateCompat.STATE_PLAYING ? 2500L : 500L;
+            publish = Math.abs(lastPlaybackPositionMs - expectedPosition) > allowedDriftMs;
+        }
+
+        if (!publish) {
+            if (state == PlaybackStateCompat.STATE_PAUSED
+                    || state == PlaybackStateCompat.STATE_PLAYING) {
+                savePlaybackProgress(lastPlaybackPositionMs);
+            }
+            updatePhoneNotification();
+            return;
+        }
+
         PlaybackStateCompat.Builder builder = new PlaybackStateCompat.Builder()
                 .setActions(actions)
                 .setState(state, lastPlaybackPositionMs, speed)
@@ -1629,11 +1726,19 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                 .addCustomAction(createRepeatAction())
                 .addCustomAction(createAutoNextAction());
 
-        // The queue is already rotated so the current song is presented first.
-        // Re-sending activeQueueItemId with every progress snapshot makes Android Auto
-        // continually scroll its queue UI back to that first row while the user browses.
+        if (activeQueueItemId != MediaSessionCompat.QueueItem.UNKNOWN_ID) {
+            // Restores Android Auto's animated/current-track indicator. Position-only
+            // snapshots are filtered above, so the marker no longer forces a scroll reset.
+            builder.setActiveQueueItemId(activeQueueItemId);
+        }
 
         mediaSession.setPlaybackState(builder.build());
+        lastPublishedPlaybackState = state;
+        lastPublishedPlaybackPositionMs = lastPlaybackPositionMs;
+        lastPublishedPlaybackSpeed = speed;
+        lastPublishedPlaybackAtMs = now;
+        lastPublishedActiveQueueItemId = activeQueueItemId;
+        lastPublishedPlaybackControlsKey = controlsKey;
         if (state == PlaybackStateCompat.STATE_PAUSED || state == PlaybackStateCompat.STATE_PLAYING) {
             savePlaybackProgress(lastPlaybackPositionMs);
         }
@@ -1807,7 +1912,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         return new PlaybackStateCompat.CustomAction.Builder(
                 activeLiked ? ACTION_UNLIKE : ACTION_LIKE,
                 activeLiked ? "♥ Polubione — kliknij, aby usunąć" : "♡ Lubię to",
-                activeLiked ? android.R.drawable.btn_star_big_on : android.R.drawable.btn_star_big_off)
+                activeLiked ? R.drawable.ic_auto_like_on : R.drawable.ic_auto_like_off)
                 .build();
     }
 

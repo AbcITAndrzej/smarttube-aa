@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class LegacyBrowseRepository implements MobileBrowseRepository {
-    private static final long PLAYLIST_CACHE_TTL_MS = 5 * 60 * 1000L;
+    private static final long PLAYLIST_CACHE_TTL_MS = 30 * 60 * 1000L;
     private final ContentService content;
     private final NotificationsService notifications;
     private final LegacyMediaIndex index;
@@ -29,6 +29,9 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> playlistCacheTimes =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> playlistBackgroundLoads =
+            new ConcurrentHashMap<>();
+    private volatile ItemUpdateListener itemUpdateListener;
 
     public LegacyBrowseRepository(ContentService content, NotificationsService notifications,
                                   LegacyMediaIndex index, LegacyMediaMapper mapper,
@@ -78,18 +81,24 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             return MobileRequest.NONE;
         }
         try {
-            Disposable d = Observable.fromCallable(() -> {
-                MediaGroup group = content.getGroup(
-                        item.mediaItem != null ? item.mediaItem : item.toMediaItem());
-                if (group == null) {
-                    throw new IllegalStateException("Playlist content is empty: " + itemId);
-                }
-                MobileBrowsePayload payload = loadCompletePlaylist(itemId, item, group);
-                playlistCache.put(itemId, payload);
-                playlistCacheTimes.put(itemId, System.currentTimeMillis());
-                return payload;
-            }).subscribeOn(Schedulers.io()).subscribe(
-                    callback::onSuccess,
+            Disposable d = Observable.fromCallable(() -> content.getGroup(
+                            item.mediaItem != null ? item.mediaItem : item.toMediaItem()))
+                    .subscribeOn(Schedulers.io()).subscribe(
+                    group -> {
+                        if (group == null) {
+                            callback.onError(new MobileError(MobileError.Kind.UNAVAILABLE,
+                                    "Playlist content is empty", null, true));
+                            return;
+                        }
+
+                        // Return the first page immediately. Completing a large playlist can
+                        // require dozens of network requests and must not block Android Auto.
+                        MobileBrowsePayload firstPage = mapPlaylistPage(itemId, item, group);
+                        playlistCache.put(itemId, firstPage);
+                        playlistCacheTimes.put(itemId, System.currentTimeMillis());
+                        callback.onSuccess(firstPage);
+                        loadPlaylistRemainderInBackground(itemId, item, group);
+                    },
                     e -> { MobileDiagnostics.error("DataBrowse", "item failed: " + itemId, e);
                         callback.onError(errors.map(e)); });
             return new RxMobileRequest(d);
@@ -97,6 +106,10 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
         }
+    }
+
+    @Override public void setItemUpdateListener(ItemUpdateListener listener) {
+        itemUpdateListener = listener;
     }
 
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
@@ -151,5 +164,45 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                 + " title=" + title + " tracks=" + tracks.size() + " pages=" + pageCount);
         MobileSection section = new MobileSection("playlist:" + itemId, title, tracks);
         return new MobileBrowsePayload(title, Collections.singletonList(section));
+    }
+
+    private MobileBrowsePayload mapPlaylistPage(String itemId, Video item, MediaGroup page) {
+        String title = LegacyMediaMapper.safe(item.getTitleFull());
+        MobileSection mapped = mapper.map(page, 0);
+        List<MobileMediaItem> tracks = mapped == null || mapped.getItems() == null
+                ? Collections.emptyList() : new ArrayList<>(mapped.getItems());
+        MobileDiagnostics.info("DataBrowse", "playlist first page id=" + itemId
+                + " title=" + title + " tracks=" + tracks.size());
+        MobileSection section = new MobileSection("playlist:" + itemId, title, tracks);
+        return new MobileBrowsePayload(title, Collections.singletonList(section));
+    }
+
+    private void loadPlaylistRemainderInBackground(
+            String itemId, Video item, MediaGroup firstPage) {
+        String nextPageKey = firstPage.getNextPageKey();
+        if (nextPageKey == null || nextPageKey.trim().isEmpty()) {
+            return;
+        }
+        if (playlistBackgroundLoads.putIfAbsent(itemId, Boolean.TRUE) != null) {
+            return;
+        }
+
+        Schedulers.io().scheduleDirect(() -> {
+            try {
+                MobileBrowsePayload complete = loadCompletePlaylist(itemId, item, firstPage);
+                playlistCache.put(itemId, complete);
+                playlistCacheTimes.put(itemId, System.currentTimeMillis());
+                ItemUpdateListener listener = itemUpdateListener;
+                if (listener != null) {
+                    listener.onItemUpdated(itemId, complete);
+                }
+            } catch (Throwable error) {
+                // The first page remains usable. A later open can retry the background fill.
+                MobileDiagnostics.error("DataBrowse",
+                        "playlist background load failed: " + itemId, error);
+            } finally {
+                playlistBackgroundLoads.remove(itemId);
+            }
+        });
     }
 }
