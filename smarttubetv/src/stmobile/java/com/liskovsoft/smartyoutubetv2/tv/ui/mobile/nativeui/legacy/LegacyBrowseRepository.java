@@ -30,6 +30,8 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> browseCacheTimes =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> browsePrefetches =
+            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MobileBrowsePayload> playlistCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> playlistCacheTimes =
@@ -91,6 +93,38 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         browseCacheTimes.remove(page.id());
     }
 
+    @Override public void prefetchBrowse(String pageId) {
+        LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
+        if (getCachedBrowse(page) != null) return;
+        if (browsePrefetches.putIfAbsent(page.id(), Boolean.TRUE) != null) return;
+        MobileDiagnostics.debug("DataBrowse", "prefetch page=" + page.id());
+        try {
+            Observable<MobileBrowsePayload> source = page.source() == LegacyBrowsePage.Source.ROWS
+                    ? rows(page).map(groups -> new MobileBrowsePayload(
+                            page.title(), mapper.mapGroups(groups)))
+                    : grid(page).map(group -> new MobileBrowsePayload(
+                            page.title(), mapper.mapSingle(group, page.title())));
+            source.subscribeOn(Schedulers.io()).take(1).subscribe(
+                    payload -> {
+                        cacheBrowse(page, payload);
+                        browsePrefetches.remove(page.id());
+                        MobileDiagnostics.debug("DataBrowse",
+                                "prefetch ready page=" + page.id());
+                    },
+                    error -> {
+                        browsePrefetches.remove(page.id());
+                        MobileDiagnostics.warn("DataBrowse",
+                                "prefetch failed page=" + page.id()
+                                        + ": " + error.getMessage());
+                    });
+        } catch (Throwable error) {
+            browsePrefetches.remove(page.id());
+            MobileDiagnostics.warn("DataBrowse",
+                    "prefetch start failed page=" + page.id()
+                            + ": " + error.getMessage());
+        }
+    }
+
     @Override public MobileRequest loadItem(String itemId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback == null) return MobileRequest.NONE;
         MobileBrowsePayload cached = playlistCache.get(itemId);
@@ -140,7 +174,6 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     }
 
     private MobileBrowsePayload getCachedBrowse(LegacyBrowsePage page) {
-        if (!isBrowseCacheable(page)) return null;
         Long cachedAt = browseCacheTimes.get(page.id());
         if (cachedAt == null || System.currentTimeMillis() - cachedAt >= BROWSE_CACHE_TTL_MS) {
             browseCache.remove(page.id());
@@ -151,21 +184,16 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     }
 
     private void cacheBrowse(LegacyBrowsePage page, MobileBrowsePayload payload) {
-        if (!isBrowseCacheable(page) || payload == null) return;
+        if (payload == null) return;
         browseCache.put(page.id(), payload);
         browseCacheTimes.put(page.id(), System.currentTimeMillis());
-    }
-
-    private boolean isBrowseCacheable(LegacyBrowsePage page) {
-        // "New recommendations" intentionally performs a fresh request on every visit.
-        return page != LegacyBrowsePage.TRENDING;
     }
 
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
         switch (page) {
             // The legacy Trending endpoint may never emit on current YouTube accounts.
-            // The mobile chip promises fresh recommendations, so use the reliable,
-            // personalized Home feed and start a new request on every chip selection.
+            // Use the reliable personalized Home feed and cache the result so category
+            // switches don't rebuild the screen around a visible network wait.
             case TRENDING: return content.getHomeObserve();
             case LIVE: return content.getLiveObserve();
             case MUSIC: return content.getMusicObserve();

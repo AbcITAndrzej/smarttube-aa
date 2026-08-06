@@ -13,6 +13,10 @@ public interface MobileBrowseRepository {
     default void invalidateBrowse(String pageId) {
     }
 
+    /** Warms selected pages without changing the currently visible screen. */
+    default void prefetchBrowse(String pageId) {
+    }
+
     default MobileRequest loadItem(String itemId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback != null) callback.onError(MobileError.unconfigured("MobileBrowseRepository.loadItem"));
         return MobileRequest.NONE;

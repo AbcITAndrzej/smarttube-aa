@@ -33,7 +33,7 @@ Pełna instrukcja i opis ograniczeń znajdują się w [docs/ANDROID-AUTO.md](doc
 
 Najnowsze wersje APK i archiwum źródeł są publikowane w GitHub Releases.
 
-Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.11`
+Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.12`
 
 ## Pochodzenie
 

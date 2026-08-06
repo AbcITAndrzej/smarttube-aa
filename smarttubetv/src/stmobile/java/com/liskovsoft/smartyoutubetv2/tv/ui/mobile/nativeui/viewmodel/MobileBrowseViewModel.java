@@ -37,7 +37,10 @@ public final class MobileBrowseViewModel extends ViewModel {
         final long token = requestSlot.begin();
         MobileResultCallback<MobileBrowsePayload> callback = new MobileResultCallback<MobileBrowsePayload>() {
             @Override public void onSuccess(MobileBrowsePayload value) {
-                if (requestSlot.isCurrent(token)) publish(MobileLoadState.content(value));
+                if (requestSlot.isCurrent(token)) {
+                    publish(MobileLoadState.content(value));
+                    prefetchSlowHomeCategories();
+                }
             }
             @Override public void onError(MobileError error) {
                 if (requestSlot.isCurrent(token)) publish(MobileLoadState.error(previous, error));
@@ -52,6 +55,13 @@ public final class MobileBrowseViewModel extends ViewModel {
     private void publish(MobileLoadState<MobileBrowsePayload> value) {
         if (Looper.myLooper() == Looper.getMainLooper()) state.setValue(value);
         else state.postValue(value);
+    }
+
+    private void prefetchSlowHomeCategories() {
+        if (itemId != null && !itemId.isEmpty()) return;
+        if (!"home".equals(pageId)) return;
+        repository.prefetchBrowse("trending");
+        repository.prefetchBrowse("news");
     }
 
     @Override protected void onCleared() { requestSlot.clear(); }
