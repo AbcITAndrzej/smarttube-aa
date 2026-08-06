@@ -18,11 +18,26 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     private void showTopLevel(Fragment fragment, int selectedItemId) {
+        Fragment current = manager.findFragmentById(R.id.mobile_native_fragment_container);
+        if (isSameBrowseDestination(current, fragment)) {
+            host.updateChrome(selectedItemId, true);
+            return;
+        }
         manager.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
         manager.beginTransaction()
                 .replace(R.id.mobile_native_fragment_container, fragment, fragment.getClass().getSimpleName())
                 .commit();
         host.updateChrome(selectedItemId, true);
+    }
+
+    private boolean isSameBrowseDestination(Fragment current, Fragment requested) {
+        if (!(current instanceof MobileBrowseFragment)
+                || !(requested instanceof MobileBrowseFragment)) return false;
+        MobileBrowseFragment currentBrowse = (MobileBrowseFragment) current;
+        MobileBrowseFragment requestedBrowse = (MobileBrowseFragment) requested;
+        return !currentBrowse.isItemDetail()
+                && !requestedBrowse.isItemDetail()
+                && currentBrowse.getPageId().equals(requestedBrowse.getPageId());
     }
 
     private void showDetail(Fragment fragment) {
@@ -54,6 +69,10 @@ public final class MobileFragmentNavigator implements MobileNavigator {
 
     @Override public void openSettings() {
         showTopLevel(MobileSettingsFragment.newInstance(), R.id.mobile_nav_settings);
+    }
+
+    @Override public void openAndroidAutoSettings() {
+        showDetail(AndroidAutoSettingsFragment.newInstance());
     }
 
     @Override public void openPlayback(String mediaId, long startPositionMs) {

@@ -2,6 +2,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           xmlns:tools="http://schemas.android.com/tools">
 
+    <queries>
+        <package android:name="com.google.android.projection.gearhead" />
+        <intent>
+            <action android:name="android.settings.ANDROID_AUTO_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.projection.gearhead.SETTINGS" />
+        </intent>
+    </queries>
+
     <!-- Background playback and its user-visible MediaStyle notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />

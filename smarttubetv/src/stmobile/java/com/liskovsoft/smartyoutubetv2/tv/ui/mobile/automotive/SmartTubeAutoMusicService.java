@@ -42,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -114,6 +115,16 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private MobilePlaybackRepository playbackRepository;
     private MediaSessionCompat mediaSession;
     private SharedPreferences resumePrefs;
+    private boolean destroyed;
+    private AndroidAutoPreferences autoPreferences;
+    private final SharedPreferences.OnSharedPreferenceChangeListener autoSettingsListener =
+            (sharedPreferences, key) -> {
+                if (AndroidAutoPreferences.isPlaylistLayoutKey(key)) {
+                    mainHandler.post(() -> {
+                        if (!destroyed) notifyChildrenChanged(PAGE_PREFIX + "playlists");
+                    });
+                }
+            };
     private String activeContainerId;
     private List<String> activeQueue = Collections.emptyList();
     private int activeQueueIndex = -1;
@@ -149,8 +160,6 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private int lastPlaybackState = PlaybackStateCompat.STATE_NONE;
     private long lastPlaybackPositionMs;
     private float lastPlaybackSpeed;
-    private boolean destroyed;
-
     @Override
     public void onCreate() {
         super.onCreate();
@@ -158,6 +167,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         MobileDiagnostics.info("P13-AA-Service", "onCreate P13-AA1.8");
 
         resumePrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        autoPreferences = new AndroidAutoPreferences(this);
+        autoPreferences.registerListener(autoSettingsListener);
         createNotificationChannel();
 
         provider = SmartTubeMobileNativeProvider.create(getApplicationContext());
@@ -405,6 +416,9 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         lastPublishedQueueKey = null;
         if (browseRepository != null) {
             browseRepository.setItemUpdateListener(null);
+        }
+        if (autoPreferences != null) {
+            autoPreferences.unregisterListener(autoSettingsListener);
         }
         actionExecutor.shutdownNow();
         mainHandler.removeCallbacksAndMessages(null);
@@ -965,8 +979,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     }
 
     private List<MediaBrowserCompat.MediaItem> convertPlaylistPayload(MobileBrowsePayload payload) {
-        List<MediaBrowserCompat.MediaItem> result = new ArrayList<>();
-        List<String> seen = new ArrayList<>();
+        Map<String, MediaBrowserCompat.MediaItem> cardsByKey = new LinkedHashMap<>();
         for (MobileSection section : payload.getSections()) {
             if (section == null || section.getItems() == null) continue;
             for (MobileMediaItem item : section.getItems()) {
@@ -975,16 +988,24 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                         + " kind=" + item.getKind() + " id=" + item.getId()
                         + " playlistId=" + item.getPlaylistId());
                 if (item.getKind() != MobileMediaItem.Kind.PLAYLIST) continue;
-                String playlistId = item.getPlaylistId() == null
-                        || item.getPlaylistId().trim().isEmpty()
-                        ? item.getId() : "playlist:" + item.getPlaylistId();
+                String playlistId = AndroidAutoPreferences.playlistKey(item);
                 if (playlistId == null || playlistId.trim().isEmpty()) continue;
-                if (seen.contains(playlistId)) continue;
-                seen.add(playlistId);
+                if (cardsByKey.containsKey(playlistId)) continue;
                 String subtitle = item.getSubtitle();
                 if (subtitle == null || subtitle.trim().isEmpty()) subtitle = "Otwórz playlistę";
-                result.add(browsable(ITEM_PREFIX + playlistId, item.getTitle(), subtitle));
+                cardsByKey.put(playlistId,
+                        browsable(ITEM_PREFIX + playlistId, item.getTitle(), subtitle));
             }
+        }
+        List<MediaBrowserCompat.MediaItem> result = new ArrayList<>();
+        Set<String> hidden = autoPreferences == null
+                ? Collections.emptySet() : autoPreferences.getHiddenPlaylists();
+        List<String> order = autoPreferences == null
+                ? new ArrayList<>(cardsByKey.keySet())
+                : autoPreferences.orderAvailableKeys(cardsByKey.keySet());
+        for (String key : order) {
+            MediaBrowserCompat.MediaItem card = cardsByKey.get(key);
+            if (card != null && !hidden.contains(key)) result.add(card);
         }
         MobileDiagnostics.info("P13-AA-Playlist", "playlist cards=" + result.size());
         return result;

@@ -115,13 +115,15 @@ public final class MobileBrowseFragment extends Fragment {
             });
         }
         retry.setOnClickListener(v -> vm.refresh());
+        final MobileBrowsePayload[] lastRenderedPayload = { null };
         vm.getState().observe(getViewLifecycleOwner(), value -> {
             progress.setVisibility(value.getStatus() == MobileLoadState.Status.LOADING && !value.hasData()
                     ? View.VISIBLE : View.GONE);
             error.setVisibility(value.getStatus() == MobileLoadState.Status.ERROR ? View.VISIBLE : View.GONE);
             retry.setVisibility(value.getStatus() == MobileLoadState.Status.ERROR ? View.VISIBLE : View.GONE);
             if (value.getError() != null) error.setText(value.getError().getMessage());
-            if (value.getData() != null) {
+            if (value.getData() != null && value.getData() != lastRenderedPayload[0]) {
+                lastRenderedPayload[0] = value.getData();
                 if (isItemDetail()) toolbar.setTitle(value.getData().getTitle());
                 adapter.submitSections(localizeTopLevelSections(value.getData().getSections(), showCategories));
             }

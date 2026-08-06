@@ -1,5 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel;
 
+import android.os.Looper;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
@@ -30,19 +31,27 @@ public final class MobileBrowseViewModel extends ViewModel {
         MobileLoadState<MobileBrowsePayload> current = state.getValue();
         MobileBrowsePayload previous = current == null ? null : current.getData();
         state.setValue(MobileLoadState.loading(previous, refreshing));
+        if (refreshing && (itemId == null || itemId.isEmpty())) {
+            repository.invalidateBrowse(pageId);
+        }
         final long token = requestSlot.begin();
         MobileResultCallback<MobileBrowsePayload> callback = new MobileResultCallback<MobileBrowsePayload>() {
             @Override public void onSuccess(MobileBrowsePayload value) {
-                if (requestSlot.isCurrent(token)) state.postValue(MobileLoadState.content(value));
+                if (requestSlot.isCurrent(token)) publish(MobileLoadState.content(value));
             }
             @Override public void onError(MobileError error) {
-                if (requestSlot.isCurrent(token)) state.postValue(MobileLoadState.error(previous, error));
+                if (requestSlot.isCurrent(token)) publish(MobileLoadState.error(previous, error));
             }
         };
         MobileRequest request = itemId == null || itemId.isEmpty()
                 ? repository.loadBrowse(pageId, callback)
                 : repository.loadItem(itemId, callback);
         requestSlot.attach(token, request);
+    }
+
+    private void publish(MobileLoadState<MobileBrowsePayload> value) {
+        if (Looper.myLooper() == Looper.getMainLooper()) state.setValue(value);
+        else state.postValue(value);
     }
 
     @Override protected void onCleared() { requestSlot.clear(); }

@@ -38,6 +38,8 @@ public final class MobileSettingsFragment extends Fragment {
                 ((MobileNativeActivity) requireActivity()).openClassicHome();
             }
         });
+        view.findViewById(R.id.mobile_android_auto_button).setOnClickListener(v ->
+                MobileFragmentSupport.navigator(this).openAndroidAutoSettings());
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         list.setHasFixedSize(true);

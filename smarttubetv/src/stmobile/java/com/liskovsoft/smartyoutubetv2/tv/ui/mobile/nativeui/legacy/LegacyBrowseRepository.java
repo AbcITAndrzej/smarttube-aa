@@ -19,12 +19,17 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class LegacyBrowseRepository implements MobileBrowseRepository {
+    private static final long BROWSE_CACHE_TTL_MS = 10 * 60 * 1000L;
     private static final long PLAYLIST_CACHE_TTL_MS = 30 * 60 * 1000L;
     private final ContentService content;
     private final NotificationsService notifications;
     private final LegacyMediaIndex index;
     private final LegacyMediaMapper mapper;
     private final LegacyErrorMapper errors;
+    private final ConcurrentHashMap<String, MobileBrowsePayload> browseCache =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> browseCacheTimes =
+            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MobileBrowsePayload> playlistCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> playlistCacheTimes =
@@ -46,22 +51,44 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     @Override public MobileRequest loadBrowse(String pageId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback == null) return MobileRequest.NONE;
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
+        MobileBrowsePayload cached = getCachedBrowse(page);
+        if (cached != null) {
+            MobileDiagnostics.debug("DataBrowse", "browse cache hit page=" + page.id());
+            callback.onSuccess(cached);
+            return MobileRequest.NONE;
+        }
         MobileDiagnostics.debug("DataBrowse", "load page=" + page.id() + " source=" + page.source());
         try {
             if (page.source() == LegacyBrowsePage.Source.ROWS) {
                 Disposable d = rows(page).subscribe(
-                        groups -> callback.onSuccess(new MobileBrowsePayload(page.title(), mapper.mapGroups(groups))),
+                        groups -> {
+                            MobileBrowsePayload payload = new MobileBrowsePayload(
+                                    page.title(), mapper.mapGroups(groups));
+                            cacheBrowse(page, payload);
+                            callback.onSuccess(payload);
+                        },
                         e -> { MobileDiagnostics.error("DataBrowse", "rows failed: " + page.id(), e); callback.onError(errors.map(e)); });
                 return new RxMobileRequest(d);
             }
             Disposable d = grid(page).subscribe(
-                    group -> callback.onSuccess(new MobileBrowsePayload(page.title(), mapper.mapSingle(group, page.title()))),
+                    group -> {
+                        MobileBrowsePayload payload = new MobileBrowsePayload(
+                                page.title(), mapper.mapSingle(group, page.title()));
+                        cacheBrowse(page, payload);
+                        callback.onSuccess(payload);
+                    },
                     e -> { MobileDiagnostics.error("DataBrowse", "grid failed: " + page.id(), e); callback.onError(errors.map(e)); });
             return new RxMobileRequest(d);
         } catch (Throwable error) {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
         }
+    }
+
+    @Override public void invalidateBrowse(String pageId) {
+        LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
+        browseCache.remove(page.id());
+        browseCacheTimes.remove(page.id());
     }
 
     @Override public MobileRequest loadItem(String itemId, MobileResultCallback<MobileBrowsePayload> callback) {
@@ -110,6 +137,28 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     @Override public void setItemUpdateListener(ItemUpdateListener listener) {
         itemUpdateListener = listener;
+    }
+
+    private MobileBrowsePayload getCachedBrowse(LegacyBrowsePage page) {
+        if (!isBrowseCacheable(page)) return null;
+        Long cachedAt = browseCacheTimes.get(page.id());
+        if (cachedAt == null || System.currentTimeMillis() - cachedAt >= BROWSE_CACHE_TTL_MS) {
+            browseCache.remove(page.id());
+            browseCacheTimes.remove(page.id());
+            return null;
+        }
+        return browseCache.get(page.id());
+    }
+
+    private void cacheBrowse(LegacyBrowsePage page, MobileBrowsePayload payload) {
+        if (!isBrowseCacheable(page) || payload == null) return;
+        browseCache.put(page.id(), payload);
+        browseCacheTimes.put(page.id(), System.currentTimeMillis());
+    }
+
+    private boolean isBrowseCacheable(LegacyBrowsePage page) {
+        // "New recommendations" intentionally performs a fresh request on every visit.
+        return page != LegacyBrowsePage.TRENDING;
     }
 
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {

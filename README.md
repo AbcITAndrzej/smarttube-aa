@@ -15,11 +15,13 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. To wersja w budowie, 
 ## Jak uruchomić w Android Auto
 
 1. Zainstaluj APK ręcznie na telefonie.
-2. Włącz tryb deweloperski w aplikacji Android Auto.
-3. Zezwól na instalację aplikacji spoza oficjalnego sklepu lub z nieznanych źródeł, jeśli telefon tego wymaga.
-4. Podłącz telefon do samochodu i uruchom SmartTube AA z ekranu Android Auto.
+2. W SmartTube otwórz `Ustawienia → Android Auto` i wykonaj instrukcję na ekranie.
+3. Włącz tryb programisty oraz opcję „Nieznane źródła” w ustawieniach Android Auto.
+4. Wróć do SmartTube i wybierz „Dodaj / sprawdź”.
+5. Podłącz ponownie telefon do samochodu i uruchom SmartTube AA z ekranu Android Auto.
 
 W zależności od wersji telefonu i Android Auto, nazwy opcji mogą się minimalnie różnić.
+Pełna instrukcja i opis ograniczeń znajdują się w [docs/ANDROID-AUTO.md](docs/ANDROID-AUTO.md).
 
 ## Ograniczenia
 
@@ -31,7 +33,7 @@ W zależności od wersji telefonu i Android Auto, nazwy opcji mogą się minimal
 
 Najnowsze wersje APK i archiwum źródeł są publikowane w GitHub Releases.
 
-Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.10`
+Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.11`
 
 ## Pochodzenie
 

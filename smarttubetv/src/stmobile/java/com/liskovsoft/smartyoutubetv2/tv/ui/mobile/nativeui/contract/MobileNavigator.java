@@ -6,6 +6,7 @@ public interface MobileNavigator {
     void openChannel(String channelId);
     void openSearch(String initialQuery);
     void openSettings();
+    void openAndroidAutoSettings();
     void openPlayback(String mediaId, long startPositionMs);
     void goBack();
 }

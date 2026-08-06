@@ -4,6 +4,7 @@
     <color name="mobile_primary_variant">#FFB4AB</color>
     <color name="mobile_secondary">#CAC4D0</color>
     <color name="mobile_surface">#1C1B1F</color>
+    <color name="mobile_surface_variant">#49454F</color>
     <color name="mobile_background">#1C1B1F</color>
     <color name="mobile_on_surface">#E6E1E5</color>
     <color name="mobile_outline">#938F99</color>
