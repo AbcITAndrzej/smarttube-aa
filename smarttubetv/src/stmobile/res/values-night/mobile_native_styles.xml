@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.SmartTube.MobileNative">
+        <!-- Keep the shared Leanback background manager valid in night mode too. -->
+        <item name="shelfBackground">@color/mobile_background</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

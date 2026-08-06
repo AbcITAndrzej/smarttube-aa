@@ -21,7 +21,7 @@ if exist "%SCRIPT_DIR%smarttubetv\build.gradle" (
   set "PUBLIC_DIR=%SCRIPT_DIR%SmartTube-AA-PUBLIC"
 )
 
-set "APK_STORE=%WORKSPACE_DIR%\P13-AA1.8-LIKED-MUSIC-MOBILE-PLAYER-APK"
+set "APK_STORE=%WORKSPACE_DIR%\P13-AA1.9-LIKED-MUSIC-MOBILE-PLAYER-APK"
 set "BUILD_APK_DIR=%SOURCE_DIR%\smarttubetv\build\outputs\apk\stmobile\debug"
 set "RELEASES_DIR=%PUBLIC_DIR%\releases"
 set "REPO=%DEFAULT_REPO%"

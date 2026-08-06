@@ -98,8 +98,9 @@
                   android:screenOrientation="fullUser"
                   tools:replace="android:screenOrientation" />
         <activity android:name="com.liskovsoft.smartyoutubetv2.tv.ui.signin.SignInActivity"
-                  android:screenOrientation="fullUser"
-                  tools:replace="android:screenOrientation" />
+                    android:screenOrientation="fullUser"
+                    android:theme="@style/Theme.SmartTube.MobileNative"
+                    tools:replace="android:screenOrientation,android:theme" />
         <activity android:name="com.liskovsoft.smartyoutubetv2.tv.ui.adddevice.AddDeviceActivity"
                   android:screenOrientation="fullUser"
                   tools:replace="android:screenOrientation" />

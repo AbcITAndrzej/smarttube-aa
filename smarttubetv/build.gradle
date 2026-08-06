@@ -57,7 +57,7 @@ android {
         applicationId "app.smarttube"
         minSdkVersion project.properties.minSdkVersion
         targetSdkVersion project.properties.targetSdkVersion
-        versionCode 2393
+        versionCode 2394
         versionName "32.03"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
@@ -176,7 +176,7 @@ android {
             applicationId "app.smarttube.mobile"
             minSdkVersion 21
             targetSdkVersion project.properties.compileSdkVersion
-            versionNameSuffix "-mobile-p13-aa1.8"
+            versionNameSuffix "-mobile-p13-aa1.9"
             matchingFallbacks = ['ststable']
         }
     }
