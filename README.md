@@ -1,32 +1,38 @@
 # SmartTube AA
 
-SmartTube AA to niezależna modyfikacja SmartTube przygotowana przede wszystkim do słuchania muzyki z YouTube w Android Auto.
+SmartTube AA to eksperymentalny fork SmartTube przygotowany głównie do muzyki z YouTube w Android Auto.
 
-Telefon służy do logowania i obsługi aplikacji, a interfejs Android Auto pozwala wybierać playlisty oraz sterować odtwarzaniem w samochodzie. Nie jest to projekt nastawiony na wygodne oglądanie filmów na telefonie ani kolejne wydanie SmartTube dla telewizorów.
+Projekt nie jest oficjalną aplikacją Google ani YouTube. To wersja w budowie, tworzona do testów i użytku badawczego.
 
-## Gdzie działa
+## Co działa
 
-- telefony i tablety z Androidem 5.0 lub nowszym,
-- Android Auto jako aplikacja multimedialna,
-- instalacja ręczna z APK (`app.smarttube.mobile`).
+- logowanie do konta YouTube,
+- odtwarzanie muzyki i playlist w Android Auto,
+- zapamiętywanie ostatniego utworu i playlisty,
+- podstawowe sterowanie odtwarzaniem,
+- tryb mobilny aplikacji na telefonie.
 
-## Co już działa
+## Jak uruchomić w Android Auto
 
-- logowanie do konta YouTube kodem QR lub przez przeglądarkę,
-- wyświetlanie i uruchamianie playlist w Android Auto,
-- poprawna kolejka utworów z wybranej playlisty,
-- zapamiętywanie ostatniego utworu, playlisty i wznowienie odtwarzania,
-- kolejka ustawiona przy aktualnie odtwarzanym utworze,
-- podstawowe sterowanie oraz czytelne stany „Lubię” i „Nie lubię”.
+1. Zainstaluj APK ręcznie na telefonie.
+2. Włącz tryb deweloperski w aplikacji Android Auto.
+3. Zezwól na instalację aplikacji spoza oficjalnego sklepu lub z nieznanych źródeł, jeśli telefon tego wymaga.
+4. Podłącz telefon do samochodu i uruchom SmartTube AA z ekranu Android Auto.
 
-Interfejs telefonu jest nadal rozwijany. Priorytetem projektu pozostaje stabilne odtwarzanie muzyki w Android Auto.
+W zależności od wersji telefonu i Android Auto, nazwy opcji mogą się minimalnie różnić.
+
+## Ograniczenia
+
+- Projekt jest rozwijany i może się zmieniać.
+- Główny nacisk jest na działanie w Android Auto, nie na pełny, oficjalny klient wideo na telefonie.
+- Lista i zachowanie sekcji mogą się zmieniać wraz z kolejnymi testami.
 
 ## Pobieranie
 
-Najnowsze APK oraz ZIP źródeł znajdują się na stronie [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
+Najnowsze wersje APK i archiwum źródeł są publikowane w GitHub Releases.
 
-Aktualna wersja: **32.03-mobile-p13-aa1.9**. Jest to kompilacja testowa/debug przeznaczona do ręcznej instalacji.
+Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.10`
 
 ## Pochodzenie
 
-Projekt bazuje na otwartym kodzie [SmartTube](https://github.com/yuliskov/SmartTube) i zachowuje jego licencję oraz informacje o autorach. SmartTube AA nie jest oficjalnym produktem Google, YouTube ani autorów SmartTube.
+Projekt bazuje na otwartym kodzie SmartTube i zachowuje oryginalne informacje o licencji oraz autorach.
