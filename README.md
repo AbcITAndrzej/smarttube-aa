@@ -1,3 +1,16 @@
+# SmartTube AA Mobile
+
+This repository contains an experimental SmartTube variant for Android phones and Android Auto.
+It adds a mobile/AA media interface, playlist browsing, queue handling and playback resume support.
+
+Download this fork only from the [GitHub Releases page](https://github.com/AbcITAndrzej/smarttube-aa/releases).
+The published APK is a test/debug build intended for manual installation.
+
+This project is based on the upstream SmartTube source. The original license, attribution and
+upstream documentation are retained below.
+
+---
+
 [<img src="images/badge_fdroid.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/app.smarttube.fdroid/)
 [<img src="images/badge_github.png" alt="Get it on GitHub" height="80">](https://github.com/yuliskov/SmartTube/releases)
 
