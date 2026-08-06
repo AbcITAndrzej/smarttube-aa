@@ -15,7 +15,32 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:title="@string/mobile_native_home" />
+        app:logo="@mipmap/app_icon"
+        app:menu="@menu/mobile_native_home_toolbar"
+        app:title="SmartTube" />
+
+    <HorizontalScrollView
+        android:id="@+id/mobile_category_scroll"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mobile_toolbar">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/mobile_category_chips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="8dp"
+            android:paddingTop="4dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="4dp"
+            app:chipSpacingHorizontal="6dp"
+            app:singleLine="true"
+            app:singleSelection="true" />
+    </HorizontalScrollView>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/mobile_list"
@@ -30,7 +55,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
+        app:layout_constraintTop_toBottomOf="@id/mobile_category_scroll"
         app:layout_constraintWidth_max="@dimen/mobile_content_max_width" />
 
     <LinearLayout
@@ -43,7 +68,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
+        app:layout_constraintTop_toBottomOf="@id/mobile_category_scroll"
         app:layout_constraintWidth_max="480dp">
 
         <ProgressBar

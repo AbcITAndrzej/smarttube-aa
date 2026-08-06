@@ -29,6 +29,21 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/mobile_classic_button"
+        app:layout_constraintWidth_max="@dimen/mobile_settings_max_width" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/mobile_classic_button"
+        style="@style/Widget.SmartTube.Mobile.Button"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="12dp"
+        android:text="@string/mobile_native_classic"
+        app:icon="@drawable/mobile_ic_back_24"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
         app:layout_constraintWidth_max="@dimen/mobile_settings_max_width" />
 
@@ -42,7 +57,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
+        app:layout_constraintTop_toBottomOf="@id/mobile_classic_button"
         app:layout_constraintWidth_max="480dp">
 
         <ProgressBar

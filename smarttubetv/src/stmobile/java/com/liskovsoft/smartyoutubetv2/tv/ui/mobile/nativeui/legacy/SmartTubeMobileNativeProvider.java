@@ -6,6 +6,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
+import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 
 /** Production Part 7 provider connecting native mobile ViewModels to current SmartTube services. */
 public final class SmartTubeMobileNativeProvider implements MobileNativeDependencies.Provider {
@@ -55,4 +57,14 @@ public final class SmartTubeMobileNativeProvider implements MobileNativeDependen
     }
     @Override public MobileImageLoader imageLoader() { return images; }
     @Override public MobilePlayerViewBinder playerViewBinder() { return binder; }
+
+    @Override public void openLegacyPlayback(Context context, String mediaId, long startPositionMs) {
+        Video video = index.get(mediaId);
+        if (video == null) {
+            video = Video.from(mediaId);
+        }
+        if (video == null) return;
+        if (startPositionMs > 0) video.pendingPosMs = startPositionMs;
+        PlaybackPresenter.instance(context).openVideo(video);
+    }
 }

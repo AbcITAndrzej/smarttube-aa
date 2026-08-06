@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">SmartTube Mobile P12.4 Menu</string>
     <bool name="mobile_touch_navigation_enabled">true</bool>
+    <bool name="mobile_native_home_enabled">true</bool>
     <bool name="mobile_haptic_feedback_enabled">true</bool>
     <bool name="mobile_settings_ui_adaptation_enabled">true</bool>
 

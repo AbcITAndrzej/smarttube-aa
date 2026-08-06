@@ -1,12 +1,14 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
 
 import android.os.Bundle;
+import android.content.res.Configuration;
 import android.view.*;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.liskovsoft.smartyoutubetv2.tv.R;
@@ -43,11 +45,24 @@ public final class MobileChannelFragment extends Fragment {
         ProgressBar progress = view.findViewById(R.id.mobile_progress);
         View retry = view.findViewById(R.id.mobile_retry_button);
         MobileMediaAdapter adapter = new MobileMediaAdapter(MobileNativeDependencies.get().imageLoader(), item -> {
-            if (item.isPlayable()) {
+            if (item.getKind() == MobileMediaItem.Kind.PLAYLIST
+                    || item.getKind() == MobileMediaItem.Kind.SECTION_LINK) {
+                MobileFragmentSupport.navigator(this).openBrowseItem(item.getId());
+            } else if (item.isPlayable()) {
                 MobileFragmentSupport.navigator(this).openPlayback(item.getId(), item.getProgressMs());
             }
         });
-        list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
+            grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override public int getSpanSize(int position) {
+                    return adapter.getLandscapeSpanSize(position);
+                }
+            });
+            list.setLayoutManager(grid);
+        } else {
+            list.setLayoutManager(new LinearLayoutManager(requireContext()));
+        }
         list.setHasFixedSize(true);
         list.setAdapter(adapter);
         toolbar.setNavigationOnClickListener(v -> MobileFragmentSupport.navigator(this).goBack());

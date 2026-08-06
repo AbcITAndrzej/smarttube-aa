@@ -10,13 +10,15 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
 public final class MobileBrowseViewModel extends ViewModel {
     private final MobileBrowseRepository repository;
     private final String pageId;
+    private final String itemId;
     private final MobileRequestSlot requestSlot = new MobileRequestSlot();
     private final MutableLiveData<MobileLoadState<MobileBrowsePayload>> state =
             new MutableLiveData<>(MobileLoadState.<MobileBrowsePayload>idle());
 
-    public MobileBrowseViewModel(MobileBrowseRepository repository, String pageId) {
+    public MobileBrowseViewModel(MobileBrowseRepository repository, String pageId, String itemId) {
         this.repository = repository;
         this.pageId = pageId;
+        this.itemId = itemId;
     }
 
     public LiveData<MobileLoadState<MobileBrowsePayload>> getState() { return state; }
@@ -29,14 +31,17 @@ public final class MobileBrowseViewModel extends ViewModel {
         MobileBrowsePayload previous = current == null ? null : current.getData();
         state.setValue(MobileLoadState.loading(previous, refreshing));
         final long token = requestSlot.begin();
-        MobileRequest request = repository.loadBrowse(pageId, new MobileResultCallback<MobileBrowsePayload>() {
+        MobileResultCallback<MobileBrowsePayload> callback = new MobileResultCallback<MobileBrowsePayload>() {
             @Override public void onSuccess(MobileBrowsePayload value) {
                 if (requestSlot.isCurrent(token)) state.postValue(MobileLoadState.content(value));
             }
             @Override public void onError(MobileError error) {
                 if (requestSlot.isCurrent(token)) state.postValue(MobileLoadState.error(previous, error));
             }
-        });
+        };
+        MobileRequest request = itemId == null || itemId.isEmpty()
+                ? repository.loadBrowse(pageId, callback)
+                : repository.loadItem(itemId, callback);
         requestSlot.attach(token, request);
     }
 

@@ -1,5 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core;
 
+import android.content.Context;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -20,6 +21,7 @@ public final class MobileNativeDependencies {
         MobilePlaybackRepository playbackRepository();
         MobileImageLoader imageLoader();
         MobilePlayerViewBinder playerViewBinder();
+        void openLegacyPlayback(Context context, String mediaId, long startPositionMs);
     }
 
     private static volatile Provider sProvider = new UnconfiguredProvider();
@@ -117,5 +119,6 @@ public final class MobileNativeDependencies {
         @Override public MobilePlaybackRepository playbackRepository() { return playback; }
         @Override public MobileImageLoader imageLoader() { return images; }
         @Override public MobilePlayerViewBinder playerViewBinder() { return binder; }
+        @Override public void openLegacyPlayback(Context context, String mediaId, long startPositionMs) { }
     }
 }

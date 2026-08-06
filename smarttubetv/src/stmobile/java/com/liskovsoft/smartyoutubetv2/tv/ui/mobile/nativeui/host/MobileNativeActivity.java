@@ -20,6 +20,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.MobileSearc
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.MobileSettingsFragment;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.legacy.SmartTubeMobileNativeProvider;
+import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
+import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
 
 /** Preview host for the Leanback-free mobile UI. */
 public final class MobileNativeActivity extends AppCompatActivity implements MobileNavigatorOwner {
@@ -47,6 +49,14 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
                 navigator.openBrowse("home");
                 return true;
             }
+            if (id == R.id.mobile_nav_shorts) {
+                navigator.openBrowse("shorts");
+                return true;
+            }
+            if (id == R.id.mobile_nav_subscriptions) {
+                navigator.openBrowse("subscriptions");
+                return true;
+            }
             if (id == R.id.mobile_nav_search) {
                 navigator.openSearch("");
                 return true;
@@ -65,6 +75,17 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
         } else if (!openedFromNotification) {
             navigator.syncChromeWithCurrentFragment();
         }
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        ViewManager.instance(this).addTop(this);
+    }
+
+    public void openClassicHome() {
+        Intent intent = new Intent(this, BrowseActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(intent);
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -103,7 +124,13 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
     }
 
     int destinationFor(Fragment fragment) {
-        if (fragment instanceof MobileBrowseFragment) return R.id.mobile_nav_home;
+        if (fragment instanceof MobileBrowseFragment) {
+            MobileBrowseFragment browse = (MobileBrowseFragment) fragment;
+            if (browse.isItemDetail()) return View.NO_ID;
+            if ("shorts".equals(browse.getPageId())) return R.id.mobile_nav_shorts;
+            if ("subscriptions".equals(browse.getPageId())) return R.id.mobile_nav_subscriptions;
+            return R.id.mobile_nav_home;
+        }
         if (fragment instanceof MobileSearchFragment) return R.id.mobile_nav_search;
         if (fragment instanceof MobileSettingsFragment) return R.id.mobile_nav_settings;
         return View.NO_ID;

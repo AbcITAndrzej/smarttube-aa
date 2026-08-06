@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compact phone-landscape chrome: keep most of the short screen for content. -->
+    <dimen name="mobile_top_bar_height">48dp</dimen>
+    <dimen name="mobile_bottom_nav_height">56dp</dimen>
+    <dimen name="mobile_bottom_nav_icon_size">20dp</dimen>
+    <dimen name="mobile_screen_horizontal_padding">6dp</dimen>
+    <dimen name="mobile_short_thumbnail_height">170dp</dimen>
+</resources>

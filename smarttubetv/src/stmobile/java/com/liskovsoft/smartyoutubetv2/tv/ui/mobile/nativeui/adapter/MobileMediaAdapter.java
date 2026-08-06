@@ -18,6 +18,7 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
     public interface Listener { void onMediaClicked(MobileMediaItem item); }
     private static final int TYPE_HEADER = 1;
     private static final int TYPE_MEDIA = 2;
+    private static final int TYPE_SHORT_PAIR = 3;
 
     private final List<Row> rows = new ArrayList<>();
     private final MobileImageLoader imageLoader;
@@ -33,14 +34,37 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
         rows.clear();
         for (MobileSection section : sections == null ? Collections.<MobileSection>emptyList() : sections) {
             if (!section.getTitle().isEmpty()) rows.add(Row.header(section.getId(), section.getTitle()));
-            for (MobileMediaItem item : section.getItems()) rows.add(Row.media(item));
+            List<MobileMediaItem> items = section.getItems();
+            for (int index = 0; index < items.size();) {
+                MobileMediaItem item = items.get(index);
+                if (item.getKind() == MobileMediaItem.Kind.SHORT) {
+                    MobileMediaItem second = index + 1 < items.size()
+                            && items.get(index + 1).getKind() == MobileMediaItem.Kind.SHORT
+                            ? items.get(index + 1) : null;
+                    rows.add(Row.shortPair(section.getId(), index, item, second));
+                    index += second == null ? 1 : 2;
+                } else {
+                    rows.add(Row.media(section.getId(), index, item));
+                    index++;
+                }
+            }
         }
         notifyDataSetChanged();
     }
 
     @Override public long getItemId(int position) { return rows.get(position).stableId(); }
-    @Override public int getItemViewType(int position) { return rows.get(position).item == null ? TYPE_HEADER : TYPE_MEDIA; }
+    @Override public int getItemViewType(int position) {
+        Row row = rows.get(position);
+        if (row.item == null) return TYPE_HEADER;
+        return row.shortPair ? TYPE_SHORT_PAIR : TYPE_MEDIA;
+    }
     @Override public int getItemCount() { return rows.size(); }
+
+    /** Section headers and Shorts pairs occupy the full landscape grid width. */
+    public int getLandscapeSpanSize(int position) {
+        int type = getItemViewType(position);
+        return type == TYPE_MEDIA ? 1 : 2;
+    }
 
     @NonNull @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
@@ -48,17 +72,59 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
         if (viewType == TYPE_HEADER) {
             return new HeaderHolder(inflater.inflate(R.layout.mobile_native_item_section_header, parent, false));
         }
+        if (viewType == TYPE_SHORT_PAIR) {
+            return new ShortPairHolder(inflater.inflate(R.layout.mobile_native_item_short_pair, parent, false));
+        }
         return new MediaHolder(inflater.inflate(R.layout.mobile_native_item_media, parent, false));
     }
 
     @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Row row = rows.get(position);
         if (holder instanceof HeaderHolder) ((HeaderHolder) holder).title.setText(row.header);
+        else if (holder instanceof ShortPairHolder) ((ShortPairHolder) holder).bind(row.item, row.secondItem);
         else ((MediaHolder) holder).bind(row.item);
     }
 
     @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         if (holder instanceof MediaHolder) imageLoader.clear(((MediaHolder) holder).thumbnail);
+        if (holder instanceof ShortPairHolder) ((ShortPairHolder) holder).clearImages();
+    }
+
+    private final class ShortPairHolder extends RecyclerView.ViewHolder {
+        final View left;
+        final View right;
+        final ImageView leftImage;
+        final ImageView rightImage;
+        final TextView leftTitle;
+        final TextView rightTitle;
+
+        ShortPairHolder(View view) {
+            super(view);
+            left = view.findViewById(R.id.mobile_short_left);
+            right = view.findViewById(R.id.mobile_short_right);
+            leftImage = left.findViewById(R.id.mobile_short_thumbnail);
+            rightImage = right.findViewById(R.id.mobile_short_thumbnail);
+            leftTitle = left.findViewById(R.id.mobile_short_title);
+            rightTitle = right.findViewById(R.id.mobile_short_title);
+        }
+
+        void bind(MobileMediaItem first, MobileMediaItem second) {
+            bindShort(left, leftImage, leftTitle, first);
+            bindShort(right, rightImage, rightTitle, second);
+        }
+
+        void clearImages() {
+            imageLoader.clear(leftImage);
+            imageLoader.clear(rightImage);
+        }
+
+        private void bindShort(View card, ImageView image, TextView title, MobileMediaItem item) {
+            card.setVisibility(item == null ? View.INVISIBLE : View.VISIBLE);
+            if (item == null) return;
+            title.setText(item.getTitle());
+            imageLoader.load(image, item.getThumbnailUrl());
+            card.setOnClickListener(v -> listener.onMediaClicked(item));
+        }
     }
 
     private final class MediaHolder extends RecyclerView.ViewHolder {
@@ -95,13 +161,27 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
         final String key;
         final String header;
         final MobileMediaItem item;
-        private Row(String key, String header, MobileMediaItem item) {
+        final MobileMediaItem secondItem;
+        final boolean shortPair;
+        private Row(String key, String header, MobileMediaItem item,
+                    MobileMediaItem secondItem, boolean shortPair) {
             this.key = key == null ? "" : key;
             this.header = header;
             this.item = item;
+            this.secondItem = secondItem;
+            this.shortPair = shortPair;
         }
-        static Row header(String key, String value) { return new Row("header:" + key, value, null); }
-        static Row media(MobileMediaItem item) { return new Row("media:" + item.getId(), null, item); }
+        static Row header(String key, String value) { return new Row("header:" + key, value, null, null, false); }
+        static Row media(String sectionId, int position, MobileMediaItem item) {
+            return new Row("media:" + sectionId + ":" + position + ":" + item.getId(),
+                    null, item, null, false);
+        }
+        static Row shortPair(String sectionId, int position,
+                             MobileMediaItem first, MobileMediaItem second) {
+            String secondId = second == null ? "" : ":" + second.getId();
+            return new Row("short:" + sectionId + ":" + position + ":" + first.getId() + secondId,
+                    null, first, second, true);
+        }
         long stableId() { return key.hashCode(); }
     }
 }

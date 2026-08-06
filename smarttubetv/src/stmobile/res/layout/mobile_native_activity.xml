@@ -24,7 +24,7 @@
         android:background="?attr/colorSurface"
         android:elevation="8dp"
         android:minHeight="48dp"
-        app:itemIconSize="24dp"
+        app:itemIconSize="@dimen/mobile_bottom_nav_icon_size"
         app:itemRippleColor="?attr/colorControlHighlight"
         app:labelVisibilityMode="labeled"
         app:layout_constraintBottom_toBottomOf="parent"

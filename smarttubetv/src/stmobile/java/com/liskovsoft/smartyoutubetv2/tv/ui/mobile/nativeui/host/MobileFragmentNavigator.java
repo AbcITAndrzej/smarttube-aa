@@ -5,6 +5,7 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileNavigator;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.*;
 
 public final class MobileFragmentNavigator implements MobileNavigator {
@@ -33,7 +34,14 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     @Override public void openBrowse(String pageId) {
-        showTopLevel(MobileBrowseFragment.newInstance(pageId), R.id.mobile_nav_home);
+        int destination = R.id.mobile_nav_home;
+        if ("shorts".equals(pageId)) destination = R.id.mobile_nav_shorts;
+        else if ("subscriptions".equals(pageId)) destination = R.id.mobile_nav_subscriptions;
+        showTopLevel(MobileBrowseFragment.newInstance(pageId), destination);
+    }
+
+    @Override public void openBrowseItem(String itemId) {
+        showDetail(MobileBrowseFragment.newItemInstance(itemId));
     }
 
     @Override public void openChannel(String channelId) {
@@ -49,7 +57,7 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     @Override public void openPlayback(String mediaId, long startPositionMs) {
-        showDetail(MobilePlaybackFragment.newInstance(mediaId, startPositionMs));
+        MobileNativeDependencies.get().openLegacyPlayback(host, mediaId, startPositionMs);
     }
 
     @Override public void goBack() {

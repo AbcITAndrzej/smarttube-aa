@@ -114,7 +114,10 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
         switch (page) {
-            case TRENDING: return content.getTrendingObserve();
+            // The legacy Trending endpoint may never emit on current YouTube accounts.
+            // The mobile chip promises fresh recommendations, so use the reliable,
+            // personalized Home feed and start a new request on every chip selection.
+            case TRENDING: return content.getHomeObserve();
             case LIVE: return content.getLiveObserve();
             case MUSIC: return content.getMusicObserve();
             case GAMING: return content.getGamingObserve();

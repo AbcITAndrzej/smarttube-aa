@@ -22,6 +22,7 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.GeneralData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.NetworkData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
+import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.adddevice.AddDeviceActivity;
 import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
 import com.liskovsoft.smartyoutubetv2.tv.ui.channel.ChannelActivity;
@@ -98,17 +99,36 @@ public class MainApplication extends MultiDexApplication { // fix: Didn't find c
             dialogClazz = AppDialogActivity.class;
         }
 
-        viewManager.setRoot(BrowseActivity.class);
+        Class<? extends android.app.Activity> browseActivity = BrowseActivity.class;
+
+        // The phone flavor ships a native, touch-first home screen in its own source set.
+        // Resolve it by name so the TV flavors remain completely independent from Material UI.
+        if (getResources().getBoolean(R.bool.mobile_native_home_enabled)) {
+            try {
+                Class<?> mobileClass = Class.forName(
+                        "com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity");
+                if (android.app.Activity.class.isAssignableFrom(mobileClass)) {
+                    @SuppressWarnings("unchecked")
+                    Class<? extends android.app.Activity> resolved =
+                            (Class<? extends android.app.Activity>) mobileClass;
+                    browseActivity = resolved;
+                }
+            } catch (ClassNotFoundException ignored) {
+                // Non-mobile builds intentionally do not contain the native activity.
+            }
+        }
+
+        viewManager.setRoot(browseActivity);
         viewManager.register(SplashView.class, SplashActivity.class); // no parent, because it's root activity
-        viewManager.register(BrowseView.class, BrowseActivity.class); // no parent, because it's root activity
-        viewManager.register(PlaybackView.class, PlaybackActivity.class, BrowseActivity.class);
-        viewManager.register(AppDialogView.class, dialogClazz, BrowseActivity.class);
-        viewManager.register(SearchView.class, SearchTagsActivity.class, BrowseActivity.class);
-        viewManager.register(SignInView.class, SignInActivity.class, BrowseActivity.class);
-        viewManager.register(AddDeviceView.class, AddDeviceActivity.class, BrowseActivity.class);
-        viewManager.register(ChannelView.class, ChannelActivity.class, BrowseActivity.class);
-        viewManager.register(ChannelUploadsView.class, ChannelUploadsActivity.class, BrowseActivity.class);
-        viewManager.register(WebBrowserView.class, WebBrowserActivity.class, BrowseActivity.class);
+        viewManager.register(BrowseView.class, browseActivity); // no parent, because it's root activity
+        viewManager.register(PlaybackView.class, PlaybackActivity.class, browseActivity);
+        viewManager.register(AppDialogView.class, dialogClazz, browseActivity);
+        viewManager.register(SearchView.class, SearchTagsActivity.class, browseActivity);
+        viewManager.register(SignInView.class, SignInActivity.class, browseActivity);
+        viewManager.register(AddDeviceView.class, AddDeviceActivity.class, browseActivity);
+        viewManager.register(ChannelView.class, ChannelActivity.class, browseActivity);
+        viewManager.register(ChannelUploadsView.class, ChannelUploadsActivity.class, browseActivity);
+        viewManager.register(WebBrowserView.class, WebBrowserActivity.class, browseActivity);
     }
 
     private void setupGlobalExceptionHandler() {

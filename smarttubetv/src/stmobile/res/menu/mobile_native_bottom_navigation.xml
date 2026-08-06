@@ -5,6 +5,14 @@
         android:icon="@drawable/mobile_ic_home_24"
         android:title="@string/mobile_native_home" />
     <item
+        android:id="@+id/mobile_nav_shorts"
+        android:icon="@drawable/mobile_ic_shorts_24"
+        android:title="@string/mobile_native_shorts" />
+    <item
+        android:id="@+id/mobile_nav_subscriptions"
+        android:icon="@drawable/mobile_ic_subscriptions_24"
+        android:title="@string/mobile_native_subscriptions" />
+    <item
         android:id="@+id/mobile_nav_search"
         android:icon="@drawable/mobile_ic_search_24"
         android:title="@string/mobile_native_search" />

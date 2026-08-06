@@ -14,6 +14,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.adapter.MobileSettin
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobileSettingsViewModel;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity;
 
 public final class MobileSettingsFragment extends Fragment {
     public static MobileSettingsFragment newInstance() { return new MobileSettingsFragment(); }
@@ -32,6 +33,11 @@ public final class MobileSettingsFragment extends Fragment {
         TextView error = view.findViewById(R.id.mobile_error);
         ProgressBar progress = view.findViewById(R.id.mobile_progress);
         View retry = view.findViewById(R.id.mobile_retry_button);
+        view.findViewById(R.id.mobile_classic_button).setOnClickListener(v -> {
+            if (requireActivity() instanceof MobileNativeActivity) {
+                ((MobileNativeActivity) requireActivity()).openClassicHome();
+            }
+        });
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         list.setHasFixedSize(true);

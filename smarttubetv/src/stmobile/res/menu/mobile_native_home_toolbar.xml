@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+      xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item
+        android:id="@+id/mobile_action_notifications"
+        android:icon="@drawable/mobile_ic_notification"
+        android:title="@string/mobile_native_notifications"
+        app:showAsAction="always" />
+    <item
+        android:id="@+id/mobile_action_search"
+        android:icon="@drawable/mobile_ic_search_24"
+        android:title="@string/mobile_native_search"
+        app:showAsAction="always" />
+</menu>

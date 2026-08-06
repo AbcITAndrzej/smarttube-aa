@@ -21,7 +21,8 @@ public final class MobileNativeViewModelFactory implements ViewModelProvider.Fac
     public <T extends ViewModel> T create(@NonNull Class<T> modelClass) {
         if (modelClass == MobileBrowseViewModel.class) {
             return (T) new MobileBrowseViewModel(provider.browseRepository(),
-                    arguments.getString("page_id", "home"));
+                    arguments.getString("page_id", "home"),
+                    arguments.getString("item_id", ""));
         }
         if (modelClass == MobileChannelViewModel.class) {
             return (T) new MobileChannelViewModel(provider.channelRepository(),

@@ -3,6 +3,7 @@
     <dimen name="mobile_touch_target">48dp</dimen>
     <dimen name="mobile_top_bar_height">64dp</dimen>
     <dimen name="mobile_bottom_nav_height">64dp</dimen>
+    <dimen name="mobile_bottom_nav_icon_size">24dp</dimen>
     <dimen name="mobile_screen_horizontal_padding">8dp</dimen>
     <dimen name="mobile_content_max_width">900dp</dimen>
     <dimen name="mobile_settings_max_width">720dp</dimen>
@@ -10,4 +11,5 @@
     <dimen name="mobile_media_thumbnail_height">81dp</dimen>
     <dimen name="mobile_media_card_min_height">97dp</dimen>
     <dimen name="mobile_setting_row_min_height">72dp</dimen>
+    <dimen name="mobile_short_thumbnail_height">280dp</dimen>
 </resources>
