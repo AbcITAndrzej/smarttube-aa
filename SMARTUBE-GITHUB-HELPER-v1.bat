@@ -5,7 +5,7 @@ title SmartTube AA - GitHub Helper v1
 
 set "SCRIPT_DIR=%~dp0"
 set "HELPER_NAME=SMARTUBE-GITHUB-HELPER-v1.bat"
-set "DEFAULT_REPO=AbcITAndrzej/SmartTube-AA-Mobile"
+set "DEFAULT_REPO=AbcITAndrzej/smarttube-aa"
 set "BRANCH=main"
 set "CONFIG_DIR=%LOCALAPPDATA%\SmartTubeGithubHelper"
 set "CONFIG_FILE=%CONFIG_DIR%\config.txt"
@@ -233,7 +233,7 @@ exit /b 0
 :CONFIGURE_REPO
 cls
 echo Aktualne repo: %REPO%
-echo Format: wlasciciel/nazwa, np. AbcITAndrzej/SmartTube-AA-Mobile
+echo Format: wlasciciel/nazwa, np. AbcITAndrzej/smarttube-aa
 echo.
 set "NEW_REPO="
 set /p "NEW_REPO=Nowe repo [Enter = bez zmian]: "
