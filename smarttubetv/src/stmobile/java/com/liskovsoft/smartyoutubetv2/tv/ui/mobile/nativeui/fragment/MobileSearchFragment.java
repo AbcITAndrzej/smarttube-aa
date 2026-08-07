@@ -5,6 +5,8 @@ import android.content.res.Configuration;
 import android.text.*;
 import android.view.*;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
@@ -49,7 +51,7 @@ public final class MobileSearchFragment extends Fragment {
         MobileTextAdapter suggestionAdapter = new MobileTextAdapter(value -> {
             query.setText(value);
             query.setSelection(value.length());
-            vm.search(value);
+            submitSearch(vm, query, suggestions);
         });
         MobileMediaAdapter resultAdapter = new MobileMediaAdapter(MobileNativeDependencies.get().imageLoader(), item -> {
             if (item.getKind() == MobileMediaItem.Kind.CHANNEL) {
@@ -90,14 +92,14 @@ public final class MobileSearchFragment extends Fragment {
         });
         query.setOnEditorActionListener((v, actionId, event) -> {
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                vm.search(query.getText().toString());
+                submitSearch(vm, query, suggestions);
                 return true;
             }
             return false;
         });
         view.findViewById(R.id.mobile_search_submit)
-                .setOnClickListener(v -> vm.search(query.getText().toString()));
-        retry.setOnClickListener(v -> vm.search(query.getText().toString()));
+                .setOnClickListener(v -> submitSearch(vm, query, suggestions));
+        retry.setOnClickListener(v -> submitSearch(vm, query, suggestions));
         vm.getSuggestions().observe(getViewLifecycleOwner(), values -> {
             suggestionAdapter.submit(values);
             suggestions.setVisibility(values == null || values.isEmpty() ? View.GONE : View.VISIBLE);
@@ -114,6 +116,17 @@ public final class MobileSearchFragment extends Fragment {
                 || vm.getState().getValue().getStatus() == MobileLoadState.Status.IDLE)) {
             vm.search(vm.getQuery());
         }
+    }
+
+    private void submitSearch(MobileSearchViewModel vm, EditText query, RecyclerView suggestions) {
+        if (pendingSuggestion != null) suggestionHandler.removeCallbacks(pendingSuggestion);
+        pendingSuggestion = null;
+        suggestions.setVisibility(View.GONE);
+        query.clearFocus();
+        InputMethodManager keyboard = (InputMethodManager) requireContext()
+                .getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(query.getWindowToken(), 0);
+        vm.search(query.getText().toString());
     }
 
     @Override public void onDestroyView() {

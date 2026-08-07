@@ -1,6 +1,10 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
 
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.os.Bundle;
 import android.view.*;
 import android.widget.*;
@@ -15,8 +19,12 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobileSettingsViewModel;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.update.MobileUpdateController;
 
 public final class MobileSettingsFragment extends Fragment {
+    private static final int REQUEST_INSTALL_PERMISSION = 701;
+    private MobileUpdateController updateController;
+
     public static MobileSettingsFragment newInstance() { return new MobileSettingsFragment(); }
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater i,
@@ -49,6 +57,8 @@ public final class MobileSettingsFragment extends Fragment {
                 MobileFragmentSupport.navigator(this).openAndroidAutoSettings());
         view.findViewById(R.id.mobile_radio_button).setOnClickListener(v ->
                 MobileFragmentSupport.navigator(this).openRadioSettings());
+        updateController = new MobileUpdateController(requireActivity(), this::requestInstallPermission);
+        view.findViewById(R.id.mobile_update_button).setOnClickListener(v -> updateController.check());
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         list.setHasFixedSize(true);
@@ -64,6 +74,31 @@ public final class MobileSettingsFragment extends Fragment {
         });
         if (vm.getState().getValue() == null
                 || vm.getState().getValue().getStatus() == MobileLoadState.Status.IDLE) vm.load();
+    }
+
+    private void requestInstallPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            if (updateController != null) updateController.resumeInstallAfterPermission();
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:" + requireContext().getPackageName()));
+        startActivityForResult(intent, REQUEST_INSTALL_PERMISSION);
+    }
+
+    @Override public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_INSTALL_PERMISSION && updateController != null) {
+            updateController.resumeInstallAfterPermission();
+        }
+    }
+
+    @Override public void onDestroyView() {
+        if (updateController != null) {
+            updateController.close();
+            updateController = null;
+        }
+        super.onDestroyView();
     }
 
     private void handleClick(MobileSettingsViewModel vm, MobileSettingItem item) {

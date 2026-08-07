@@ -7,6 +7,7 @@ import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import io.reactivex.disposables.Disposable;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class LegacySearchRepository implements MobileSearchRepository {
     private final ContentService content;
@@ -28,8 +29,14 @@ public final class LegacySearchRepository implements MobileSearchRepository {
         }
         MobileDiagnostics.debug("DataSearch", "search queryLength=" + normalized.length());
         try {
-            Disposable d = content.getSearchObserve(normalized, 0).subscribe(
-                    groups -> callback.onSuccess(new MobileSearchPayload(normalized, mapper.mapGroups(groups))),
+            Disposable d = content.getSearchObserve(normalized, 0)
+                    .timeout(30, TimeUnit.SECONDS)
+                    .subscribe(
+                    groups -> {
+                        List<MobileSection> sections = mapper.mapGroups(groups);
+                        MobileDiagnostics.debug("DataSearch", "search complete sections=" + sections.size());
+                        callback.onSuccess(new MobileSearchPayload(normalized, sections));
+                    },
                     e -> { MobileDiagnostics.error("DataSearch", "search failed", e); callback.onError(errors.map(e)); });
             return new RxMobileRequest(d);
         } catch (Throwable error) {

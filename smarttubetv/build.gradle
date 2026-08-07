@@ -57,7 +57,7 @@ android {
         applicationId "app.smarttube"
         minSdkVersion project.properties.minSdkVersion
         targetSdkVersion project.properties.targetSdkVersion
-        versionCode 2398
+        versionCode 2399
         versionName "32.04"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
@@ -176,7 +176,7 @@ android {
             applicationId "app.smarttube.mobile"
             minSdkVersion 21
             targetSdkVersion project.properties.compileSdkVersion
-            versionNameSuffix "-mobile-p13-aa1.13"
+            versionNameSuffix "-mobile-p13-aa1.14"
             matchingFallbacks = ['ststable']
         }
     }
@@ -238,6 +238,7 @@ dependencies {
     implementation project(':fragment-1.1.0')
     implementation project(':leanback-1.0.0')
     implementation project(':common')
+    implementation project(':appupdatechecker2')
     implementation project(':sharedutils')
     implementation project(':mediaserviceinterfaces')
     implementation project(':youtubeapi')

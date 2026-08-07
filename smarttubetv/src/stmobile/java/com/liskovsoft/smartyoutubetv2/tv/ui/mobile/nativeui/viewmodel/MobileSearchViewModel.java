@@ -51,6 +51,8 @@ public final class MobileSearchViewModel extends ViewModel {
     public void search(String value) {
         query = value == null ? "" : value.trim();
         if (query.isEmpty()) return;
+        suggestionSlot.clear();
+        suggestions.setValue(Collections.<String>emptyList());
         MobileSearchPayload previous = state.getValue() == null ? null : state.getValue().getData();
         state.setValue(MobileLoadState.loading(previous, false));
         final long token = searchSlot.begin();
