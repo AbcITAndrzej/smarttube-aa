@@ -17,6 +17,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.ChatReceiver;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.SeekBarSegment;
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers.VideoLoaderController;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.ExoPlayerController;
@@ -171,6 +172,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                             setVolume(Math.max(0f, Math.min(1f, multiplier)));
                         }
                     });
+            // ExoPlayerController already owns audio focus for YouTube and direct radio streams.
+            // The companion MediaSession exposes metadata/controls only; a second focus request
+            // would make the two clients in this process immediately pause each other.
+            this.mediaSessionManager.setPlayerHandlesAudioFocus(true);
         }
     }
 
@@ -335,18 +340,50 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
             emitSnapshot();
         }
     }
+
+    @Override public void playNext() {
+        if (presenter != null) {
+            MobileDiagnostics.info("P15-MobilePlayer", "next item requested");
+            VideoLoaderController loader = presenter.getController(VideoLoaderController.class);
+            if (loader != null) loader.loadNext();
+            else presenter.onNextClicked();
+        }
+    }
+
+    @Override public void playPrevious() {
+        if (presenter != null) {
+            MobileDiagnostics.info("P15-MobilePlayer", "previous item requested");
+            VideoLoaderController loader = presenter.getController(VideoLoaderController.class);
+            if (loader != null) loader.loadPrevious();
+            else presenter.onPreviousClicked();
+        }
+    }
+
     @Override public void seekTo(long positionMs) { setPositionMs(Math.max(0, positionMs)); emitSnapshot(); }
     @Override public void seekBy(long deltaMs) { seekTo(Math.max(0, getPositionMs() + deltaMs)); }
     @Override public void setPlaybackSpeed(float speed) { setSpeed(speed); emitSnapshot(); }
 
+    @Override public void selectVideoTrack(String trackId) {
+        FormatItem item = trackMapper.find(getVideoFormats(), trackId);
+        if (item != null) setFormat(item);
+    }
+
     @Override public void selectAudioTrack(String trackId) {
         FormatItem item = trackMapper.find(getAudioFormats(), trackId);
-        if (item != null) setFormat(item);
+        if (item != null) {
+            MobileDiagnostics.info("P15-MobilePlayer", "select audio id=" + trackId
+                    + " language=" + item.getLanguage());
+            setFormat(item);
+        }
     }
 
     @Override public void selectSubtitleTrack(String trackId) {
         FormatItem item = trackMapper.find(getSubtitleFormats(), trackId);
-        if (item != null) setFormat(item);
+        if (item != null) {
+            MobileDiagnostics.info("P15-MobilePlayer", "select subtitles id=" + trackId
+                    + " language=" + item.getLanguage());
+            setFormat(item);
+        }
     }
 
     @Override public void release() {
@@ -443,6 +480,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         long position = Math.max(0, getPositionMs());
         long duration = Math.max(0, getDurationMs());
         long buffered = player == null ? 0 : Math.max(0, player.getBufferedPosition());
+        List<MobileTrack> videoTracks = controller == null ? Collections.emptyList()
+                : trackMapper.map(controller.getVideoFormats(), MobileTrack.Type.VIDEO);
         List<MobileTrack> audio = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getAudioFormats(), MobileTrack.Type.AUDIO);
         List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
@@ -456,7 +495,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         : video == null ? "" : LegacyMediaMapper.safe(video.getSecondTitleFull()),
                 containsMedia(), isPlaying(), buffering || (!radioPlayback && isLoading()),
                 isPlaybackEnded(),
-                position, duration, buffered, getSpeed(), audio, subtitles);
+                position, duration, buffered, getSpeed(), videoTracks, audio, subtitles);
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
@@ -541,9 +580,9 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     @Override public void showBackgroundColor(int colorResId) { }
     @Override public void resetPlayerState() { if (controller != null) controller.resetPlayerState(); }
     @Override public boolean isEmbed() {
-        // The phone surface still behaves as the original embed player. Android Auto must use the
-        // full error-recovery path (applyNoPlaybackFix + reloadVideo) instead of finish/release.
-        return !headlessPlaybackAllowed;
+        // Mobile needs the complete metadata and recovery pipeline. Embed mode suppresses
+        // suggestions (so Next waits forever) and aborts early handling of errors such as 403.
+        return false;
     }
     @Override public void updateSuggestions(VideoGroup group) { }
     @Override public void removeSuggestions(VideoGroup group) { }

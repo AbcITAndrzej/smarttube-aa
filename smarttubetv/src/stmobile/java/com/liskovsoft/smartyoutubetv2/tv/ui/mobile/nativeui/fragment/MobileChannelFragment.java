@@ -49,7 +49,13 @@ public final class MobileChannelFragment extends Fragment {
                     || item.getKind() == MobileMediaItem.Kind.SECTION_LINK) {
                 MobileFragmentSupport.navigator(this).openBrowseItem(item.getId());
             } else if (item.isPlayable()) {
-                MobileFragmentSupport.navigator(this).openPlayback(item.getId(), item.getProgressMs());
+                if (item.getKind() == MobileMediaItem.Kind.SHORT) {
+                    MobileFragmentSupport.navigator(this).openShortPlayback(
+                            item.getId(), item.getProgressMs());
+                } else {
+                    MobileFragmentSupport.navigator(this).openPlayback(
+                            item.getId(), item.getProgressMs());
+                }
             }
         });
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {

@@ -43,12 +43,16 @@ public final class MobilePlaybackViewModel extends ViewModel {
     }
 
     public void play() { repository.play(); }
+    public void playNext() { repository.playNext(); }
+    public void playPrevious() { repository.playPrevious(); }
 
     public void seekBy(long deltaMs) { repository.seekBy(deltaMs); }
     public void seekTo(long positionMs) { repository.seekTo(Math.max(0, positionMs)); }
+    public void selectVideoTrack(String id) { repository.selectVideoTrack(id); }
     public void selectAudioTrack(String id) { repository.selectAudioTrack(id); }
     public void selectSubtitleTrack(String id) { repository.selectSubtitleTrack(id); }
     public void setSpeed(float speed) { repository.setPlaybackSpeed(speed); }
+    public void setResizeMode(int mode) { repository.setResizeMode(mode); }
 
     public void onHostStart() {
         if (repository instanceof MobileBackgroundPlaybackRepository) {

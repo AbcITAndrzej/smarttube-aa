@@ -5,7 +5,6 @@ import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileNavigator;
-import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
 
@@ -86,7 +85,11 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     @Override public void openPlayback(String mediaId, long startPositionMs) {
-        MobileNativeDependencies.get().openLegacyPlayback(host, mediaId, startPositionMs);
+        showDetail(MobilePlaybackFragment.newInstance(mediaId, startPositionMs));
+    }
+
+    @Override public void openShortPlayback(String mediaId, long startPositionMs) {
+        showDetail(MobilePlaybackFragment.newShortInstance(mediaId, startPositionMs));
     }
 
     @Override public void goBack() {

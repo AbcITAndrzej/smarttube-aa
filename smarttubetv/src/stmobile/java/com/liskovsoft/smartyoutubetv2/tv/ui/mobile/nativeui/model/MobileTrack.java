@@ -1,7 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model;
 
 public final class MobileTrack {
-    public enum Type { AUDIO, SUBTITLE }
+    public enum Type { VIDEO, AUDIO, SUBTITLE }
 
     private final String id;
     private final Type type;

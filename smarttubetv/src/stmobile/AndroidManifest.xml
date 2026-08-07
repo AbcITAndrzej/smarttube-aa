@@ -75,8 +75,9 @@
             android:launchMode="singleTop"
             android:resizeableActivity="true"
             android:screenOrientation="fullUser"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.SmartTube.MobileNative"
-            tools:replace="android:launchMode" />
+            tools:replace="android:launchMode,android:resizeableActivity,android:supportsPictureInPicture" />
 
         <service
             android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.background.MobileBackgroundPlaybackService"

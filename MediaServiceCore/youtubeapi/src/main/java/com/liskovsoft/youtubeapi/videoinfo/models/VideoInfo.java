@@ -392,10 +392,18 @@ public class VideoInfo {
         if (mMergedCaptionTracks == null) {
             mMergedCaptionTracks = mCaptionTracks;
 
-            if (mTranslationLanguages != null && mCaptionTracks != null) {
+            if (mCaptionTracks != null) {
                 CaptionTrack originTrack = findOriginTrack(mCaptionTracks);
-                for (TranslationLanguage language : mTranslationLanguages) {
-                    mMergedCaptionTracks.add(new TranslatedCaptionTrack(originTrack, language));
+                if (mTranslationLanguages != null || originTrack.isTranslatable()) {
+                    // translationLanguages may be absent even though authored captions are
+                    // translatable. Keep the Polish fallback independent from that array.
+                    mMergedCaptionTracks.add(new TranslatedCaptionTrack(
+                            originTrack, "pl", "Polski", "mobile.pl"));
+                }
+                if (mTranslationLanguages != null) {
+                    for (TranslationLanguage language : mTranslationLanguages) {
+                        mMergedCaptionTracks.add(new TranslatedCaptionTrack(originTrack, language));
+                    }
                 }
             }
         }

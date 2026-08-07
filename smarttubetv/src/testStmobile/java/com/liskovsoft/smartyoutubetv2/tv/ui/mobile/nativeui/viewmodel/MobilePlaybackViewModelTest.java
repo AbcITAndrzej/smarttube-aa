@@ -48,17 +48,32 @@ public class MobilePlaybackViewModelTest {
         FakePlayer player = new FakePlayer(); MobilePlaybackViewModel vm = new MobilePlaybackViewModel(player, "abc", 0);
         vm.release(); vm.release(); assertEquals(1, player.releaseCalls);
     }
+
+    @Test public void forwardsNextAndPreviousRequests() {
+        FakePlayer player = new FakePlayer();
+        MobilePlaybackViewModel vm = new MobilePlaybackViewModel(player, "abc", 0);
+        vm.playNext();
+        vm.playPrevious();
+        assertEquals(1, player.nextCalls);
+        assertEquals(1, player.previousCalls);
+    }
+
     private static class FakePlayer implements MobilePlaybackRepository {
-        Listener listener; int playCalls; int pauseCalls; int releaseCalls;
+        Listener listener; int playCalls; int pauseCalls; int nextCalls; int previousCalls;
+        int releaseCalls;
         @Override public void setListener(Listener listener) { this.listener = listener; }
         @Override public void prepare(String id, long pos) {}
         @Override public void play() { playCalls++; }
         @Override public void pause() { pauseCalls++; }
+        @Override public void playNext() { nextCalls++; }
+        @Override public void playPrevious() { previousCalls++; }
         @Override public void seekTo(long p) {}
         @Override public void seekBy(long d) {}
         @Override public void setPlaybackSpeed(float s) {}
+        @Override public void selectVideoTrack(String id) {}
         @Override public void selectAudioTrack(String id) {}
         @Override public void selectSubtitleTrack(String id) {}
+        @Override public void setResizeMode(int mode) {}
         @Override public void release() { releaseCalls++; }
     }
     private static final class BackgroundPlayer extends FakePlayer

@@ -413,7 +413,15 @@ public class TrackSelectorManager implements TrackSelectorCallback {
         // enable renderer
         mRenderers[rendererIndex].isDisabled = false;
 
-        MediaTrack matchedTrack = findBestMatch(track);
+        // Tracks coming from the current on-screen list already carry exact group/index data.
+        // Using fuzzy language matching here could turn Polish auto-translated captions into a
+        // different language. Saved/preset tracks have no indices and still use best matching.
+        MediaTrack matchedTrack = track.groupIndex >= 0 && track.trackIndex >= 0
+                ? track : findBestMatch(track);
+        if (matchedTrack == null) {
+            Log.e(TAG, "Can't match selected track.");
+            return;
+        }
         
         setSelection(matchedTrack.rendererIndex, matchedTrack.groupIndex, matchedTrack.trackIndex);
 

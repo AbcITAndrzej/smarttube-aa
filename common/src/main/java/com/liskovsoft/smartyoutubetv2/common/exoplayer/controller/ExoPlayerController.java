@@ -247,7 +247,18 @@ public class ExoPlayerController implements Player.EventListener {
     public void selectFormat(FormatItem formatItem) {
         if (formatItem != null && formatItem.getTrack() != null) {
             FormatItem selectedFormatItem = getSelectedFormat(formatItem.getTrack().rendererIndex);
-            if (!formatItem.equals(selectedFormatItem)) {
+            boolean sameTrack = formatItem.equals(selectedFormatItem);
+            // Caption translations intentionally compare loosely in ExoFormatItem so a saved
+            // language can be restored. A direct UI tap, however, must distinguish e.g. Polish
+            // originals from Polish auto-translated captions in another track group.
+            if (formatItem.getType() == FormatItem.TYPE_SUBTITLE
+                    && selectedFormatItem != null && selectedFormatItem.getTrack() != null) {
+                MediaTrack requested = formatItem.getTrack();
+                MediaTrack selected = selectedFormatItem.getTrack();
+                sameTrack = requested.groupIndex == selected.groupIndex
+                        && requested.trackIndex == selected.trackIndex;
+            }
+            if (!sameTrack) {
                 mTrackSelectorManager.selectTrack(formatItem.getTrack());
                 mEventListener.onTrackSelected(formatItem);
             }

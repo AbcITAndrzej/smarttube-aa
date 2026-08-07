@@ -16,6 +16,7 @@ public final class MobilePlaybackSnapshot {
     private final long durationMs;
     private final long bufferedPositionMs;
     private final float speed;
+    private final List<MobileTrack> videoTracks;
     private final List<MobileTrack> audioTracks;
     private final List<MobileTrack> subtitleTracks;
 
@@ -25,13 +26,26 @@ public final class MobilePlaybackSnapshot {
                                   float speed, List<MobileTrack> audioTracks,
                                   List<MobileTrack> subtitleTracks) {
         this(mediaId, title, subtitle, prepared, playing, buffering, false,
-                positionMs, durationMs, bufferedPositionMs, speed, audioTracks, subtitleTracks);
+                positionMs, durationMs, bufferedPositionMs, speed,
+                Collections.<MobileTrack>emptyList(), audioTracks, subtitleTracks);
     }
 
     public MobilePlaybackSnapshot(String mediaId, String title, String subtitle,
                                   boolean prepared, boolean playing, boolean buffering,
                                   boolean ended, long positionMs, long durationMs,
                                   long bufferedPositionMs, float speed,
+                                  List<MobileTrack> audioTracks,
+                                  List<MobileTrack> subtitleTracks) {
+        this(mediaId, title, subtitle, prepared, playing, buffering, ended,
+                positionMs, durationMs, bufferedPositionMs, speed,
+                Collections.<MobileTrack>emptyList(), audioTracks, subtitleTracks);
+    }
+
+    public MobilePlaybackSnapshot(String mediaId, String title, String subtitle,
+                                  boolean prepared, boolean playing, boolean buffering,
+                                  boolean ended, long positionMs, long durationMs,
+                                  long bufferedPositionMs, float speed,
+                                  List<MobileTrack> videoTracks,
                                   List<MobileTrack> audioTracks,
                                   List<MobileTrack> subtitleTracks) {
         this.mediaId = mediaId;
@@ -45,6 +59,7 @@ public final class MobilePlaybackSnapshot {
         this.durationMs = Math.max(0, durationMs);
         this.bufferedPositionMs = Math.max(0, bufferedPositionMs);
         this.speed = speed <= 0 ? 1f : speed;
+        this.videoTracks = immutable(videoTracks);
         this.audioTracks = immutable(audioTracks);
         this.subtitleTracks = immutable(subtitleTracks);
     }
@@ -65,6 +80,7 @@ public final class MobilePlaybackSnapshot {
     public long getDurationMs() { return durationMs; }
     public long getBufferedPositionMs() { return bufferedPositionMs; }
     public float getSpeed() { return speed; }
+    public List<MobileTrack> getVideoTracks() { return videoTracks; }
     public List<MobileTrack> getAudioTracks() { return audioTracks; }
     public List<MobileTrack> getSubtitleTracks() { return subtitleTracks; }
 }

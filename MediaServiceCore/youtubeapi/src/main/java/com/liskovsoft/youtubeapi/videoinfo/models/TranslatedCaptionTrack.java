@@ -6,21 +6,34 @@ import com.liskovsoft.sharedutils.helpers.Helpers;
 public class TranslatedCaptionTrack extends CaptionTrack {
     public final static String TRANSLATE_MARKER = "*";
     private final CaptionTrack mOriginTrack;
-    private final TranslationLanguage mLanguage;
+    private final String mLanguageCode;
+    private final String mLanguageName;
+    private final String mIdSuffix;
 
     public TranslatedCaptionTrack(CaptionTrack originTrack, TranslationLanguage language) {
+        this(originTrack, language.getLanguageCode(), language.getLanguageName());
+    }
+
+    public TranslatedCaptionTrack(CaptionTrack originTrack, String languageCode, String languageName) {
+        this(originTrack, languageCode, languageName, languageCode);
+    }
+
+    public TranslatedCaptionTrack(CaptionTrack originTrack, String languageCode, String languageName,
+                                  String idSuffix) {
         mOriginTrack = originTrack;
-        mLanguage = language;
+        mLanguageCode = languageCode;
+        mLanguageName = languageName;
+        mIdSuffix = idSuffix;
     }
 
     @Override
     public String getBaseUrl() {
         // Don't try to translate the same lang or you'll get a mess
-        if (Helpers.equals(mOriginTrack.getLanguageCode(), mLanguage.getLanguageCode())) {
+        if (Helpers.equals(mOriginTrack.getLanguageCode(), mLanguageCode)) {
             return mOriginTrack.getBaseUrl();
         }
 
-        return mOriginTrack.getBaseUrl() + "&tlang=" + mLanguage.getLanguageCode();
+        return mOriginTrack.getBaseUrl() + "&tlang=" + mLanguageCode;
     }
 
     @Override
@@ -30,12 +43,13 @@ public class TranslatedCaptionTrack extends CaptionTrack {
 
     @Override
     public String getLanguageCode() {
-        return mLanguage.getLanguageCode();
+        return mLanguageCode;
     }
 
     @Override
     public String getVssId() {
-        return mOriginTrack.getVssId();
+        String originId = mOriginTrack.getVssId();
+        return (originId != null ? originId : "caption") + ".tlang." + mIdSuffix;
     }
 
     @Override
@@ -43,7 +57,7 @@ public class TranslatedCaptionTrack extends CaptionTrack {
         // NOTE: tag contain weird chars: (simplified) - chinese (simplified)
         //return mLanguage.getLanguageName() + (mTag != null ? " " + mTag : "") + TRANSLATE_MARKER;
 
-        return YouTubeHelper.exoNameFix(mLanguage.getLanguageName()) + TRANSLATE_MARKER;
+        return YouTubeHelper.exoNameFix(mLanguageName) + TRANSLATE_MARKER;
     }
 
     @Override

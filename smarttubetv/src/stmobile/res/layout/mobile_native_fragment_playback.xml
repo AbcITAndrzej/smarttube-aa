@@ -16,6 +16,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
+    <!-- Kept above PlayerView so SurfaceView cannot swallow taps after controls auto-hide. -->
+    <View
+        android:id="@+id/mobile_player_gesture_surface"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:contentDescription="@string/mobile_native_video_surface"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <ProgressBar
         android:id="@+id/mobile_progress"
         android:layout_width="48dp"
@@ -26,25 +37,28 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <LinearLayout
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/mobile_player_controls"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:background="@drawable/mobile_player_controls_background"
-        android:orientation="vertical"
-        android:paddingStart="@dimen/mobile_screen_horizontal_padding"
-        android:paddingTop="8dp"
-        android:paddingEnd="@dimen/mobile_screen_horizontal_padding"
-        android:paddingBottom="12dp"
+        android:layout_height="0dp"
+        android:background="#26000000"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent">
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:id="@+id/mobile_player_top_bar"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:background="#99000000"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/mobile_back_button"
@@ -52,96 +66,221 @@
                 android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:contentDescription="@string/mobile_native_back"
-                android:minWidth="48dp"
-                android:minHeight="48dp"
                 app:icon="@drawable/mobile_ic_back_24"
                 app:iconGravity="textStart"
                 app:iconPadding="0dp" />
 
-            <TextView
-                android:id="@+id/mobile_player_title"
-                style="@style/TextAppearance.SmartTube.Mobile.PlayerTitle"
+            <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:maxLines="2"
-                android:paddingStart="8dp" />
+                android:orientation="vertical"
+                android:paddingStart="8dp">
+
+                <TextView
+                    android:id="@+id/mobile_player_title"
+                    style="@style/TextAppearance.SmartTube.Mobile.PlayerTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1" />
+
+                <TextView
+                    android:id="@+id/mobile_player_subtitle"
+                    style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_player_more"
+                style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/mobile_native_more_options"
+                app:icon="@drawable/mobile_ic_more_24"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
         </LinearLayout>
 
-        <SeekBar
-            android:id="@+id/mobile_player_seek"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:minHeight="48dp"
-            android:paddingStart="0dp"
-            android:paddingEnd="0dp" />
+        <View
+            android:id="@+id/mobile_player_gesture_area"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:contentDescription="@string/mobile_native_video_surface"
+            app:layout_constraintBottom_toTopOf="@id/mobile_player_bottom_bar"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/mobile_player_top_bar" />
 
-        <TextView
-            android:id="@+id/mobile_player_time"
-            style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+        <LinearLayout
+            android:id="@+id/mobile_player_center_controls"
+            android:layout_width="wrap_content"
+            android:layout_height="72dp"
             android:gravity="center"
-            android:minHeight="24dp" />
+            android:orientation="horizontal"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
 
-        <HorizontalScrollView
-            android:layout_width="match_parent"
-            android:layout_height="56dp"
-            android:fillViewport="true"
-            android:scrollbars="none">
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_player_previous"
+                style="@style/Widget.SmartTube.Mobile.PlayerRoundButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/mobile_native_previous_video"
+                app:icon="@drawable/mobile_ic_skip_previous_24"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_player_play"
+                style="@style/Widget.SmartTube.Mobile.PlayerPrimaryButton"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
+                android:layout_marginStart="24dp"
+                android:layout_marginEnd="24dp"
+                android:contentDescription="@string/mobile_native_play"
+                app:icon="@drawable/mobile_ic_play"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_player_next"
+                style="@style/Widget.SmartTube.Mobile.PlayerRoundButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/mobile_native_next_video"
+                app:icon="@drawable/mobile_ic_skip_next_24"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/mobile_player_bottom_bar"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:background="@drawable/mobile_player_controls_background"
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="10dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
+
+            <SeekBar
+                android:id="@+id/mobile_player_seek"
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:maxHeight="36dp"
+                android:minHeight="36dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp" />
 
             <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:gravity="center"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
                 android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/mobile_player_rewind"
-                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:minWidth="64dp"
-                    android:minHeight="48dp"
-                    android:text="@string/mobile_native_rewind_10" />
+                <TextView
+                    android:id="@+id/mobile_player_time"
+                    style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/mobile_player_play"
-                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
+                <HorizontalScrollView
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:minWidth="88dp"
-                    android:minHeight="48dp"
-                    android:text="@string/mobile_native_play" />
+                    android:fillViewport="true"
+                    android:scrollbars="none">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/mobile_player_forward"
-                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:minWidth="64dp"
-                    android:minHeight="48dp"
-                    android:text="@string/mobile_native_forward_10" />
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/mobile_player_audio"
-                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:minWidth="80dp"
-                    android:minHeight="48dp"
-                    android:text="@string/mobile_native_audio" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_quick_options"
+                            style="@style/Widget.SmartTube.Mobile.PlayerRoundButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:contentDescription="@string/mobile_native_quick_options"
+                            app:icon="@drawable/mobile_ic_tune_24"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/mobile_player_subtitles"
-                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:minWidth="80dp"
-                    android:minHeight="48dp"
-                    android:text="@string/mobile_native_subtitles" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_subtitles_toggle"
+                            style="@style/Widget.SmartTube.Mobile.PlayerButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:text="@string/mobile_native_subtitles"
+                            app:icon="@drawable/mobile_ic_captions_24"
+                            app:iconGravity="textStart" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_audio_toggle"
+                            style="@style/Widget.SmartTube.Mobile.PlayerButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:text="@string/mobile_native_dubbing"
+                            app:icon="@drawable/mobile_ic_voice_24"
+                            app:iconGravity="textStart" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_quality"
+                            style="@style/Widget.SmartTube.Mobile.PlayerButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:text="@string/mobile_native_quality" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_speed"
+                            style="@style/Widget.SmartTube.Mobile.PlayerButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:text="@string/mobile_native_speed" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_fit"
+                            style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:contentDescription="@string/mobile_native_fit_mode"
+                            app:icon="@drawable/mobile_ic_fit_24"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_pip"
+                            style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:contentDescription="@string/mobile_native_pip"
+                            app:icon="@drawable/mobile_ic_pip_24"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/mobile_player_fullscreen"
+                            style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:contentDescription="@string/mobile_native_fullscreen"
+                            app:icon="@drawable/mobile_ic_fullscreen_24"
+                            app:iconGravity="textStart"
+                            app:iconPadding="0dp" />
+                    </LinearLayout>
+                </HorizontalScrollView>
             </LinearLayout>
-        </HorizontalScrollView>
-    </LinearLayout>
-
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

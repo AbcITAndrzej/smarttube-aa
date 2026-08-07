@@ -15,6 +15,7 @@ public final class AndroidAutoPreferences {
     public static final String PREF_FILE = "smarttube_auto_settings";
     public static final String KEY_PLAYLIST_ORDER = "playlist_order";
     public static final String KEY_HIDDEN_PLAYLISTS = "hidden_playlists";
+    public static final String KEY_EXPERIMENTAL_DRIVING_VIDEO = "experimental_driving_video";
     private static final String KEY_DEVELOPER_CONFIRMED = "developer_mode_confirmed";
     private static final String KEY_UNKNOWN_SOURCES_CONFIRMED = "unknown_sources_confirmed";
     private static final String ORDER_SEPARATOR = "\u001f";
@@ -40,6 +41,15 @@ public final class AndroidAutoPreferences {
 
     public void setUnknownSourcesConfirmed(boolean confirmed) {
         preferences.edit().putBoolean(KEY_UNKNOWN_SOURCES_CONFIRMED, confirmed).apply();
+    }
+
+    /** Off by default: normal Android Auto playback remains audio-only. */
+    public boolean isExperimentalDrivingVideoEnabled() {
+        return preferences.getBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, false);
+    }
+
+    public void setExperimentalDrivingVideoEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, enabled).apply();
     }
 
     public List<String> getPlaylistOrder() {

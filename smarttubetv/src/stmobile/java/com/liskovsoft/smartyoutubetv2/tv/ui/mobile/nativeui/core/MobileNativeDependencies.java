@@ -91,11 +91,15 @@ public final class MobileNativeDependencies {
             }
             @Override public void play() {}
             @Override public void pause() {}
+            @Override public void playNext() {}
+            @Override public void playPrevious() {}
             @Override public void seekTo(long positionMs) {}
             @Override public void seekBy(long deltaMs) {}
             @Override public void setPlaybackSpeed(float speed) {}
+            @Override public void selectVideoTrack(String trackId) {}
             @Override public void selectAudioTrack(String trackId) {}
             @Override public void selectSubtitleTrack(String trackId) {}
+            @Override public void setResizeMode(int resizeMode) {}
             @Override public void release() { listener = null; }
         };
         private final MobileImageLoader images = new MobileImageLoader() {

@@ -61,6 +61,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
     private SwitchMaterial accessEnabled;
     private SwitchMaterial developerConfirmed;
     private SwitchMaterial unknownSourcesConfirmed;
+    private SwitchMaterial experimentalDrivingVideo;
     private boolean bindingAccessSwitch;
 
     public static AndroidAutoSettingsFragment newInstance() {
@@ -83,6 +84,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
         accessEnabled = view.findViewById(R.id.mobile_aa_access_enabled);
         developerConfirmed = view.findViewById(R.id.mobile_aa_developer_confirmed);
         unknownSourcesConfirmed = view.findViewById(R.id.mobile_aa_unknown_sources_confirmed);
+        experimentalDrivingVideo = view.findViewById(R.id.mobile_aa_experimental_video);
 
         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
         toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
@@ -90,6 +92,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
         toolbar.setNavigationOnClickListener(v -> MobileFragmentSupport.navigator(this).goBack());
 
         bindAccessControls(view);
+        bindExperimentalVideo();
         view.findViewById(R.id.mobile_aa_playlist_refresh).setOnClickListener(v -> loadPlaylists(true));
         view.findViewById(R.id.mobile_aa_playlist_reset).setOnClickListener(v -> resetPlaylistLayout());
         loadPlaylists(false);
@@ -149,6 +152,30 @@ public final class AndroidAutoSettingsFragment extends Fragment {
                         .setPositiveButton(android.R.string.ok, null)
                         .show());
         updateAccessStatus();
+    }
+
+    private void bindExperimentalVideo() {
+        experimentalDrivingVideo.setChecked(preferences.isExperimentalDrivingVideoEnabled());
+        experimentalDrivingVideo.setOnCheckedChangeListener((button, checked) -> {
+            if (!checked) {
+                preferences.setExperimentalDrivingVideoEnabled(false);
+                return;
+            }
+            new AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.mobile_aa_video_confirm_title)
+                    .setMessage(R.string.mobile_aa_video_confirm_message)
+                    .setPositiveButton(R.string.mobile_aa_video_confirm_enable, (dialog, which) ->
+                            preferences.setExperimentalDrivingVideoEnabled(true))
+                    .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
+                        preferences.setExperimentalDrivingVideoEnabled(false);
+                        experimentalDrivingVideo.setChecked(false);
+                    })
+                    .setOnCancelListener(dialog -> {
+                        preferences.setExperimentalDrivingVideoEnabled(false);
+                        experimentalDrivingVideo.setChecked(false);
+                    })
+                    .show();
+        });
     }
 
     private void setAccessSwitch(boolean checked) {

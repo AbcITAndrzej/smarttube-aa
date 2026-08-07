@@ -176,7 +176,7 @@ android {
             applicationId "app.smarttube.mobile"
             minSdkVersion 21
             targetSdkVersion project.properties.compileSdkVersion
-            versionNameSuffix "-mobile-p13-aa1.14"
+            versionNameSuffix "-mobile-p13-aa1.15"
             matchingFallbacks = ['ststable']
         }
     }

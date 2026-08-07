@@ -10,5 +10,6 @@ public interface MobileNavigator {
     void openRadioSettings();
     void openRadioPlayback(String stationId);
     void openPlayback(String mediaId, long startPositionMs);
+    void openShortPlayback(String mediaId, long startPositionMs);
     void goBack();
 }

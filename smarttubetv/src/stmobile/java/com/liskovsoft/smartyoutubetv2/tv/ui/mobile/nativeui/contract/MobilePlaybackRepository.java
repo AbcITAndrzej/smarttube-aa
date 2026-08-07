@@ -17,10 +17,14 @@ public interface MobilePlaybackRepository {
     void prepare(String mediaId, long startPositionMs);
     void play();
     void pause();
+    void playNext();
+    void playPrevious();
     void seekTo(long positionMs);
     void seekBy(long deltaMs);
     void setPlaybackSpeed(float speed);
+    void selectVideoTrack(String trackId);
     void selectAudioTrack(String trackId);
     void selectSubtitleTrack(String trackId);
+    void setResizeMode(int resizeMode);
     void release();
 }

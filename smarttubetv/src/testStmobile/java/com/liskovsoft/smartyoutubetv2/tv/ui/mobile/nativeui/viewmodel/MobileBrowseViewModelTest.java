@@ -14,7 +14,7 @@ public class MobileBrowseViewModelTest {
             callback.onSuccess(new MobileBrowsePayload("Home", Collections.<MobileSection>emptyList()));
             return MobileRequest.NONE;
         };
-        MobileBrowseViewModel vm = new MobileBrowseViewModel(repo, "home"); vm.load();
+        MobileBrowseViewModel vm = new MobileBrowseViewModel(repo, "home", null); vm.load();
         assertEquals(MobileLoadState.Status.CONTENT, vm.getState().getValue().getStatus());
         assertEquals("Home", vm.getState().getValue().getData().getTitle());
     }
@@ -23,7 +23,7 @@ public class MobileBrowseViewModelTest {
             callback.onError(new MobileError(MobileError.Kind.NETWORK, "offline", null, true));
             return MobileRequest.NONE;
         };
-        MobileBrowseViewModel vm = new MobileBrowseViewModel(repo, "home"); vm.load();
+        MobileBrowseViewModel vm = new MobileBrowseViewModel(repo, "home", null); vm.load();
         assertEquals(MobileLoadState.Status.ERROR, vm.getState().getValue().getStatus());
         assertTrue(vm.getState().getValue().getError().isRetryable());
     }
