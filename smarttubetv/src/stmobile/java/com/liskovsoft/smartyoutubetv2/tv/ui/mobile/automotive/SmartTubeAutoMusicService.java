@@ -34,6 +34,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileError;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileMediaItem;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileSection;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
 import java.util.ArrayList;
@@ -55,6 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private static final String ROOT = "smarttube:auto:root";
+    private static final String SUGGESTED_ROOT = "smarttube:auto:suggested";
     private static final String PAGE_PREFIX = "page:";
     private static final String SECTION_PREFIX = "section:";
     private static final String ITEM_PREFIX = "item:";
@@ -62,6 +65,12 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private static final String MEDIA_ACTION_PLAY_LIKED = "action:liked:play_all";
     private static final String MEDIA_ACTION_SHUFFLE_LIKED = "action:liked:shuffle";
     private static final String LIKED_PAGE_ID = "liked_music";
+    private static final String RADIO_FAVORITES_PAGE_ID = "radio_favorites";
+    private static final String RADIO_ALL_PAGE_ID = "radio_all";
+    private static final String MORE_PAGE_ID = "more";
+    private static final String RADIO_FAVORITES_CONTAINER_ID = SECTION_PREFIX + "radio:favorites";
+    private static final String RADIO_ALL_CONTAINER_ID = SECTION_PREFIX + "radio:all";
+    private static final String ROOT_HINT_SUGGESTED = "android.service.media.extra.SUGGESTED";
     private static final String LIKED_CONTAINER_ID = SECTION_PREFIX + "liked_music:all";
     private static final String[] LIKED_BROWSE_ALIASES = {"VLLM", "LM", "liked", "liked_music"};
     private static final String ACTION_TOGGLE_LIKE = "com.liskovsoft.smarttube.mobile.auto.TOGGLE_LIKE";
@@ -72,6 +81,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private static final String ACTION_TOGGLE_SHUFFLE = "com.liskovsoft.smarttube.mobile.auto.TOGGLE_SHUFFLE";
     private static final String ACTION_CYCLE_REPEAT = "com.liskovsoft.smarttube.mobile.auto.CYCLE_REPEAT";
     private static final String ACTION_TOGGLE_AUTO_NEXT = "com.liskovsoft.smarttube.mobile.auto.TOGGLE_AUTO_NEXT";
+    private static final String ACTION_SWITCH_SOURCE = "com.liskovsoft.smarttube.mobile.auto.SWITCH_SOURCE";
     private static final String NOTIFICATION_ACTION_PLAY = "com.liskovsoft.smarttube.mobile.auto.NOTIFICATION_PLAY";
     private static final String NOTIFICATION_ACTION_PAUSE = "com.liskovsoft.smarttube.mobile.auto.NOTIFICATION_PAUSE";
     private static final String NOTIFICATION_ACTION_NEXT = "com.liskovsoft.smarttube.mobile.auto.NOTIFICATION_NEXT";
@@ -92,13 +102,17 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private static final String PREF_QUEUE_INDEX = "last_queue_index";
     private static final String PREF_SOURCE_ID = "last_source_id";
     private static final String PREF_LIKE_PREFIX = "liked:";
+    private static final String PREF_MODE_MUSIC_PREFIX = "mode_music:";
+    private static final String PREF_MODE_RADIO_PREFIX = "mode_radio:";
     private static final long AUTO_ADVANCE_EARLY_MS = 1200L;
     private static final long RESUME_SAVE_INTERVAL_MS = 5000L;
-    private static final long AUTO_RESUME_DELAY_MS = 900L;
+    private static final long AUTO_RESUME_DELAY_MS = 150L;
     private static final long FORCE_ZERO_GUARD_MS = 1600L;
     private static final long FORCE_ZERO_THRESHOLD_MS = 5000L;
     private static final long DOUBLE_PREVIOUS_WINDOW_MS = 1600L;
     private static final long AUTO_ADVANCE_MIN_DURATION_MS = 10000L;
+    private static final int MAX_RESUME_SOURCE_ATTEMPTS = 5;
+    private static final long RESUME_RETRY_BASE_DELAY_MS = 1500L;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, MobileMediaItem> mediaByBrowserId = new LinkedHashMap<>();
@@ -113,6 +127,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private SmartTubeMobileNativeProvider provider;
     private MobileBrowseRepository browseRepository;
     private MobilePlaybackRepository playbackRepository;
+    private RadioStationRepository radioRepository;
     private MediaSessionCompat mediaSession;
     private SharedPreferences resumePrefs;
     private boolean destroyed;
@@ -125,6 +140,12 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                     });
                 }
             };
+    private final Runnable radioCatalogRefresh = this::refreshRadioBrowseTree;
+    private final RadioStationRepository.ChangeListener radioCatalogListener = () -> {
+        // A quick double tap should update the host once, after the final favorite state settles.
+        mainHandler.removeCallbacks(radioCatalogRefresh);
+        mainHandler.postDelayed(radioCatalogRefresh, 150L);
+    };
     private String activeContainerId;
     private List<String> activeQueue = Collections.emptyList();
     private int activeQueueIndex = -1;
@@ -151,6 +172,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private boolean autoResumeScheduled;
     private boolean resumeLoadInProgress;
     private boolean resumeAutoplayConsumed;
+    private int resumeSourceAttempt;
+    private String resumeSourcePageId;
+    private String resumeReason;
+    private boolean activeItemReachedReady;
     private boolean likedPlaybackLoadInProgress;
     private boolean pendingLikedShuffle;
     private boolean likedCatalogWarmStarted;
@@ -167,6 +192,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         MobileDiagnostics.info("P13-AA-Service", "onCreate P13-AA1.8");
 
         resumePrefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        migrateCurrentSelectionToModeHistory();
         autoPreferences = new AndroidAutoPreferences(this);
         autoPreferences.registerListener(autoSettingsListener);
         createNotificationChannel();
@@ -176,6 +202,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         browseRepository.setItemUpdateListener((itemId, payload) -> mainHandler.post(
                 () -> applyBackgroundItemUpdate(itemId, payload)));
         playbackRepository = provider.automotivePlaybackRepository();
+        radioRepository = RadioStationRepository.get(getApplicationContext());
+        radioRepository.addChangeListener(radioCatalogListener);
         MobileDiagnostics.info("P13-AA-Playback",
                 "headless audio repository created; Auto session is the only public session");
 
@@ -268,6 +296,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                     cycleRepeatMode();
                 } else if (ACTION_TOGGLE_AUTO_NEXT.equals(action)) {
                     toggleAutoNext();
+                } else if (ACTION_SWITCH_SOURCE.equals(action)) {
+                    switchPlaybackSource();
                 }
             }
 
@@ -300,6 +330,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                                 + " retryable=" + (error != null && error.isRetryable())
                                 + " message=" + (error == null ? "unknown" : error.getMessage()));
                 mainHandler.post(() -> {
+                    if (!activeItemReachedReady) {
+                        MobileDiagnostics.warn("P13-AA-Recovery",
+                                "selected item failed before ready; retrying same item without auto-next");
+                    }
                     updatePlaybackState(PlaybackStateCompat.STATE_ERROR, 0L, 0f);
                     String mediaId = activeItem == null ? null : activeItem.getId();
                     if (mediaId != null
@@ -314,7 +348,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                         playbackRepository.play();
                         return;
                     }
-                    if (autoNextEnabled && activeQueue != null && activeQueue.size() > 1) {
+                    if (activeItemReachedReady && autoNextEnabled
+                            && activeQueue != null && activeQueue.size() > 1) {
                         int nextIndex = resolveAutoNextIndex();
                         if (nextIndex >= 0 && nextIndex < activeQueue.size()
                                 && nextIndex != activeQueueIndex) {
@@ -364,15 +399,37 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     public BrowserRoot onGetRoot(String clientPackageName, int clientUid, Bundle rootHints) {
         MobileDiagnostics.info("P13-AA-Resume",
                 "onGetRoot client=" + clientPackageName + " uid=" + clientUid);
-        return new BrowserRoot(ROOT, null);
+        boolean suggested = rootHints != null
+                && rootHints.getBoolean(ROOT_HINT_SUGGESTED, false);
+        return new BrowserRoot(suggested ? SUGGESTED_ROOT : ROOT, null);
     }
 
     @Override
     public void onLoadChildren(String parentId,
                                Result<List<MediaBrowserCompat.MediaItem>> result) {
         if (ROOT.equals(parentId)) {
-            result.sendResult(createRootItems());
+            result.sendResult(createAaRootItems());
             scheduleAutoResumeAfterOpen();
+            return;
+        }
+
+        if (SUGGESTED_ROOT.equals(parentId)) {
+            result.sendResult(createRadioItems(true));
+            return;
+        }
+
+        if ((PAGE_PREFIX + RADIO_FAVORITES_PAGE_ID).equals(parentId)) {
+            result.sendResult(createRadioItems(true));
+            return;
+        }
+
+        if ((PAGE_PREFIX + RADIO_ALL_PAGE_ID).equals(parentId)) {
+            result.sendResult(createRadioItems(false));
+            return;
+        }
+
+        if ((PAGE_PREFIX + MORE_PAGE_ID).equals(parentId)) {
+            result.sendResult(createMoreItems());
             return;
         }
 
@@ -407,6 +464,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     public void onDestroy() {
         destroyed = true;
         MobileDiagnostics.info("P13-AA-Service", "onDestroy");
+        mainHandler.removeCallbacks(radioCatalogRefresh);
+        if (radioRepository != null) {
+            radioRepository.removeChangeListener(radioCatalogListener);
+        }
         for (MobileRequest request : new ArrayList<>(activeBrowseRequests)) {
             if (request != null) {
                 request.cancel();
@@ -434,6 +495,27 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         super.onDestroy();
     }
 
+    private void refreshRadioBrowseTree() {
+        if (destroyed || radioRepository == null) return;
+        if (activeItem != null && RadioStationRepository.isRadioMediaId(activeItem.getId())) {
+            RadioStation station = radioRepository.getStation(
+                    RadioStationRepository.stationIdFromMediaId(activeItem.getId()));
+            boolean favorite = station != null && station.isFavorite();
+            if (favorite != activeLiked) {
+                activeLiked = favorite;
+                updateMetadata(activeItem, lastMetadataDurationMs);
+                updatePlaybackState(lastPlaybackState, lastPlaybackPositionMs, lastPlaybackSpeed);
+            }
+        }
+        notifyChildrenChanged(PAGE_PREFIX + RADIO_FAVORITES_PAGE_ID);
+        notifyChildrenChanged(PAGE_PREFIX + RADIO_ALL_PAGE_ID);
+        notifyChildrenChanged(SUGGESTED_ROOT);
+        MobileDiagnostics.info("P14-Radio",
+                "AA radio catalog refreshed favorites="
+                        + radioRepository.getStations(
+                                RadioStationRepository.SortMode.POPULARITY, true).size());
+    }
+
     private List<MediaBrowserCompat.MediaItem> createRootItems() {
         List<MediaBrowserCompat.MediaItem> result = new ArrayList<>();
         result.add(browsable(PAGE_PREFIX + "playlists", "Playlisty", "Wybierz playlistę z konta"));
@@ -443,6 +525,65 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         result.add(browsable(PAGE_PREFIX + "history", "Ostatnio odtwarzane", "Historia oglądania i słuchania"));
         result.add(browsable(PAGE_PREFIX + "subscriptions", "Subskrypcje", "Najnowsze materiały z subskrypcji"));
         return result;
+    }
+
+    private List<MediaBrowserCompat.MediaItem> createAaRootItems() {
+        List<MediaBrowserCompat.MediaItem> result = new ArrayList<>();
+        result.add(browsable(PAGE_PREFIX + "playlists", "Playlisty",
+                "Wybierz playlistę z konta"));
+        result.add(browsable(PAGE_PREFIX + RADIO_FAVORITES_PAGE_ID, "Radio",
+                "Ulubione stacje radiowe"));
+        result.add(browsable(PAGE_PREFIX + "music", "Automatyczne",
+                "Polecane i miksy z konta"));
+        result.add(browsable(PAGE_PREFIX + MORE_PAGE_ID, "Więcej",
+                "Wszystkie stacje i pozostałe sekcje"));
+        return result;
+    }
+
+    private List<MediaBrowserCompat.MediaItem> createMoreItems() {
+        List<MediaBrowserCompat.MediaItem> result = new ArrayList<>();
+        result.add(browsable(PAGE_PREFIX + RADIO_ALL_PAGE_ID, "Wszystkie stacje",
+                "Pełny katalog zsynchronizowanych stacji"));
+        result.add(browsable(PAGE_PREFIX + LIKED_PAGE_ID, "Polubiona muzyka",
+                "Muzyka, która Ci się podoba"));
+        result.add(browsable(PAGE_PREFIX + "history", "Ostatnio odtwarzane",
+                "Historia oglądania i słuchania"));
+        result.add(browsable(PAGE_PREFIX + "subscriptions", "Subskrypcje",
+                "Najnowsze materiały z subskrypcji"));
+        return result;
+    }
+
+    private List<MediaBrowserCompat.MediaItem> createRadioItems(boolean favoritesOnly) {
+        if (radioRepository == null) {
+            radioRepository = RadioStationRepository.get(getApplicationContext());
+        }
+        List<RadioStation> stations = radioRepository.getStations(
+                RadioStationRepository.SortMode.POPULARITY, favoritesOnly);
+        String containerId = favoritesOnly
+                ? RADIO_FAVORITES_CONTAINER_ID : RADIO_ALL_CONTAINER_ID;
+        String sourceId = PAGE_PREFIX + (favoritesOnly
+                ? RADIO_FAVORITES_PAGE_ID : RADIO_ALL_PAGE_ID);
+        List<String> browserIds = new ArrayList<>();
+        int index = 0;
+        for (RadioStation station : stations) {
+            String mediaId = RadioStationRepository.mediaId(station.getId());
+            String browserId = MEDIA_PREFIX + "radio:"
+                    + (favoritesOnly ? "favorite:" : "all:") + index++ + ":" + station.getId();
+            String codec = station.getCodec() == null || station.getCodec().trim().isEmpty()
+                    ? "Radio" : station.getCodec();
+            String subtitle = station.getBitrate() > 0
+                    ? codec + " • " + station.getBitrate() + " kb/s" : codec;
+            MobileMediaItem item = new MobileMediaItem(mediaId, MobileMediaItem.Kind.LIVE,
+                    station.getName(), subtitle, station.getFaviconUrl(), "NA ŻYWO",
+                    0L, 0L, true);
+            mediaByBrowserId.put(browserId, item);
+            browserIds.add(browserId);
+        }
+        queueByContainer.put(containerId, browserIds);
+        sourceByContainer.put(containerId, sourceId);
+        MobileDiagnostics.info("P14-Radio",
+                "AA radio page favorites=" + favoritesOnly + " stations=" + browserIds.size());
+        return mediaItems(browserIds);
     }
 
     private void warmLikedStateCache(int aliasIndex) {
@@ -956,16 +1097,33 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             return;
         }
 
+        if (activeItem != null
+                && sourceId.equals(sourceByContainer.get(activeContainerId))
+                && attachHydratedQueue(sourceId, activeItem.getId())) {
+            return;
+        }
+
         if (activeContainerId != null && currentBrowserId != null) {
             List<String> completedQueue = queueByContainer.get(activeContainerId);
             int completedIndex = completedQueue == null
                     ? -1 : completedQueue.indexOf(currentBrowserId);
+            if (completedIndex < 0 && completedQueue != null && activeItem != null) {
+                completedIndex = findMediaIndex(completedQueue, activeItem.getId());
+                if (completedIndex >= 0) {
+                    currentBrowserId = completedQueue.get(completedIndex);
+                }
+            }
             if (completedIndex >= 0) {
                 activeQueue = new ArrayList<>(completedQueue);
                 activeQueueIndex = completedIndex;
+                MobileMediaItem hydratedItem = mediaByBrowserId.get(currentBrowserId);
+                if (hydratedItem != null) {
+                    activeItem = hydratedItem;
+                }
                 publishQueue(activeQueue);
                 updatePlaybackState(lastPlaybackState,
                         lastPlaybackPositionMs, lastPlaybackSpeed);
+                savePlaybackSelection(currentBrowserId, activeItem, lastPlaybackPositionMs);
                 MobileDiagnostics.info("P13-AA-Queue",
                         "background queue expanded source=" + sourceId
                                 + " size=" + activeQueue.size()
@@ -1092,6 +1250,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         activeQueueIndex = activeQueue.indexOf(browserId);
         activeItem = item;
         activeLiked = resolveKnownLike(item.getId());
+        activeItemReachedReady = false;
         lastRecoveryMediaId = item.getId();
         recoveryAttemptsForMediaId = 0;
         if (!fromAutoAdvance) {
@@ -1114,6 +1273,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         playbackRepository.prepare(item.getId(), 0L);
         playbackRepository.seekTo(0L);
         playbackRepository.play();
+        if (RadioStationRepository.isRadioMediaId(item.getId()) && radioRepository != null) {
+            radioRepository.reportClick(
+                    RadioStationRepository.stationIdFromMediaId(item.getId()));
+        }
     }
 
     private void publishQueue(List<String> browserIds) {
@@ -1208,6 +1371,18 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
 
         String savedBrowserId = resumePrefs.getString(PREF_BROWSER_ID, null);
         String savedVideoId = resumePrefs.getString(PREF_VIDEO_ID, null);
+        if (RadioStationRepository.isRadioMediaId(savedVideoId)) {
+            // Radio is backed by the local persistent cache, so its queue can be restored
+            // immediately without a YouTube browse request.
+            boolean favorites = RADIO_FAVORITES_CONTAINER_ID.equals(
+                    resumePrefs.getString(PREF_CONTAINER_ID, null));
+            createRadioItems(favorites);
+            // The station may have been removed from favorites while it was still playing.
+            // Keep resume reliable by also exposing it through the full local catalog.
+            if (findLoadedResumeBrowserId(savedBrowserId, savedVideoId) == null && favorites) {
+                createRadioItems(false);
+            }
+        }
         String loadedBrowserId = findLoadedResumeBrowserId(savedBrowserId, savedVideoId);
         if (loadedBrowserId != null) {
             resumeAutoplayConsumed = true;
@@ -1230,14 +1405,228 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             return false;
         }
 
-        resumeLoadInProgress = true;
         String savedSourceId = resumePrefs.getString(PREF_SOURCE_ID, null);
         String sourceId = savedSourceId == null || savedSourceId.trim().isEmpty()
                 ? "history" : savedSourceId;
+
+        // YouTube playback only needs the stable video ID. Start it immediately from
+        // persisted metadata, then rebuild the owning queue independently in the
+        // background. This removes the cold-start dependency on the transient browse
+        // index and keeps the first audible result local and deterministic.
+        if (!RadioStationRepository.isRadioMediaId(savedVideoId)
+                && startImmediateSavedPlayback(savedBrowserId, savedVideoId, sourceId, reason)) {
+            hydrateResumeQueueInBackground(sourceId, savedVideoId);
+            return true;
+        }
+
+        resumeLoadInProgress = true;
+        resumeSourceAttempt = 1;
+        resumeSourcePageId = sourceId;
+        resumeReason = reason;
         MobileDiagnostics.info("P13-AA-Resume",
-                "resume loading source=" + sourceId + " reason=" + reason + " videoId=" + savedVideoId);
+                "resume loading source=" + sourceId + " reason=" + reason
+                        + " attempt=" + resumeSourceAttempt + " videoId=" + savedVideoId);
         loadResumePageAndPlay(sourceId, reason, true);
         return true;
+    }
+
+    private boolean startImmediateSavedPlayback(
+            String savedBrowserId, String savedVideoId, String sourceId, String reason) {
+        String savedContainerId = resumePrefs.getString(PREF_CONTAINER_ID, null);
+        if (savedContainerId == null || savedContainerId.trim().isEmpty()) {
+            savedContainerId = SECTION_PREFIX + "resume:local";
+        }
+        if (savedBrowserId == null || savedBrowserId.trim().isEmpty()) {
+            savedBrowserId = MEDIA_PREFIX + savedContainerId + ":resume:" + savedVideoId;
+        }
+
+        String playlistId = null;
+        String playlistPrefix = ITEM_PREFIX + "playlist:";
+        if (sourceId != null && sourceId.startsWith(playlistPrefix)) {
+            playlistId = sourceId.substring(playlistPrefix.length());
+        }
+        MobileMediaItem savedItem = new MobileMediaItem(
+                savedVideoId,
+                MobileMediaItem.Kind.VIDEO,
+                resumePrefs.getString(PREF_TITLE, "Ostatni utwór"),
+                resumePrefs.getString(PREF_SUBTITLE, ""),
+                resumePrefs.getString(PREF_THUMB, null),
+                "",
+                0L,
+                resumePrefs.getLong(PREF_DURATION, 0L),
+                true,
+                playlistId);
+
+        mediaByBrowserId.put(savedBrowserId, savedItem);
+        queueByContainer.put(savedContainerId,
+                new ArrayList<>(Collections.singletonList(savedBrowserId)));
+        sourceByContainer.put(savedContainerId, sourceId);
+        resumeAutoplayConsumed = true;
+        MobileDiagnostics.info("P13-AA-Resume",
+                "instant local resume reason=" + reason + " browserId=" + savedBrowserId
+                        + " videoId=" + savedVideoId + " source=" + sourceId);
+        playResumeBrowserId(savedBrowserId);
+        return activeItem != null;
+    }
+
+    private void hydrateResumeQueueInBackground(String sourceId, String savedVideoId) {
+        hydrateResumeQueueInBackground(sourceId, savedVideoId, true);
+    }
+
+    private void hydrateResumeQueueInBackground(
+            String sourceId, String savedVideoId, boolean allowPlaylistCatalogRecovery) {
+        if (sourceId == null || sourceId.trim().isEmpty() || browseRepository == null) {
+            return;
+        }
+        final MobileRequest[] requestHolder = { MobileRequest.NONE };
+        MobileResultCallback<MobileBrowsePayload> callback =
+                new MobileResultCallback<MobileBrowsePayload>() {
+                    @Override public void onSuccess(MobileBrowsePayload payload) {
+                        mainHandler.post(() -> completeResumeQueueHydration(
+                                sourceId, savedVideoId, payload, requestHolder,
+                                allowPlaylistCatalogRecovery));
+                    }
+
+                    @Override public void onError(MobileError error) {
+                        MobileDiagnostics.warn("P13-AA-Resume",
+                                "background queue hydration failed source=" + sourceId
+                                        + " error=" + error);
+                        mainHandler.post(() -> completeResumeQueueHydration(
+                                sourceId, savedVideoId, null, requestHolder,
+                                allowPlaylistCatalogRecovery));
+                    }
+                };
+        try {
+            MobileRequest request = sourceId.startsWith(ITEM_PREFIX)
+                    ? browseRepository.loadItem(
+                            sourceId.substring(ITEM_PREFIX.length()), callback)
+                    : browseRepository.loadBrowse(sourceId, callback);
+            requestHolder[0] = request == null ? MobileRequest.NONE : request;
+            activeBrowseRequests.add(requestHolder[0]);
+            MobileDiagnostics.info("P13-AA-Resume",
+                    "background queue hydration started source=" + sourceId
+                            + " videoId=" + savedVideoId);
+        } catch (Throwable error) {
+            MobileDiagnostics.error("P13-AA-Resume",
+                    "background queue hydration threw source=" + sourceId, error);
+            completeResumeQueueHydration(sourceId, savedVideoId, null, requestHolder,
+                    allowPlaylistCatalogRecovery);
+        }
+    }
+
+    private void completeResumeQueueHydration(
+            String sourceId, String savedVideoId, MobileBrowsePayload payload,
+            MobileRequest[] requestHolder, boolean allowPlaylistCatalogRecovery) {
+        MobileRequest request = requestHolder[0];
+        if (request != null) {
+            request.cancel();
+            activeBrowseRequests.remove(request);
+        }
+        if (destroyed || activeItem == null
+                || !savedVideoId.equals(activeItem.getId())) {
+            return;
+        }
+        if (payload == null) {
+            if (allowPlaylistCatalogRecovery
+                    && sourceId.startsWith(ITEM_PREFIX + "playlist:")) {
+                loadPlaylistCatalogThenHydrate(sourceId, savedVideoId);
+            }
+            return;
+        }
+        try {
+            convertPayload(sourceId, payload);
+            attachHydratedQueue(sourceId, savedVideoId);
+        } catch (Throwable error) {
+            MobileDiagnostics.error("P13-AA-Resume",
+                    "background queue conversion failed source=" + sourceId, error);
+        }
+    }
+
+    private void loadPlaylistCatalogThenHydrate(String sourceId, String savedVideoId) {
+        final MobileRequest[] requestHolder = { MobileRequest.NONE };
+        MobileDiagnostics.info("P13-AA-Resume",
+                "warming playlist catalog for queue source=" + sourceId);
+        try {
+            MobileRequest request = browseRepository.loadBrowse("playlists",
+                    new MobileResultCallback<MobileBrowsePayload>() {
+                        @Override public void onSuccess(MobileBrowsePayload payload) {
+                            mainHandler.post(() -> {
+                                finishBrowseRequest(requestHolder[0]);
+                                if (destroyed || activeItem == null
+                                        || !savedVideoId.equals(activeItem.getId())) {
+                                    return;
+                                }
+                                MobileDiagnostics.info("P13-AA-Resume",
+                                        "playlist catalog ready; retry queue source="
+                                                + sourceId);
+                                hydrateResumeQueueInBackground(
+                                        sourceId, savedVideoId, false);
+                            });
+                        }
+
+                        @Override public void onError(MobileError error) {
+                            mainHandler.post(() -> {
+                                finishBrowseRequest(requestHolder[0]);
+                                MobileDiagnostics.warn("P13-AA-Resume",
+                                        "playlist catalog recovery failed source="
+                                                + sourceId + " error=" + error);
+                            });
+                        }
+                    });
+            requestHolder[0] = request == null ? MobileRequest.NONE : request;
+            activeBrowseRequests.add(requestHolder[0]);
+        } catch (Throwable error) {
+            MobileDiagnostics.error("P13-AA-Resume",
+                    "playlist catalog recovery threw source=" + sourceId, error);
+        }
+    }
+
+    private boolean attachHydratedQueue(String sourceId, String mediaId) {
+        for (Map.Entry<String, String> entry : sourceByContainer.entrySet()) {
+            if (!sourceId.equals(entry.getValue())) {
+                continue;
+            }
+            List<String> queue = queueByContainer.get(entry.getKey());
+            int index = findMediaIndex(queue, mediaId);
+            if (index < 0) {
+                continue;
+            }
+            String browserId = queue.get(index);
+            MobileMediaItem hydratedItem = mediaByBrowserId.get(browserId);
+            activeContainerId = entry.getKey();
+            activeQueue = new ArrayList<>(queue);
+            activeQueueIndex = index;
+            if (hydratedItem != null) {
+                activeItem = hydratedItem;
+            }
+            publishQueue(activeQueue);
+            updateMetadata(activeItem, Math.max(lastMetadataDurationMs,
+                    activeItem.getDurationMs()));
+            updatePlaybackState(lastPlaybackState,
+                    lastPlaybackPositionMs, lastPlaybackSpeed);
+            savePlaybackSelection(browserId, activeItem, lastPlaybackPositionMs);
+            MobileDiagnostics.info("P13-AA-Resume",
+                    "background queue attached source=" + sourceId
+                            + " size=" + activeQueue.size() + " current=" + index);
+            return true;
+        }
+        MobileDiagnostics.info("P13-AA-Resume",
+                "background first page does not contain current item yet source="
+                        + sourceId + " videoId=" + mediaId);
+        return false;
+    }
+
+    private int findMediaIndex(List<String> queue, String mediaId) {
+        if (queue == null || mediaId == null) {
+            return -1;
+        }
+        for (int i = 0; i < queue.size(); i++) {
+            MobileMediaItem item = mediaByBrowserId.get(queue.get(i));
+            if (item != null && mediaId.equals(item.getId())) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private String findLoadedResumeBrowserId(String savedBrowserId, String savedVideoId) {
@@ -1247,9 +1636,25 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         if (savedVideoId == null) {
             return null;
         }
+        String savedSourceId = resumePrefs == null
+                ? null : resumePrefs.getString(PREF_SOURCE_ID, null);
+        String savedContainerId = resumePrefs == null
+                ? null : resumePrefs.getString(PREF_CONTAINER_ID, null);
         for (Map.Entry<String, MobileMediaItem> entry : mediaByBrowserId.entrySet()) {
             MobileMediaItem item = entry.getValue();
-            if (item != null && savedVideoId.equals(item.getId())) {
+            if (item == null || !savedVideoId.equals(item.getId())) {
+                continue;
+            }
+            if (RadioStationRepository.isRadioMediaId(savedVideoId)) {
+                return entry.getKey();
+            }
+            String candidateContainer = findContainer(entry.getKey());
+            String candidateSource = sourceByContainer.get(candidateContainer);
+            boolean sameContainer = savedContainerId != null
+                    && savedContainerId.equals(candidateContainer);
+            boolean sameSource = savedSourceId != null
+                    && savedSourceId.equals(candidateSource);
+            if (sameContainer || sameSource) {
                 return entry.getKey();
             }
         }
@@ -1352,10 +1757,32 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         if (loadedBrowserId != null) {
             resumeLoadInProgress = false;
             resumeAutoplayConsumed = true;
+            resumeSourceAttempt = 0;
+            resumeSourcePageId = null;
+            resumeReason = null;
             MobileDiagnostics.info("P13-AA-Resume",
                     "resume page matched page=" + pageId + " reason=" + reason
                             + " browserId=" + loadedBrowserId + " fromZero=true");
             playResumeBrowserId(loadedBrowserId);
+            return;
+        }
+
+        if (tryMusicFallback && pageId.equals(resumeSourcePageId)
+                && resumeSourceAttempt < MAX_RESUME_SOURCE_ATTEMPTS) {
+            int nextAttempt = ++resumeSourceAttempt;
+            long delayMs = Math.min(3000L, RESUME_RETRY_BASE_DELAY_MS * nextAttempt);
+            MobileDiagnostics.info("P13-AA-Resume",
+                    "resume source not ready; retry=" + nextAttempt + "/"
+                            + MAX_RESUME_SOURCE_ATTEMPTS + " page=" + pageId
+                            + " delay=" + delayMs);
+            mainHandler.postDelayed(() -> {
+                if (destroyed || resumeAutoplayConsumed || activeItem != null) {
+                    resumeLoadInProgress = false;
+                    return;
+                }
+                loadResumePageAndPlay(pageId,
+                        resumeReason == null ? reason : resumeReason, true);
+            }, delayMs);
             return;
         }
 
@@ -1367,6 +1794,9 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         }
 
         resumeLoadInProgress = false;
+        resumeSourceAttempt = 0;
+        resumeSourcePageId = null;
+        resumeReason = null;
         MobileDiagnostics.info("P13-AA-Resume",
                 "resume item not found reason=" + reason + " videoId=" + savedVideoId);
     }
@@ -1375,7 +1805,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         if (resumePrefs == null || item == null || browserId == null) {
             return;
         }
-        resumePrefs.edit()
+        String modePrefix = modePrefixFor(item.getId());
+        SharedPreferences.Editor editor = resumePrefs.edit()
                 .putString(PREF_BROWSER_ID, browserId)
                 .putString(PREF_CONTAINER_ID, activeContainerId)
                 .putString(PREF_VIDEO_ID, item.getId())
@@ -1385,8 +1816,11 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                 .putLong(PREF_DURATION, Math.max(0L, item.getDurationMs()))
                 .putLong(PREF_POSITION, Math.max(0L, positionMs))
                 .putInt(PREF_QUEUE_INDEX, activeQueueIndex)
-                .putString(PREF_SOURCE_ID, sourceByContainer.get(activeContainerId))
-                .apply();
+                .putString(PREF_SOURCE_ID, sourceByContainer.get(activeContainerId));
+        putModeSelection(editor, modePrefix, browserId, activeContainerId, item,
+                Math.max(0L, positionMs), activeQueueIndex,
+                sourceByContainer.get(activeContainerId));
+        editor.apply();
         lastResumeSavePositionMs = Math.max(0L, positionMs);
         MobileDiagnostics.info("P13-AA-Resume",
                 "saved selection browserId=" + browserId + " index=" + activeQueueIndex
@@ -1403,12 +1837,94 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                 && lastPlaybackState != PlaybackStateCompat.STATE_PAUSED) {
             return;
         }
+        String modePrefix = modePrefixFor(activeItem.getId());
         resumePrefs.edit()
                 .putLong(PREF_POSITION, safePosition)
                 .putLong(PREF_DURATION, Math.max(lastMetadataDurationMs, activeItem.getDurationMs()))
                 .putInt(PREF_QUEUE_INDEX, activeQueueIndex)
+                .putLong(modeKey(modePrefix, PREF_POSITION), safePosition)
+                .putLong(modeKey(modePrefix, PREF_DURATION),
+                        Math.max(lastMetadataDurationMs, activeItem.getDurationMs()))
+                .putInt(modeKey(modePrefix, PREF_QUEUE_INDEX), activeQueueIndex)
                 .apply();
         lastResumeSavePositionMs = safePosition;
+    }
+
+    private void migrateCurrentSelectionToModeHistory() {
+        if (resumePrefs == null) return;
+        String videoId = resumePrefs.getString(PREF_VIDEO_ID, null);
+        if (videoId == null || videoId.trim().isEmpty()) return;
+        String prefix = modePrefixFor(videoId);
+        if (resumePrefs.contains(modeKey(prefix, PREF_VIDEO_ID))) return;
+        copyCurrentSelectionToMode(prefix);
+    }
+
+    private String modePrefixFor(String mediaId) {
+        return RadioStationRepository.isRadioMediaId(mediaId)
+                ? PREF_MODE_RADIO_PREFIX : PREF_MODE_MUSIC_PREFIX;
+    }
+
+    private static String modeKey(String prefix, String key) {
+        return prefix + key;
+    }
+
+    private void putModeSelection(SharedPreferences.Editor editor, String prefix,
+                                  String browserId, String containerId,
+                                  MobileMediaItem item, long positionMs,
+                                  int queueIndex, String sourceId) {
+        editor.putString(modeKey(prefix, PREF_BROWSER_ID), browserId)
+                .putString(modeKey(prefix, PREF_CONTAINER_ID), containerId)
+                .putString(modeKey(prefix, PREF_VIDEO_ID), item.getId())
+                .putString(modeKey(prefix, PREF_TITLE), item.getTitle())
+                .putString(modeKey(prefix, PREF_SUBTITLE),
+                        item.getSubtitle() == null ? "" : item.getSubtitle().toString())
+                .putString(modeKey(prefix, PREF_THUMB), item.getThumbnailUrl())
+                .putLong(modeKey(prefix, PREF_DURATION), Math.max(0L, item.getDurationMs()))
+                .putLong(modeKey(prefix, PREF_POSITION), Math.max(0L, positionMs))
+                .putInt(modeKey(prefix, PREF_QUEUE_INDEX), queueIndex)
+                .putString(modeKey(prefix, PREF_SOURCE_ID), sourceId);
+    }
+
+    private void copyCurrentSelectionToMode(String prefix) {
+        if (resumePrefs == null) return;
+        SharedPreferences.Editor editor = resumePrefs.edit();
+        copyStringPreference(editor, PREF_BROWSER_ID, modeKey(prefix, PREF_BROWSER_ID));
+        copyStringPreference(editor, PREF_CONTAINER_ID, modeKey(prefix, PREF_CONTAINER_ID));
+        copyStringPreference(editor, PREF_VIDEO_ID, modeKey(prefix, PREF_VIDEO_ID));
+        copyStringPreference(editor, PREF_TITLE, modeKey(prefix, PREF_TITLE));
+        copyStringPreference(editor, PREF_SUBTITLE, modeKey(prefix, PREF_SUBTITLE));
+        copyStringPreference(editor, PREF_THUMB, modeKey(prefix, PREF_THUMB));
+        copyStringPreference(editor, PREF_SOURCE_ID, modeKey(prefix, PREF_SOURCE_ID));
+        editor.putLong(modeKey(prefix, PREF_DURATION),
+                        resumePrefs.getLong(PREF_DURATION, 0L))
+                .putLong(modeKey(prefix, PREF_POSITION),
+                        resumePrefs.getLong(PREF_POSITION, 0L))
+                .putInt(modeKey(prefix, PREF_QUEUE_INDEX),
+                        resumePrefs.getInt(PREF_QUEUE_INDEX, -1))
+                .apply();
+    }
+
+    private void copyModeSelectionToCurrent(String prefix) {
+        SharedPreferences.Editor editor = resumePrefs.edit();
+        copyStringPreference(editor, modeKey(prefix, PREF_BROWSER_ID), PREF_BROWSER_ID);
+        copyStringPreference(editor, modeKey(prefix, PREF_CONTAINER_ID), PREF_CONTAINER_ID);
+        copyStringPreference(editor, modeKey(prefix, PREF_VIDEO_ID), PREF_VIDEO_ID);
+        copyStringPreference(editor, modeKey(prefix, PREF_TITLE), PREF_TITLE);
+        copyStringPreference(editor, modeKey(prefix, PREF_SUBTITLE), PREF_SUBTITLE);
+        copyStringPreference(editor, modeKey(prefix, PREF_THUMB), PREF_THUMB);
+        copyStringPreference(editor, modeKey(prefix, PREF_SOURCE_ID), PREF_SOURCE_ID);
+        editor.putLong(PREF_DURATION,
+                        resumePrefs.getLong(modeKey(prefix, PREF_DURATION), 0L))
+                .putLong(PREF_POSITION,
+                        resumePrefs.getLong(modeKey(prefix, PREF_POSITION), 0L))
+                .putInt(PREF_QUEUE_INDEX,
+                        resumePrefs.getInt(modeKey(prefix, PREF_QUEUE_INDEX), -1))
+                .commit();
+    }
+
+    private void copyStringPreference(SharedPreferences.Editor editor,
+                                      String fromKey, String toKey) {
+        editor.putString(toKey, resumePrefs.getString(fromKey, null));
     }
 
     private List<MediaSessionCompat.QueueItem> buildSessionQueue(List<String> browserIds) {
@@ -1523,6 +2039,21 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             return;
         }
 
+        // Engine recreation is asynchronous. A released radio/video player can still post its
+        // final snapshot after the user has selected a different source. Never let that stale
+        // ENDED/error state advance the newly selected queue.
+        if (activeItem != null && (snapshot.getMediaId() == null
+                || !activeItem.getId().equals(snapshot.getMediaId()))) {
+            MobileDiagnostics.debug("P13-AA-Playback",
+                    "ignore stale snapshot active=" + activeItem.getId()
+                            + " snapshot=" + snapshot.getMediaId());
+            return;
+        }
+
+        if (snapshot.isPrepared()) {
+            activeItemReachedReady = true;
+        }
+
         if (activeItem != null) {
             updateMetadata(activeItem, snapshot.getDurationMs());
             if (maybeForceStartFromZero(snapshot)) {
@@ -1575,7 +2106,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
 
     private boolean maybeAutoAdvance(MobilePlaybackSnapshot snapshot) {
         if (snapshot == null || activeQueue == null || activeQueue.isEmpty()
-                || activeQueueIndex < 0 || activeQueueIndex >= activeQueue.size()) {
+                || activeQueueIndex < 0 || activeQueueIndex >= activeQueue.size()
+                || !activeItemReachedReady) {
             return false;
         }
         if (snapshot.isBuffering() || !snapshot.isPrepared()) {
@@ -1705,6 +2237,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                 && activeQueue != null && activeQueueIndex < activeQueue.size()
                 ? activeQueueIndex : MediaSessionCompat.QueueItem.UNKNOWN_ID;
         String controlsKey = "liked=" + activeLiked
+                + "|radio=" + (activeItem != null
+                        && RadioStationRepository.isRadioMediaId(activeItem.getId()))
                 + "|repeat=" + repeatMode
                 + "|shuffle=" + shuffleMode
                 + "|autoNext=" + autoNextEnabled;
@@ -1741,6 +2275,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         PlaybackStateCompat.Builder builder = new PlaybackStateCompat.Builder()
                 .setActions(actions)
                 .setState(state, lastPlaybackPositionMs, speed)
+                .addCustomAction(createSourceSwitchAction())
                 .addCustomAction(createLikeAction())
                 .addCustomAction(createRestartAction())
                 .addCustomAction(createShuffleAction())
@@ -1849,10 +2384,13 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                 "Następny", notificationIntent(NOTIFICATION_ACTION_NEXT, 43));
         builder.addAction(android.R.drawable.ic_menu_revert,
                 "Od początku", notificationIntent(NOTIFICATION_ACTION_RESTART, 44));
+        boolean radio = RadioStationRepository.isRadioMediaId(activeItem.getId());
         builder.addAction(activeLiked
                         ? android.R.drawable.btn_star_big_on
                         : android.R.drawable.btn_star_big_off,
-                activeLiked ? "Usuń polubienie" : "Lubię to",
+                radio
+                        ? (activeLiked ? "Usuń z ulubionych" : "Dodaj do ulubionych")
+                        : (activeLiked ? "Usuń polubienie" : "Lubię to"),
                 notificationIntent(NOTIFICATION_ACTION_LIKE, 45));
 
         if (Build.VERSION.SDK_INT >= 21) {
@@ -1930,10 +2468,30 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     }
 
     private PlaybackStateCompat.CustomAction createLikeAction() {
+        boolean radio = activeItem != null
+                && RadioStationRepository.isRadioMediaId(activeItem.getId());
+        String label;
+        if (radio) {
+            label = activeLiked
+                    ? "Usuń radio z ulubionych" : "Dodaj radio do ulubionych";
+        } else {
+            label = activeLiked
+                    ? "Polubione — kliknij, aby usunąć" : "Lubię to";
+        }
         return new PlaybackStateCompat.CustomAction.Builder(
                 activeLiked ? ACTION_UNLIKE : ACTION_LIKE,
-                activeLiked ? "♥ Polubione — kliknij, aby usunąć" : "♡ Lubię to",
+                label,
                 activeLiked ? R.drawable.ic_auto_like_on : R.drawable.ic_auto_like_off)
+                .build();
+    }
+
+    private PlaybackStateCompat.CustomAction createSourceSwitchAction() {
+        boolean radio = activeItem != null
+                && RadioStationRepository.isRadioMediaId(activeItem.getId());
+        return new PlaybackStateCompat.CustomAction.Builder(
+                ACTION_SWITCH_SOURCE,
+                radio ? "Wróć do muzyki" : "Przełącz na radio",
+                radio ? android.R.drawable.ic_media_play : android.R.drawable.ic_btn_speak_now)
                 .build();
     }
 
@@ -2011,9 +2569,129 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         updatePlaybackState(lastPlaybackState, lastPlaybackPositionMs, lastPlaybackSpeed);
     }
 
+    private void switchPlaybackSource() {
+        boolean currentRadio = activeItem != null
+                ? RadioStationRepository.isRadioMediaId(activeItem.getId())
+                : RadioStationRepository.isRadioMediaId(
+                        resumePrefs == null ? null : resumePrefs.getString(PREF_VIDEO_ID, null));
+        boolean targetRadio = !currentRadio;
+        String targetPrefix = targetRadio ? PREF_MODE_RADIO_PREFIX : PREF_MODE_MUSIC_PREFIX;
+        String savedTargetId = resumePrefs == null ? null
+                : resumePrefs.getString(modeKey(targetPrefix, PREF_VIDEO_ID), null);
+
+        MobileDiagnostics.info("P14-Radio",
+                "switch source from=" + (currentRadio ? "radio" : "music")
+                        + " to=" + (targetRadio ? "radio" : "music")
+                        + " saved=" + savedTargetId);
+        // Preserve the exact return position before replacing the shared current-selection keys.
+        if (activeItem != null && activeQueueIndex >= 0) {
+            savePlaybackProgress(lastPlaybackPositionMs);
+        }
+        if (playbackRepository != null) playbackRepository.pause();
+
+        if (savedTargetId != null && !savedTargetId.trim().isEmpty()) {
+            copyModeSelectionToCurrent(targetPrefix);
+            resetActiveSelectionForSourceSwitch();
+            requestResumePlayback("source-switch");
+            return;
+        }
+
+        if (targetRadio) {
+            List<MediaBrowserCompat.MediaItem> stations = createRadioItems(true);
+            if (stations.isEmpty()) stations = createRadioItems(false);
+            if (!stations.isEmpty()) {
+                playBrowserMediaId(stations.get(0).getMediaId());
+            } else {
+                MobileDiagnostics.warn("P14-Radio",
+                        "switch to radio ignored: station cache is empty");
+            }
+            return;
+        }
+
+        String loadedMusic = findFirstLoadedMusicBrowserId();
+        if (loadedMusic != null) {
+            playBrowserMediaId(loadedMusic);
+        } else {
+            loadFirstMusicForSourceSwitch();
+        }
+    }
+
+    private void resetActiveSelectionForSourceSwitch() {
+        activeItem = null;
+        activeContainerId = null;
+        activeQueue = Collections.emptyList();
+        activeQueueIndex = -1;
+        activeItemReachedReady = false;
+        resumeAutoplayConsumed = false;
+        resumeLoadInProgress = false;
+        resumeSourceAttempt = 0;
+        resumeSourcePageId = null;
+        resumeReason = null;
+        lastAutoAdvancedFromBrowserId = null;
+        lastPublishedQueueKey = null;
+    }
+
+    private String findFirstLoadedMusicBrowserId() {
+        for (Map.Entry<String, List<String>> entry : queueByContainer.entrySet()) {
+            String source = sourceByContainer.get(entry.getKey());
+            if (!"music".equals(source) || entry.getValue() == null) continue;
+            for (String browserId : entry.getValue()) {
+                MobileMediaItem item = mediaByBrowserId.get(browserId);
+                if (item != null && !RadioStationRepository.isRadioMediaId(item.getId())) {
+                    return browserId;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void loadFirstMusicForSourceSwitch() {
+        final MobileRequest[] holder = { MobileRequest.NONE };
+        try {
+            MobileRequest request = browseRepository.loadBrowse("music",
+                    new MobileResultCallback<MobileBrowsePayload>() {
+                        @Override public void onSuccess(MobileBrowsePayload payload) {
+                            mainHandler.post(() -> {
+                                MobileRequest current = holder[0];
+                                if (current != null) activeBrowseRequests.remove(current);
+                                if (destroyed || payload == null) return;
+                                convertPayload("music", payload);
+                                String browserId = findFirstLoadedMusicBrowserId();
+                                if (browserId != null) {
+                                    playBrowserMediaId(browserId);
+                                } else {
+                                    MobileDiagnostics.warn("P13-AA-Playback",
+                                            "source switch: music page has no playable item");
+                                }
+                            });
+                        }
+
+                        @Override public void onError(MobileError error) {
+                            mainHandler.post(() -> {
+                                MobileRequest current = holder[0];
+                                if (current != null) activeBrowseRequests.remove(current);
+                                MobileDiagnostics.warn("P13-AA-Playback",
+                                        "source switch: music load failed " + error);
+                            });
+                        }
+                    });
+            holder[0] = request == null ? MobileRequest.NONE : request;
+            activeBrowseRequests.add(holder[0]);
+        } catch (Throwable error) {
+            MobileDiagnostics.error("P13-AA-Playback",
+                    "source switch: music load threw", error);
+        }
+    }
+
     private boolean resolveKnownLike(String videoId) {
         if (videoId == null || videoId.trim().isEmpty()) {
             return false;
+        }
+        if (RadioStationRepository.isRadioMediaId(videoId)) {
+            RadioStation station = radioRepository == null ? null
+                    : radioRepository.getStation(
+                            RadioStationRepository.stationIdFromMediaId(videoId));
+            return station != null && station.isFavorite();
         }
         if (likedCatalogReady) {
             boolean accountState = likedCatalogVideoIds.contains(videoId);
@@ -2059,6 +2737,24 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         }
 
         final String videoId = item.getId();
+        if (RadioStationRepository.isRadioMediaId(videoId)) {
+            if (radioRepository == null) {
+                radioRepository = RadioStationRepository.get(getApplicationContext());
+            }
+            RadioStation station = radioRepository.getStation(
+                    RadioStationRepository.stationIdFromMediaId(videoId));
+            boolean currentFavorite = station != null && station.isFavorite();
+            if (currentFavorite != liked) {
+                radioRepository.toggleFavorite(
+                        RadioStationRepository.stationIdFromMediaId(videoId));
+            }
+            activeLiked = liked;
+            updateMetadata(item, lastMetadataDurationMs);
+            updatePlaybackState(lastPlaybackState, lastPlaybackPositionMs, lastPlaybackSpeed);
+            MobileDiagnostics.info("P14-Radio",
+                    "favorite " + (liked ? "added " : "removed ") + videoId);
+            return;
+        }
         final boolean previousLiked = activeLiked;
         activeLiked = liked;
         rememberLikeState(videoId, liked);

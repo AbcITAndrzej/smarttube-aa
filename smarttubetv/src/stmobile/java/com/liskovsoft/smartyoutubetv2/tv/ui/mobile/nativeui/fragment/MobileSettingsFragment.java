@@ -34,12 +34,21 @@ public final class MobileSettingsFragment extends Fragment {
         ProgressBar progress = view.findViewById(R.id.mobile_progress);
         View retry = view.findViewById(R.id.mobile_retry_button);
         view.findViewById(R.id.mobile_classic_button).setOnClickListener(v -> {
-            if (requireActivity() instanceof MobileNativeActivity) {
-                ((MobileNativeActivity) requireActivity()).openClassicHome();
-            }
+            new AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.mobile_native_classic_confirm_title)
+                    .setMessage(R.string.mobile_native_classic_confirm_message)
+                    .setNegativeButton(R.string.mobile_native_classic_no, null)
+                    .setPositiveButton(R.string.mobile_native_classic_yes, (dialog, which) -> {
+                        if (requireActivity() instanceof MobileNativeActivity) {
+                            ((MobileNativeActivity) requireActivity()).openClassicHome();
+                        }
+                    })
+                    .show();
         });
         view.findViewById(R.id.mobile_android_auto_button).setOnClickListener(v ->
                 MobileFragmentSupport.navigator(this).openAndroidAutoSettings());
+        view.findViewById(R.id.mobile_radio_button).setOnClickListener(v ->
+                MobileFragmentSupport.navigator(this).openRadioSettings());
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         list.setHasFixedSize(true);

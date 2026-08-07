@@ -4,12 +4,18 @@ SmartTube AA to eksperymentalny fork SmartTube przygotowany głównie do muzyki 
 
 Projekt nie jest oficjalną aplikacją Google ani YouTube. To wersja w budowie, tworzona do testów i użytku badawczego.
 
+## Zmiany w 32.04-mobile-p13-aa1.13
+
+- Dodano obsługę Radia (integracja z https://www.radio-browser.info/users).
+- Usprawniono zimny start Android Auto: ostatni utwór uruchamia się od razu, a pełna kolejka playlisty jest dołączana w tle.
+
 ## Co działa
 
 - logowanie do konta YouTube,
 - odtwarzanie muzyki i playlist w Android Auto,
 - zapamiętywanie ostatniego utworu i playlisty,
 - podstawowe sterowanie odtwarzaniem,
+- radio internetowe z katalogiem stacji i ulubionymi,
 - tryb mobilny aplikacji na telefonie.
 
 ## Jak uruchomić w Android Auto
@@ -33,7 +39,7 @@ Pełna instrukcja i opis ograniczeń znajdują się w [docs/ANDROID-AUTO.md](doc
 
 Najnowsze wersje APK i archiwum źródeł są publikowane w GitHub Releases.
 
-Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.12`
+Aktualna wersja tego wydania: `32.04-mobile-p13-aa1.13`
 
 ## Pochodzenie
 

@@ -72,6 +72,7 @@ public final class MobileMediaSessionManager {
     private boolean hostVisible = true;
     private boolean notificationDismissed;
     private boolean noisyReceiverRegistered;
+    private boolean playerHandlesAudioFocus;
 
     public MobileMediaSessionManager(Context context, PlaybackControl playback) {
         if (context == null) throw new IllegalArgumentException("context == null");
@@ -122,7 +123,11 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             notificationDismissed = false;
-            commandCoordinator.onPlayRequested(requestAudioFocus());
+            if (playerHandlesAudioFocus) {
+                playback.playFromSystem();
+            } else {
+                commandCoordinator.onPlayRequested(requestAudioFocus());
+            }
             synchronizeSystemSurface();
         });
     }
@@ -131,9 +136,26 @@ public final class MobileMediaSessionManager {
     public void pauseByUser() {
         runOnMain(() -> {
             if (released) return;
-            commandCoordinator.onUserPause();
-            abandonAudioFocus();
+            if (playerHandlesAudioFocus) {
+                playback.pauseFromSystem();
+            } else {
+                commandCoordinator.onUserPause();
+                abandonAudioFocus();
+            }
             synchronizeSystemSurface();
+        });
+    }
+
+    /**
+     * Direct streams are opened by the existing ExoPlayer controller, whose own audio-focus
+     * manager must remain the single owner. The MediaSession still exposes metadata, transport
+     * controls and the notification, but does not request a second focus grant for the process.
+     */
+    public void setPlayerHandlesAudioFocus(boolean value) {
+        runOnMain(() -> {
+            if (released || playerHandlesAudioFocus == value) return;
+            playerHandlesAudioFocus = value;
+            if (value) abandonAudioFocus();
         });
     }
 
@@ -156,7 +178,8 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             snapshot = value;
-            if (value != null && value.isPlaying() && !focusRequestOutstanding) {
+            if (!playerHandlesAudioFocus && value != null && value.isPlaying()
+                    && !focusRequestOutstanding) {
                 notificationDismissed = false;
                 commandCoordinator.onExternalPlaybackStarted(requestAudioFocus());
             }

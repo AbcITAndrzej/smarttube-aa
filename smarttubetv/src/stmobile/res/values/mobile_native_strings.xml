@@ -58,6 +58,32 @@
     <string name="mobile_native_history">History</string>
     <string name="mobile_native_classic">Classic interface</string>
     <string name="mobile_native_classic_summary">Open the previous SmartTube home screen</string>
+    <string name="mobile_native_classic_confirm_title">Enable the classic interface?</string>
+    <string name="mobile_native_classic_confirm_message">The classic interface is intended mainly for TVs and remote controls. The mobile screen returns after the app is fully closed and opened again.</string>
+    <string name="mobile_native_classic_yes">Yes</string>
+    <string name="mobile_native_classic_no">No</string>
+    <string name="mobile_radio_settings_entry">Radio (experimental)</string>
+    <string name="mobile_radio_title">Radio</string>
+    <string name="mobile_radio_summary">Experimental directory of working Polish stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
+    <string name="mobile_radio_sync">Synchronize stations</string>
+    <string name="mobile_radio_syncing">Synchronizing Radio Browser…</string>
+    <string name="mobile_radio_sort_label">Sort stations</string>
+    <string name="mobile_radio_favorites_only">Show favorites only</string>
+    <string name="mobile_radio_empty">No stations to display. Synchronize the directory or disable the favorites-only filter.</string>
+    <string name="mobile_radio_status">Stations: %1$d • Favorites: %2$d</string>
+    <string name="mobile_radio_status_synced">Stations: %1$d • Favorites: %2$d • Updated: %3$s</string>
+    <string name="mobile_radio_sync_done">Synchronized %1$d working stations.</string>
+    <string name="mobile_radio_sync_error">Could not synchronize stations: %1$s</string>
+    <string name="mobile_radio_play">Play</string>
+    <string name="mobile_radio_station_logo">Station logo</string>
+    <string name="mobile_radio_add_favorite">Add to favorites</string>
+    <string name="mobile_radio_remove_favorite">Remove from favorites</string>
+    <string name="mobile_radio_station_meta">%1$s • %2$s kb/s • popularity %3$d</string>
+    <string-array name="mobile_radio_sort_options">
+        <item>Popularity</item>
+        <item>Name</item>
+        <item>Bitrate</item>
+    </string-array>
     <string name="mobile_native_back">Back</string>
     <string name="mobile_native_retry">Retry</string>
     <string name="mobile_native_play">Play</string>

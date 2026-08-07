@@ -58,6 +58,32 @@
     <string name="mobile_native_history">Historia</string>
     <string name="mobile_native_classic">Klasyczny interfejs</string>
     <string name="mobile_native_classic_summary">Otwórz poprzedni ekran główny SmartTube</string>
+    <string name="mobile_native_classic_confirm_title">Włączyć klasyczny interfejs?</string>
+    <string name="mobile_native_classic_confirm_message">Klasyczny interfejs jest przeznaczony głównie do telewizora i pilota. Mobilny ekran zostanie przywrócony po całkowitym zamknięciu i ponownym uruchomieniu aplikacji.</string>
+    <string name="mobile_native_classic_yes">Tak</string>
+    <string name="mobile_native_classic_no">Nie</string>
+    <string name="mobile_radio_settings_entry">Radio (eksperymentalne)</string>
+    <string name="mobile_radio_title">Radio</string>
+    <string name="mobile_radio_summary">Eksperymentalny katalog działających polskich stacji z Radio Browser. Synchronizacja i ulubione są zapisywane tylko na tym urządzeniu.</string>
+    <string name="mobile_radio_sync">Synchronizuj stacje</string>
+    <string name="mobile_radio_syncing">Synchronizacja z Radio Browser…</string>
+    <string name="mobile_radio_sort_label">Sortowanie stacji</string>
+    <string name="mobile_radio_favorites_only">Pokaż tylko ulubione</string>
+    <string name="mobile_radio_empty">Brak stacji do wyświetlenia. Wykonaj synchronizację albo wyłącz filtr ulubionych.</string>
+    <string name="mobile_radio_status">Stacje: %1$d • Ulubione: %2$d</string>
+    <string name="mobile_radio_status_synced">Stacje: %1$d • Ulubione: %2$d • Aktualizacja: %3$s</string>
+    <string name="mobile_radio_sync_done">Zsynchronizowano %1$d działających stacji.</string>
+    <string name="mobile_radio_sync_error">Nie udało się zsynchronizować stacji: %1$s</string>
+    <string name="mobile_radio_play">Graj</string>
+    <string name="mobile_radio_station_logo">Logo stacji</string>
+    <string name="mobile_radio_add_favorite">Dodaj do ulubionych</string>
+    <string name="mobile_radio_remove_favorite">Usuń z ulubionych</string>
+    <string name="mobile_radio_station_meta">%1$s • %2$s kb/s • popularność %3$d</string>
+    <string-array name="mobile_radio_sort_options">
+        <item>Popularność</item>
+        <item>Nazwa</item>
+        <item>Przepływność</item>
+    </string-array>
     <string name="mobile_native_back">Wstecz</string>
     <string name="mobile_native_retry">Spróbuj ponownie</string>
     <string name="mobile_native_play">Odtwórz</string>

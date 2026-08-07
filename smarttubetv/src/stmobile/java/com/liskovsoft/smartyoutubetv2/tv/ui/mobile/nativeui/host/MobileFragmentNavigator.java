@@ -7,6 +7,7 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileNavigator;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.*;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
 
 public final class MobileFragmentNavigator implements MobileNavigator {
     private final MobileNativeActivity host;
@@ -73,6 +74,15 @@ public final class MobileFragmentNavigator implements MobileNavigator {
 
     @Override public void openAndroidAutoSettings() {
         showDetail(AndroidAutoSettingsFragment.newInstance());
+    }
+
+    @Override public void openRadioSettings() {
+        showDetail(RadioSettingsFragment.newInstance());
+    }
+
+    @Override public void openRadioPlayback(String stationId) {
+        showDetail(MobilePlaybackFragment.newRadioInstance(
+                RadioStationRepository.mediaId(stationId)));
     }
 
     @Override public void openPlayback(String mediaId, long startPositionMs) {

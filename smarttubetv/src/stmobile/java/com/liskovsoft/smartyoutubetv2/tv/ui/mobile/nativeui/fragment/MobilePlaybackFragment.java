@@ -22,6 +22,7 @@ public final class MobilePlaybackFragment extends Fragment {
     private View controls;
     private SeekBar seekBar;
     private boolean userSeeking;
+    private boolean radioAutoplayStarted;
 
     public static MobilePlaybackFragment newInstance(String mediaId, long startMs) {
         MobilePlaybackFragment f = new MobilePlaybackFragment();
@@ -30,6 +31,12 @@ public final class MobilePlaybackFragment extends Fragment {
         b.putLong("start_position_ms", startMs);
         f.setArguments(b);
         return f;
+    }
+
+    public static MobilePlaybackFragment newRadioInstance(String mediaId) {
+        MobilePlaybackFragment fragment = newInstance(mediaId, 0L);
+        fragment.requireArguments().putBoolean("radio_mode", true);
+        return fragment;
     }
 
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
@@ -43,7 +50,21 @@ public final class MobilePlaybackFragment extends Fragment {
                 new MobileNativeViewModelFactory(MobileNativeDependencies.get(), getArguments()))
                 .get(MobilePlaybackViewModel.class);
         ViewGroup surface = view.findViewById(R.id.mobile_player_surface);
+        boolean radioMode = getArguments() != null
+                && getArguments().getBoolean("radio_mode", false);
+        if (radioMode) {
+            surface.setContentDescription(getString(R.string.mobile_radio_title));
+            surface.setBackgroundColor(0xff101010);
+        }
         binding = MobileNativeDependencies.get().playerViewBinder().bind(surface, viewModel.getRepository());
+        if (radioMode && !radioAutoplayStarted) {
+            radioAutoplayStarted = true;
+            // Binding the surface consumes the deferred station prepare. Start it immediately
+            // so selecting a station is a single action on phone and tablet.
+            view.post(() -> {
+                if (isAdded() && viewModel != null) viewModel.play();
+            });
+        }
         controls = view.findViewById(R.id.mobile_player_controls);
         TextView title = view.findViewById(R.id.mobile_player_title);
         TextView time = view.findViewById(R.id.mobile_player_time);

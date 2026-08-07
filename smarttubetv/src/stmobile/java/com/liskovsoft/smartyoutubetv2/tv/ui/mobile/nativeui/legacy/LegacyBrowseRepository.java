@@ -136,14 +136,31 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             return MobileRequest.NONE;
         }
         Video item = index.get(itemId);
+        if (item == null && itemId.startsWith("playlist:")) {
+            // Playlist cards are indexed in memory while browsing. Android Auto can,
+            // however, recreate its service without opening the playlist catalog first.
+            // Rebuild the lightweight playlist reference from its persistent YouTube ID
+            // so a cold-start resume never depends on that transient index.
+            String playlistId = itemId.substring("playlist:".length());
+            if (!playlistId.trim().isEmpty()) {
+                item = new Video();
+                item.playlistId = playlistId;
+                item.title = "Playlista";
+                index.put(itemId, item);
+                MobileDiagnostics.info("DataBrowse",
+                        "restored playlist reference id=" + itemId);
+            }
+        }
         if (item == null) {
             callback.onError(new MobileError(MobileError.Kind.UNAVAILABLE,
                     "Playlist is no longer available", null, true));
             return MobileRequest.NONE;
         }
+        final Video resolvedItem = item;
         try {
             Disposable d = Observable.fromCallable(() -> content.getGroup(
-                            item.mediaItem != null ? item.mediaItem : item.toMediaItem()))
+                            resolvedItem.mediaItem != null
+                                    ? resolvedItem.mediaItem : resolvedItem.toMediaItem()))
                     .subscribeOn(Schedulers.io()).subscribe(
                     group -> {
                         if (group == null) {
@@ -154,11 +171,12 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
                         // Return the first page immediately. Completing a large playlist can
                         // require dozens of network requests and must not block Android Auto.
-                        MobileBrowsePayload firstPage = mapPlaylistPage(itemId, item, group);
+                        MobileBrowsePayload firstPage = mapPlaylistPage(
+                                itemId, resolvedItem, group);
                         playlistCache.put(itemId, firstPage);
                         playlistCacheTimes.put(itemId, System.currentTimeMillis());
                         callback.onSuccess(firstPage);
-                        loadPlaylistRemainderInBackground(itemId, item, group);
+                        loadPlaylistRemainderInBackground(itemId, resolvedItem, group);
                     },
                     e -> { MobileDiagnostics.error("DataBrowse", "item failed: " + itemId, e);
                         callback.onError(errors.map(e)); });

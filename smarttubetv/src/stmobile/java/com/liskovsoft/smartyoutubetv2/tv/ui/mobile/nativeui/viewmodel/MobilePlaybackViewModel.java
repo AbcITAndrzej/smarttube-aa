@@ -42,6 +42,8 @@ public final class MobilePlaybackViewModel extends ViewModel {
         if (snapshot != null && snapshot.isPlaying()) repository.pause(); else repository.play();
     }
 
+    public void play() { repository.play(); }
+
     public void seekBy(long deltaMs) { repository.seekBy(deltaMs); }
     public void seekTo(long positionMs) { repository.seekTo(Math.max(0, positionMs)); }
     public void selectAudioTrack(String id) { repository.selectAudioTrack(id); }
