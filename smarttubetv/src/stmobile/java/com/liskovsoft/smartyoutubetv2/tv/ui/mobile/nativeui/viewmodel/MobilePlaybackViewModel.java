@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBackgroundPlaybackRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlaybackRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
+import java.util.List;
 
 public final class MobilePlaybackViewModel extends ViewModel {
     private final MobilePlaybackRepository repository;
@@ -17,6 +18,11 @@ public final class MobilePlaybackViewModel extends ViewModel {
 
     public MobilePlaybackViewModel(MobilePlaybackRepository repository, String mediaId,
                                    long startPositionMs) {
+        this(repository, mediaId, startPositionMs, null);
+    }
+
+    public MobilePlaybackViewModel(MobilePlaybackRepository repository, String mediaId,
+                                   long startPositionMs, List<String> playbackQueue) {
         this.repository = repository;
         repository.setListener(new MobilePlaybackRepository.Listener() {
             @Override public void onPlaybackSnapshot(MobilePlaybackSnapshot snapshot) {
@@ -28,6 +34,7 @@ public final class MobilePlaybackViewModel extends ViewModel {
             }
         });
         if (mediaId != null && !mediaId.isEmpty()) {
+            repository.setPlaybackQueue(playbackQueue, mediaId);
             state.setValue(MobileLoadState.loading(null, false));
             repository.prepare(mediaId, Math.max(0, startPositionMs));
             prepared = true;

@@ -67,6 +67,7 @@ public final class MobileBrowseFragment extends Fragment {
         TextView error = view.findViewById(R.id.mobile_error);
         ProgressBar progress = view.findViewById(R.id.mobile_progress);
         View retry = view.findViewById(R.id.mobile_retry_button);
+        final MobileMediaAdapter[] adapterRef = new MobileMediaAdapter[1];
         MobileMediaAdapter adapter = new MobileMediaAdapter(MobileNativeDependencies.get().imageLoader(), item -> {
             if (item.getKind() == MobileMediaItem.Kind.CHANNEL) {
                 MobileFragmentSupport.navigator(this).openChannel(item.getId());
@@ -76,13 +77,15 @@ public final class MobileBrowseFragment extends Fragment {
             } else if (item.isPlayable()) {
                 if (item.getKind() == MobileMediaItem.Kind.SHORT) {
                     MobileFragmentSupport.navigator(this).openShortPlayback(
-                            item.getId(), item.getProgressMs());
+                            item.getId(), item.getProgressMs(),
+                            adapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
                     MobileFragmentSupport.navigator(this).openPlayback(
                             item.getId(), item.getProgressMs());
                 }
             }
         });
+        adapterRef[0] = adapter;
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
             GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
@@ -96,6 +99,18 @@ public final class MobileBrowseFragment extends Fragment {
         }
         list.setHasFixedSize(false);
         list.setAdapter(adapter);
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView recyclerView,
+                                             int dx, int dy) {
+                if (dy <= 0) return;
+                RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
+                int last = manager instanceof GridLayoutManager
+                        ? ((GridLayoutManager) manager).findLastVisibleItemPosition()
+                        : manager instanceof LinearLayoutManager
+                        ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
+                if (last >= adapter.getItemCount() - 6) vm.loadMore();
+            }
+        });
         boolean showCategories = !isItemDetail() && isCategoryPage(getPageId());
         if (isItemDetail()) {
             categoryScroll.setVisibility(View.GONE);
@@ -132,6 +147,13 @@ public final class MobileBrowseFragment extends Fragment {
                 lastRenderedPayload[0] = value.getData();
                 if (isItemDetail()) toolbar.setTitle(value.getData().getTitle());
                 adapter.submitSections(localizeTopLevelSections(value.getData().getSections(), showCategories));
+                if (value.getData().hasMore()) {
+                    // Large tablets can display the whole first Shorts page without producing
+                    // a scroll event. Fill one more page until the list is actually scrollable.
+                    list.post(() -> {
+                        if (isAdded() && !list.canScrollVertically(1)) vm.loadMore();
+                    });
+                }
             }
         });
         if (vm.getState().getValue() == null

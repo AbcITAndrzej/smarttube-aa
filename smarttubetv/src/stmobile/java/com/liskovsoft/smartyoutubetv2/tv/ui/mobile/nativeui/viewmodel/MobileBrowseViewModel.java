@@ -15,6 +15,7 @@ public final class MobileBrowseViewModel extends ViewModel {
     private final MobileRequestSlot requestSlot = new MobileRequestSlot();
     private final MutableLiveData<MobileLoadState<MobileBrowsePayload>> state =
             new MutableLiveData<>(MobileLoadState.<MobileBrowsePayload>idle());
+    private boolean loadingMore;
 
     public MobileBrowseViewModel(MobileBrowseRepository repository, String pageId, String itemId) {
         this.repository = repository;
@@ -27,7 +28,32 @@ public final class MobileBrowseViewModel extends ViewModel {
     public void load() { load(false); }
     public void refresh() { load(true); }
 
+    public void loadMore() {
+        MobileLoadState<MobileBrowsePayload> current = state.getValue();
+        MobileBrowsePayload previous = current == null ? null : current.getData();
+        if (loadingMore || previous == null || !previous.hasMore()
+                || itemId != null && !itemId.isEmpty()) return;
+        loadingMore = true;
+        final long token = requestSlot.begin();
+        MobileRequest request = repository.loadMoreBrowse(pageId,
+                new MobileResultCallback<MobileBrowsePayload>() {
+                    @Override public void onSuccess(MobileBrowsePayload value) {
+                        loadingMore = false;
+                        if (requestSlot.isCurrent(token)) publish(MobileLoadState.content(value));
+                    }
+
+                    @Override public void onError(MobileError error) {
+                        loadingMore = false;
+                        if (requestSlot.isCurrent(token)) {
+                            publish(MobileLoadState.error(previous, error));
+                        }
+                    }
+                });
+        requestSlot.attach(token, request);
+    }
+
     private void load(boolean refreshing) {
+        loadingMore = false;
         MobileLoadState<MobileBrowsePayload> current = state.getValue();
         MobileBrowsePayload previous = current == null ? null : current.getData();
         state.setValue(MobileLoadState.loading(previous, refreshing));
@@ -53,8 +79,13 @@ public final class MobileBrowseViewModel extends ViewModel {
     }
 
     private void publish(MobileLoadState<MobileBrowsePayload> value) {
-        if (Looper.myLooper() == Looper.getMainLooper()) state.setValue(value);
-        else state.postValue(value);
+        try {
+            if (Looper.myLooper() == Looper.getMainLooper()) state.setValue(value);
+            else state.postValue(value);
+        } catch (RuntimeException notRunningOnAndroid) {
+            // Local JVM unit tests do not provide android.os.Looper.
+            state.setValue(value);
+        }
     }
 
     private void prefetchSlowHomeCategories() {

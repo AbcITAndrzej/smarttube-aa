@@ -430,6 +430,11 @@ public class VideoLoaderController extends BasePlayerController {
         reloadVideo(1_000);
     }
 
+    /** Retry quickly after an expired/forbidden YouTube stream URL was invalidated. */
+    public void reloadVideoAfterStreamRefresh() {
+        reloadVideo(250);
+    }
+
     private void applyPlaybackMode(int playbackMode) {
         if (getPlayer() == null) {
             return;

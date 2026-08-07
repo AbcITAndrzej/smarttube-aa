@@ -15,14 +15,20 @@ public final class LegacyMediaMapper {
     public LegacyMediaMapper(LegacyMediaIndex index) { this.index = index; }
 
     public MobileMediaItem map(Video video) {
+        return map(video, null);
+    }
+
+    public MobileMediaItem map(Video video, MobileMediaItem.Kind forcedKind) {
         if (video == null) throw new IllegalArgumentException("video == null");
         String id = stableId(video);
-        MobileMediaItem.Kind kind = kindOf(video);
+        MobileMediaItem.Kind kind = forcedKind == null ? kindOf(video) : forcedKind;
         long duration = Math.max(0, video.getDurationMs());
         long progress = Math.max(0, video.getPositionMs());
         String durationText = video.isLive ? "LIVE" : formatDuration(duration);
         CharSequence secondary = video.getSecondTitleFull();
-        String subtitle = secondary == null ? safe(video.getAuthor()) : secondary.toString();
+        // The raw author is already populated by service mappers. Avoid reparsing it via
+        // Android TextUtils here; this keeps the mobile mapper deterministic in JVM tests too.
+        String subtitle = secondary == null ? safe(video.author) : secondary.toString();
         boolean playable = video.videoId != null && !video.isUnplayable;
         MobileMediaItem item = new MobileMediaItem(id, kind, safe(video.getTitleFull()), subtitle,
                 video.getCardImageUrl(), durationText, progress, duration, playable,
@@ -32,15 +38,27 @@ public final class LegacyMediaMapper {
     }
 
     public MobileSection map(MediaGroup source, int position) {
+        return map(source, position, null);
+    }
+
+    public MobileSection map(MediaGroup source, int position,
+                             MobileMediaItem.Kind forcedKind) {
         VideoGroup group = VideoGroup.from(source);
-        return map(group, position);
+        return map(group, position, forcedKind);
     }
 
     public MobileSection map(VideoGroup group, int position) {
+        return map(group, position, null);
+    }
+
+    public MobileSection map(VideoGroup group, int position,
+                             MobileMediaItem.Kind forcedKind) {
         if (group == null) return new MobileSection("section:" + position, "", Collections.emptyList());
         List<MobileMediaItem> items = new ArrayList<>();
         List<Video> videos = group.getVideos();
-        if (videos != null) for (Video video : videos) if (video != null) items.add(map(video));
+        if (videos != null) for (Video video : videos) if (video != null) {
+            items.add(map(video, forcedKind));
+        }
         String title = safe(group.getTitle());
         String id = "section:" + group.getId() + ":" + position;
         return new MobileSection(id, title, items);

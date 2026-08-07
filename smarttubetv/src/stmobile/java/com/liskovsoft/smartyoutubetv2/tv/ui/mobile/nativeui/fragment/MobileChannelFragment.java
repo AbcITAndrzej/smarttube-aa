@@ -44,6 +44,7 @@ public final class MobileChannelFragment extends Fragment {
         TextView error = view.findViewById(R.id.mobile_error);
         ProgressBar progress = view.findViewById(R.id.mobile_progress);
         View retry = view.findViewById(R.id.mobile_retry_button);
+        final MobileMediaAdapter[] adapterRef = new MobileMediaAdapter[1];
         MobileMediaAdapter adapter = new MobileMediaAdapter(MobileNativeDependencies.get().imageLoader(), item -> {
             if (item.getKind() == MobileMediaItem.Kind.PLAYLIST
                     || item.getKind() == MobileMediaItem.Kind.SECTION_LINK) {
@@ -51,13 +52,15 @@ public final class MobileChannelFragment extends Fragment {
             } else if (item.isPlayable()) {
                 if (item.getKind() == MobileMediaItem.Kind.SHORT) {
                     MobileFragmentSupport.navigator(this).openShortPlayback(
-                            item.getId(), item.getProgressMs());
+                            item.getId(), item.getProgressMs(),
+                            adapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
                     MobileFragmentSupport.navigator(this).openPlayback(
                             item.getId(), item.getProgressMs());
                 }
             }
         });
+        adapterRef[0] = adapter;
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
             GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {

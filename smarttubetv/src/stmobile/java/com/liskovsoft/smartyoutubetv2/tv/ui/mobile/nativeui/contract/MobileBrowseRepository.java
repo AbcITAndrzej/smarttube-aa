@@ -10,6 +10,13 @@ public interface MobileBrowseRepository {
 
     MobileRequest loadBrowse(String pageId, MobileResultCallback<MobileBrowsePayload> callback);
 
+    default MobileRequest loadMoreBrowse(String pageId,
+                                         MobileResultCallback<MobileBrowsePayload> callback) {
+        if (callback != null) callback.onError(
+                MobileError.unconfigured("MobileBrowseRepository.loadMoreBrowse"));
+        return MobileRequest.NONE;
+    }
+
     default void invalidateBrowse(String pageId) {
     }
 

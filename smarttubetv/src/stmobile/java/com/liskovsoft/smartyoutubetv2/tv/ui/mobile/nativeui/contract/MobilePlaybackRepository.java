@@ -2,6 +2,7 @@ package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract;
 
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileError;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
+import java.util.List;
 
 /**
  * Player port. An adapter may delegate these calls to SmartTube's current playback manager
@@ -14,6 +15,8 @@ public interface MobilePlaybackRepository {
     }
 
     void setListener(Listener listener);
+    default void setPlaybackQueue(List<String> mediaIds, String currentMediaId) {
+    }
     void prepare(String mediaId, long startPositionMs);
     void play();
     void pause();

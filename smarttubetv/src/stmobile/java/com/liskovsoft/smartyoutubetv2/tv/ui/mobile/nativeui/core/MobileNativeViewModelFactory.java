@@ -38,7 +38,8 @@ public final class MobileNativeViewModelFactory implements ViewModelProvider.Fac
         if (modelClass == MobilePlaybackViewModel.class) {
             return (T) new MobilePlaybackViewModel(provider.playbackRepository(),
                     arguments.getString("media_id", ""),
-                    arguments.getLong("start_position_ms", 0));
+                    arguments.getLong("start_position_ms", 0),
+                    arguments.getStringArrayList("playback_queue"));
         }
         throw new IllegalArgumentException("Unknown ViewModel: " + modelClass.getName());
     }

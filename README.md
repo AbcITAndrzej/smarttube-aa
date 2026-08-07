@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.15`
+Aktualne wydanie: `32.04-mobile-p13-aa1.16`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -32,16 +32,16 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.15
+## Co zmienia aa1.16
 
-- naprawiono wiszące „Proszę czekać, trwa ładowanie danych” przy następnym filmie,
-- włączono pełne odświeżanie danych odtwarzania po przejściowych błędach źródła, w tym 403,
-- środkowe przyciski ±10 s zastąpiono poprzednim i następnym filmem; przewijanie nadal działa gestem i paskiem,
-- dodano powiększanie filmu dwoma palcami w zwykłym i pełnoekranowym playerze,
-- poprawiono PiP oraz powrót z pełnego ekranu do pionu,
-- rozdzielono identyfikatory tłumaczonych napisów, aby kliknięty język nie wskazywał innej ścieżki.
+- preferowany język audio jest ponownie sprawdzany po załadowaniu ścieżek; polska ścieżka zostaje wybrana, gdy YouTube ją udostępnia,
+- Shorts korzystają z własnej kolejki, dlatego gest góra/dół nie przełącza już na zwykły film,
+- ekran Shorts oraz pozostałe obsługiwane feedy doładowują następne strony przy przewijaniu,
+- sekcja „Wszystkie” nie miesza już kafelków Shorts ze zwykłymi filmami,
+- po powiększeniu filmu można przesuwać obraz jednym palcem w granicach jego krawędzi,
+- ponowienie odtwarzania po przejściowym błędzie strumienia 403 rozpoczyna się szybciej.
 
-Automatyczne tłumaczenia, w tym polskie, zależą od ścieżek udostępnionych przez YouTube dla danego filmu. Funkcje Android Auto i radio pozostają eksperymentalne.
+Automatyczne tłumaczenia i dubbing zależą od ścieżek udostępnionych przez YouTube dla danego filmu. Interfejs multimedialny Android Auto pozostaje audio-only — eksperymentalne ustawienie nie omija blokad obrazu na ekranie samochodu. Funkcje Android Auto i radio pozostają eksperymentalne.
 
 ## Pochodzenie
 

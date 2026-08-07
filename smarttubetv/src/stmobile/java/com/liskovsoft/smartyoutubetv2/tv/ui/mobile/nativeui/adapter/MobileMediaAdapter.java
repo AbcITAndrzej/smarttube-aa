@@ -52,6 +52,23 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
         notifyDataSetChanged();
     }
 
+    /** Current visible queue, kept in feed order and de-duplicated by media id. */
+    public ArrayList<String> getPlayableIds(MobileMediaItem.Kind kind) {
+        ArrayList<String> result = new ArrayList<>();
+        for (Row row : rows) {
+            appendPlayableId(result, row.item, kind);
+            appendPlayableId(result, row.secondItem, kind);
+        }
+        return result;
+    }
+
+    private static void appendPlayableId(List<String> result, MobileMediaItem item,
+                                         MobileMediaItem.Kind kind) {
+        if (item == null || !item.isPlayable() || item.getKind() != kind
+                || item.getId() == null || result.contains(item.getId())) return;
+        result.add(item.getId());
+    }
+
     @Override public long getItemId(int position) { return rows.get(position).stableId(); }
     @Override public int getItemViewType(int position) {
         Row row = rows.get(position);

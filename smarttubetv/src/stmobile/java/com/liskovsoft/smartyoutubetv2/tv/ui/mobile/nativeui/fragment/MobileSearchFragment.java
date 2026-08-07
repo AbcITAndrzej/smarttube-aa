@@ -53,6 +53,7 @@ public final class MobileSearchFragment extends Fragment {
             query.setSelection(value.length());
             submitSearch(vm, query, suggestions);
         });
+        final MobileMediaAdapter[] resultAdapterRef = new MobileMediaAdapter[1];
         MobileMediaAdapter resultAdapter = new MobileMediaAdapter(MobileNativeDependencies.get().imageLoader(), item -> {
             if (item.getKind() == MobileMediaItem.Kind.CHANNEL) {
                 MobileFragmentSupport.navigator(this).openChannel(item.getId());
@@ -62,13 +63,15 @@ public final class MobileSearchFragment extends Fragment {
             } else if (item.isPlayable()) {
                 if (item.getKind() == MobileMediaItem.Kind.SHORT) {
                     MobileFragmentSupport.navigator(this).openShortPlayback(
-                            item.getId(), item.getProgressMs());
+                            item.getId(), item.getProgressMs(),
+                            resultAdapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
                     MobileFragmentSupport.navigator(this).openPlayback(
                             item.getId(), item.getProgressMs());
                 }
             }
         });
+        resultAdapterRef[0] = resultAdapter;
         suggestions.setLayoutManager(new LinearLayoutManager(requireContext()));
         suggestions.setAdapter(suggestionAdapter);
         if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {

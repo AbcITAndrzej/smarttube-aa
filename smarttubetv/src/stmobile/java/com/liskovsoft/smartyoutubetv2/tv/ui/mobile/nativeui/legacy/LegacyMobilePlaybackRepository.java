@@ -25,6 +25,7 @@ import com.liskovsoft.smartyoutubetv2.common.exoplayer.other.ExoPlayerInitialize
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.TrackSelectorManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
+import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.background.MobileMediaSessionManager;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBackgroundPlaybackRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlaybackRepository;
@@ -34,8 +35,10 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Native-mobile bridge to SmartTube's existing playback controllers. It implements PlaybackView
@@ -84,6 +87,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private String qualityInfo = "";
     private String pendingMediaId;
     private long pendingStartPositionMs;
+    private final List<String> scopedPlaybackQueue = new ArrayList<>();
+    private int scopedPlaybackIndex = -1;
+    private String preferredAudioAppliedMediaId;
+    private String preferredAudioAttemptSignature;
 
     private Player.EventListener stateListener;
 
@@ -221,6 +228,19 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         emitSnapshot();
     }
 
+    @Override public void setPlaybackQueue(List<String> mediaIds, String currentMediaId) {
+        scopedPlaybackQueue.clear();
+        if (mediaIds != null) {
+            for (String id : mediaIds) {
+                if (id != null && !id.trim().isEmpty()
+                        && !scopedPlaybackQueue.contains(id)) scopedPlaybackQueue.add(id);
+            }
+        }
+        scopedPlaybackIndex = scopedPlaybackQueue.indexOf(currentMediaId);
+        MobileDiagnostics.info("P16-Shorts", "scoped queue size="
+                + scopedPlaybackQueue.size() + " current=" + scopedPlaybackIndex);
+    }
+
     @Override public void prepare(String mediaId, long startPositionMs) {
         if (mediaId == null || mediaId.trim().isEmpty()) {
             notifyError(new IllegalArgumentException("Missing media id"));
@@ -252,6 +272,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                 return;
             }
             radioPlayback = false;
+            preferredAudioAppliedMediaId = null;
+            preferredAudioAttemptSignature = null;
             radioMediaId = null;
             radioAutoplayPending = false;
             radioTitle = "";
@@ -342,6 +364,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     @Override public void playNext() {
+        if (playScoped(1)) return;
         if (presenter != null) {
             MobileDiagnostics.info("P15-MobilePlayer", "next item requested");
             VideoLoaderController loader = presenter.getController(VideoLoaderController.class);
@@ -351,12 +374,30 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     @Override public void playPrevious() {
+        if (playScoped(-1)) return;
         if (presenter != null) {
             MobileDiagnostics.info("P15-MobilePlayer", "previous item requested");
             VideoLoaderController loader = presenter.getController(VideoLoaderController.class);
             if (loader != null) loader.loadPrevious();
             else presenter.onPreviousClicked();
         }
+    }
+
+    private boolean playScoped(int direction) {
+        if (scopedPlaybackQueue.size() < 2) return false;
+        String currentId = video == null ? null : LegacyMediaMapper.stableId(video);
+        int current = scopedPlaybackQueue.indexOf(currentId);
+        if (current < 0) current = scopedPlaybackIndex;
+        if (current < 0) return false;
+        int next = (current + direction + scopedPlaybackQueue.size())
+                % scopedPlaybackQueue.size();
+        String nextId = scopedPlaybackQueue.get(next);
+        scopedPlaybackIndex = next;
+        MobileDiagnostics.info("P16-Shorts", "scoped switch " + current
+                + " -> " + next + " id=" + nextId);
+        prepareNow(nextId, 0L);
+        play();
+        return true;
     }
 
     @Override public void seekTo(long positionMs) { setPositionMs(Math.max(0, positionMs)); emitSnapshot(); }
@@ -420,6 +461,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         listener = null;
         pendingMediaId = null;
         pendingStartPositionMs = 0;
+        scopedPlaybackQueue.clear();
+        scopedPlaybackIndex = -1;
+        preferredAudioAppliedMediaId = null;
+        preferredAudioAttemptSignature = null;
         hostContext.clear();
     }
 
@@ -482,8 +527,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         long buffered = player == null ? 0 : Math.max(0, player.getBufferedPosition());
         List<MobileTrack> videoTracks = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getVideoFormats(), MobileTrack.Type.VIDEO);
-        List<MobileTrack> audio = controller == null ? Collections.emptyList()
-                : trackMapper.map(controller.getAudioFormats(), MobileTrack.Type.AUDIO);
+        List<FormatItem> audioFormats = controller == null ? Collections.emptyList()
+                : controller.getAudioFormats();
+        applyPreferredAudio(audioFormats);
+        List<MobileTrack> audio = trackMapper.map(audioFormats, MobileTrack.Type.AUDIO);
         List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getSubtitleFormats(), MobileTrack.Type.SUBTITLE);
         String id = radioPlayback ? radioMediaId
@@ -499,6 +546,72 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
+    }
+
+    private void applyPreferredAudio(List<FormatItem> formats) {
+        if (radioPlayback || video == null || formats == null || formats.isEmpty()) return;
+        String mediaId = LegacyMediaMapper.stableId(video);
+        if (mediaId == null || mediaId.equals(preferredAudioAppliedMediaId)) return;
+        String preferred = normalizeLanguage(
+                PlayerData.instance(applicationContext).getAudioLanguage());
+        if (preferred.isEmpty()) {
+            preferredAudioAppliedMediaId = mediaId;
+            return;
+        }
+        String attemptSignature = audioAttemptSignature(mediaId, formats);
+        if (attemptSignature.equals(preferredAudioAttemptSignature)) return;
+        preferredAudioAttemptSignature = attemptSignature;
+        FormatItem selected = null;
+        FormatItem candidate = null;
+        for (FormatItem format : formats) {
+            if (format == null) continue;
+            if (format.isSelected()) selected = format;
+            if (candidate == null && languageMatches(format, preferred)) candidate = format;
+        }
+        if (selected != null && languageMatches(selected, preferred)) {
+            preferredAudioAppliedMediaId = mediaId;
+            MobileDiagnostics.info("P16-Audio", "preferred already selected media="
+                    + mediaId + " language=" + selected.getLanguage());
+            return;
+        }
+        if (candidate != null) {
+            preferredAudioAppliedMediaId = mediaId;
+            MobileDiagnostics.info("P16-Audio", "enforce preferred media=" + mediaId
+                    + " preference=" + preferred + " selected="
+                    + (selected == null ? "none" : selected.getLanguage())
+                    + " target=" + candidate.getLanguage());
+            controller.selectFormat(candidate);
+        } else {
+            MobileDiagnostics.info("P16-Audio", "preferred unavailable media=" + mediaId
+                    + " preference=" + preferred + " tracks=" + formats.size());
+        }
+    }
+
+    private static String audioAttemptSignature(String mediaId, List<FormatItem> formats) {
+        StringBuilder result = new StringBuilder(mediaId == null ? "" : mediaId);
+        for (FormatItem format : formats) {
+            if (format == null) continue;
+            result.append('|').append(normalizeLanguage(format.getLanguage()))
+                    .append(':').append(normalizeLanguage(format.getTitle() == null
+                            ? "" : format.getTitle().toString()))
+                    .append(':').append(format.isSelected());
+        }
+        return result.toString();
+    }
+
+    private static boolean languageMatches(FormatItem format, String preferred) {
+        String language = normalizeLanguage(format.getLanguage());
+        CharSequence rawTitle = format.getTitle();
+        String title = normalizeLanguage(rawTitle == null ? "" : rawTitle.toString());
+        return language.equals(preferred) || language.startsWith(preferred + "-")
+                || language.startsWith(preferred + "_")
+                || language.startsWith(preferred + ".")
+                || "pl".equals(preferred) && (title.contains("polski")
+                || title.contains("polish"));
+    }
+
+    private static String normalizeLanguage(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     @Override public void setHostVisible(boolean visible) {

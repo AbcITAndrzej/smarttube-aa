@@ -113,6 +113,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         boolean restartEngine = true;
         boolean showMessage = true;
         String errorContent = error != null ? error.getMessage() : null;
+        boolean forbiddenStream = Helpers.startsWithAny(
+                errorContent, "Response code: 403");
         String errorTitle = getErrorTitle(type, rendererIndex);
         String errorMessage = errorTitle + "\n" + errorContent;
 
@@ -211,7 +213,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             mVideoLoaderController.restartEngine();
         } else {
             // Need at least to reload the video because the player becomes idle after error
-            mVideoLoaderController.reloadVideo();
+            if (forbiddenStream) {
+                // Cache invalidation above rotates the player response/client. Shorts often
+                // expose a stale signed URL first, so don't leave a visible one-second pause.
+                mVideoLoaderController.reloadVideoAfterStreamRefresh();
+            } else {
+                mVideoLoaderController.reloadVideo();
+            }
         }
     }
 

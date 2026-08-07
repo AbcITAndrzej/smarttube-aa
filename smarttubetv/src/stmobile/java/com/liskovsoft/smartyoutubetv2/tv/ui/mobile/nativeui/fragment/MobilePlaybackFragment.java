@@ -44,6 +44,7 @@ import java.util.Locale;
 /** Mobile-first controls layered over the original SmartTube playback engine. */
 public final class MobilePlaybackFragment extends Fragment {
     private static final String ARG_SHORT_MODE = "short_mode";
+    private static final String ARG_PLAYBACK_QUEUE = "playback_queue";
     private static final String ARG_FORCED_FULLSCREEN = "forced_fullscreen";
     private static final long CONTROLS_TIMEOUT_MS = 4_000L;
     private static final float[] SPEED_VALUES = {0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f};
@@ -71,7 +72,13 @@ public final class MobilePlaybackFragment extends Fragment {
     private float shortGestureStartY;
     private float videoScale = 1f;
     private boolean scalingVideo;
+    private boolean panningVideo;
+    private float panLastX;
+    private float panLastY;
+    private float videoTranslationX;
+    private float videoTranslationY;
     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
+    private String activeMediaId;
 
     public static MobilePlaybackFragment newInstance(String mediaId, long startMs) {
         MobilePlaybackFragment fragment = new MobilePlaybackFragment();
@@ -88,9 +95,12 @@ public final class MobilePlaybackFragment extends Fragment {
         return fragment;
     }
 
-    public static MobilePlaybackFragment newShortInstance(String mediaId, long startMs) {
+    public static MobilePlaybackFragment newShortInstance(String mediaId, long startMs,
+                                                           List<String> shortQueue) {
         MobilePlaybackFragment fragment = newInstance(mediaId, startMs);
         fragment.requireArguments().putBoolean(ARG_SHORT_MODE, true);
+        fragment.requireArguments().putStringArrayList(ARG_PLAYBACK_QUEUE,
+                shortQueue == null ? new ArrayList<>() : new ArrayList<>(shortQueue));
         return fragment;
     }
 
@@ -201,6 +211,10 @@ public final class MobilePlaybackFragment extends Fragment {
                         if (radioMode) return false;
                         scalingVideo = true;
                         ui.removeCallbacks(hideControls);
+                        if (videoSurface != null) {
+                            videoSurface.setPivotX(videoSurface.getWidth() / 2f);
+                            videoSurface.setPivotY(videoSurface.getHeight() / 2f);
+                        }
                         return true;
                     }
 
@@ -208,12 +222,11 @@ public final class MobilePlaybackFragment extends Fragment {
                         float nextScale = Math.max(1f,
                                 Math.min(4f, videoScale * detector.getScaleFactor()));
                         if (videoSurface != null) {
-                            videoSurface.setPivotX(detector.getFocusX());
-                            videoSurface.setPivotY(detector.getFocusY());
                             videoSurface.setScaleX(nextScale);
                             videoSurface.setScaleY(nextScale);
                         }
                         videoScale = nextScale;
+                        clampVideoTranslation();
                         return true;
                     }
 
@@ -258,6 +271,29 @@ public final class MobilePlaybackFragment extends Fragment {
             if (scaleDetector.isInProgress() || scalingVideo || event.getPointerCount() > 1) {
                 return true;
             }
+            if (videoScale > 1.02f) {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    panningVideo = true;
+                    panLastX = event.getX();
+                    panLastY = event.getY();
+                    ui.removeCallbacks(hideControls);
+                    return true;
+                }
+                if (event.getActionMasked() == MotionEvent.ACTION_MOVE && panningVideo) {
+                    videoTranslationX += event.getX() - panLastX;
+                    videoTranslationY += event.getY() - panLastY;
+                    panLastX = event.getX();
+                    panLastY = event.getY();
+                    clampVideoTranslation();
+                    return true;
+                }
+                if (event.getActionMasked() == MotionEvent.ACTION_UP
+                        || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    panningVideo = false;
+                    keepControlsVisible();
+                    return true;
+                }
+            }
             if (shortMode) {
                 if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                     shortGestureStartY = event.getY();
@@ -286,6 +322,12 @@ public final class MobilePlaybackFragment extends Fragment {
                 Toast.makeText(requireContext(), value.getError().getMessage(), Toast.LENGTH_LONG).show();
             }
             if (current == null) return;
+            if (activeMediaId == null || !activeMediaId.equals(current.getMediaId())) {
+                activeMediaId = current.getMediaId();
+                baseAudioTrackId = null;
+                lastAlternativeAudioTrackId = null;
+                lastSubtitleTrackId = null;
+            }
             boolean startedPlaying = (snapshot == null || !snapshot.isPlaying()) && current.isPlaying();
             snapshot = current;
             title.setText(current.getTitle());
@@ -621,12 +663,27 @@ public final class MobilePlaybackFragment extends Fragment {
 
     private void resetVideoZoom() {
         videoScale = 1f;
+        videoTranslationX = 0f;
+        videoTranslationY = 0f;
+        panningVideo = false;
         if (videoSurface != null) {
             videoSurface.setScaleX(1f);
             videoSurface.setScaleY(1f);
+            videoSurface.setTranslationX(0f);
+            videoSurface.setTranslationY(0f);
             videoSurface.setPivotX(videoSurface.getWidth() / 2f);
             videoSurface.setPivotY(videoSurface.getHeight() / 2f);
         }
+    }
+
+    private void clampVideoTranslation() {
+        if (videoSurface == null) return;
+        float maxX = Math.max(0f, videoSurface.getWidth() * (videoScale - 1f) / 2f);
+        float maxY = Math.max(0f, videoSurface.getHeight() * (videoScale - 1f) / 2f);
+        videoTranslationX = Math.max(-maxX, Math.min(maxX, videoTranslationX));
+        videoTranslationY = Math.max(-maxY, Math.min(maxY, videoTranslationY));
+        videoSurface.setTranslationX(videoTranslationX);
+        videoSurface.setTranslationY(videoTranslationY);
     }
 
     private static String selectedLabel(List<MobileTrack> tracks, String fallback) {

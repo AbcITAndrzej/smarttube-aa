@@ -15,7 +15,9 @@ import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class LegacyBrowseRepository implements MobileBrowseRepository {
@@ -31,6 +33,10 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     private final ConcurrentHashMap<String, Long> browseCacheTimes =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> browsePrefetches =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, BrowseContinuation> browseContinuations =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Integer> emptyReloadCounts =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MobileBrowsePayload> playlistCache =
             new ConcurrentHashMap<>();
@@ -62,20 +68,28 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         MobileDiagnostics.debug("DataBrowse", "load page=" + page.id() + " source=" + page.source());
         try {
             if (page.source() == LegacyBrowsePage.Source.ROWS) {
+                List<MediaGroup> accumulated = new ArrayList<>();
                 Disposable d = rows(page).subscribe(
                         groups -> {
-                            MobileBrowsePayload payload = new MobileBrowsePayload(
-                                    page.title(), mapper.mapGroups(groups));
+                            if (groups != null) accumulated.addAll(groups);
+                            BrowseContinuation continuation = new BrowseContinuation(accumulated);
+                            browseContinuations.put(page.id(), continuation);
+                            MobileBrowsePayload payload = mapBrowsePayload(page, accumulated,
+                                    continuation.hasMore());
                             cacheBrowse(page, payload);
                             callback.onSuccess(payload);
                         },
                         e -> { MobileDiagnostics.error("DataBrowse", "rows failed: " + page.id(), e); callback.onError(errors.map(e)); });
                 return new RxMobileRequest(d);
             }
+            List<MediaGroup> accumulated = new ArrayList<>();
             Disposable d = grid(page).subscribe(
                     group -> {
-                        MobileBrowsePayload payload = new MobileBrowsePayload(
-                                page.title(), mapper.mapSingle(group, page.title()));
+                        if (group != null) accumulated.add(group);
+                        BrowseContinuation continuation = new BrowseContinuation(accumulated);
+                        browseContinuations.put(page.id(), continuation);
+                        MobileBrowsePayload payload = mapBrowsePayload(page, accumulated,
+                                continuation.hasMore() || page == LegacyBrowsePage.SHORTS);
                         cacheBrowse(page, payload);
                         callback.onSuccess(payload);
                     },
@@ -91,6 +105,57 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
         browseCache.remove(page.id());
         browseCacheTimes.remove(page.id());
+        browseContinuations.remove(page.id());
+    }
+
+    @Override public MobileRequest loadMoreBrowse(
+            String pageId, MobileResultCallback<MobileBrowsePayload> callback) {
+        if (callback == null) return MobileRequest.NONE;
+        LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
+        BrowseContinuation continuation = browseContinuations.get(page.id());
+        MobileBrowsePayload current = browseCache.get(page.id());
+        if (continuation == null || current == null) {
+            return loadBrowse(page.id(), callback);
+        }
+        int groupIndex = continuation.nextGroupIndex();
+        if (groupIndex < 0) {
+            if (page == LegacyBrowsePage.SHORTS) {
+                return reloadShorts(page, current, callback);
+            }
+            callback.onSuccess(withHasMore(current, false));
+            return MobileRequest.NONE;
+        }
+        MediaGroup source = continuation.groupAt(groupIndex);
+        MobileDiagnostics.debug("DataBrowse", "continue page=" + page.id()
+                + " group=" + groupIndex);
+        try {
+            Disposable disposable = content.continueGroupObserve(source)
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(nextPage -> {
+                        if (nextPage == null) {
+                            continuation.markFinished(groupIndex);
+                            MobileBrowsePayload done = withHasMore(current,
+                                    continuation.hasMore());
+                            cacheBrowse(page, done);
+                            callback.onSuccess(done);
+                            return;
+                        }
+                        continuation.replace(groupIndex, nextPage);
+                        MobileBrowsePayload combined = appendContinuation(
+                                page, current, nextPage, groupIndex,
+                                continuation.hasMore());
+                        cacheBrowse(page, combined);
+                        callback.onSuccess(combined);
+                    }, error -> {
+                        MobileDiagnostics.error("DataBrowse",
+                                "continue failed page=" + page.id(), error);
+                        callback.onError(errors.map(error));
+                    });
+            return new RxMobileRequest(disposable);
+        } catch (Throwable error) {
+            callback.onError(errors.map(error));
+            return MobileRequest.NONE;
+        }
     }
 
     @Override public void prefetchBrowse(String pageId) {
@@ -100,10 +165,17 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         MobileDiagnostics.debug("DataBrowse", "prefetch page=" + page.id());
         try {
             Observable<MobileBrowsePayload> source = page.source() == LegacyBrowsePage.Source.ROWS
-                    ? rows(page).map(groups -> new MobileBrowsePayload(
-                            page.title(), mapper.mapGroups(groups)))
-                    : grid(page).map(group -> new MobileBrowsePayload(
-                            page.title(), mapper.mapSingle(group, page.title())));
+                    ? rows(page).map(groups -> {
+                        BrowseContinuation continuation = new BrowseContinuation(groups);
+                        browseContinuations.put(page.id(), continuation);
+                        return mapBrowsePayload(page, groups, continuation.hasMore());
+                    })
+                    : grid(page).map(group -> {
+                        List<MediaGroup> groups = Collections.singletonList(group);
+                        BrowseContinuation continuation = new BrowseContinuation(groups);
+                        browseContinuations.put(page.id(), continuation);
+                        return mapBrowsePayload(page, groups, continuation.hasMore());
+                    });
             source.subscribeOn(Schedulers.io()).take(1).subscribe(
                     payload -> {
                         cacheBrowse(page, payload);
@@ -207,6 +279,144 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         browseCacheTimes.put(page.id(), System.currentTimeMillis());
     }
 
+    private MobileBrowsePayload mapBrowsePayload(
+            LegacyBrowsePage page, List<MediaGroup> groups, boolean hasMore) {
+        List<MobileSection> sections = new ArrayList<>();
+        if (groups != null) {
+            for (int index = 0; index < groups.size(); index++) {
+                MediaGroup group = groups.get(index);
+                if (group == null) continue;
+                MobileSection section = mapper.map(group, index,
+                        page == LegacyBrowsePage.SHORTS
+                                ? MobileMediaItem.Kind.SHORT : null);
+                section = normalizeSection(page, section);
+                if (section != null && !section.getItems().isEmpty()) sections.add(section);
+            }
+        }
+        if (page.source() == LegacyBrowsePage.Source.GRID && sections.size() > 1) {
+            List<MobileMediaItem> combined = new ArrayList<>();
+            for (MobileSection section : sections) combined.addAll(section.getItems());
+            MobileSection first = sections.get(0);
+            sections = Collections.singletonList(new MobileSection(first.getId(),
+                    first.getTitle(), mergeItems(Collections.emptyList(), combined)));
+        }
+        return new MobileBrowsePayload(page.title(), sections, hasMore);
+    }
+
+    private MobileRequest reloadShorts(LegacyBrowsePage page, MobileBrowsePayload current,
+                                       MobileResultCallback<MobileBrowsePayload> callback) {
+        MobileDiagnostics.debug("DataBrowse", "reload shorts without continuation token");
+        try {
+            Disposable disposable = grid(page).toList().subscribeOn(Schedulers.io())
+                    .subscribe(groups -> {
+                        BrowseContinuation nextContinuation = new BrowseContinuation(groups);
+                        browseContinuations.put(page.id(), nextContinuation);
+                        MobileBrowsePayload fresh = mapBrowsePayload(page, groups, true);
+                        MobileBrowsePayload combined = mergeGridPayload(current, fresh, true);
+                        int oldCount = countItems(current);
+                        int newCount = countItems(combined);
+                        int emptyReloads = newCount > oldCount ? 0
+                                : emptyReloadCounts.getOrDefault(page.id(), 0) + 1;
+                        emptyReloadCounts.put(page.id(), emptyReloads);
+                        boolean canRetry = nextContinuation.hasMore() || emptyReloads < 2;
+                        combined = withHasMore(combined, canRetry);
+                        cacheBrowse(page, combined);
+                        MobileDiagnostics.debug("DataBrowse", "shorts reload items="
+                                + oldCount + "->" + newCount + " retry=" + canRetry);
+                        callback.onSuccess(combined);
+                    }, error -> {
+                        MobileDiagnostics.error("DataBrowse", "shorts reload failed", error);
+                        callback.onError(errors.map(error));
+                    });
+            return new RxMobileRequest(disposable);
+        } catch (Throwable error) {
+            callback.onError(errors.map(error));
+            return MobileRequest.NONE;
+        }
+    }
+
+    private MobileBrowsePayload mergeGridPayload(MobileBrowsePayload current,
+                                                  MobileBrowsePayload fresh,
+                                                  boolean hasMore) {
+        if (current == null || current.getSections().isEmpty()) return withHasMore(fresh, hasMore);
+        if (fresh == null || fresh.getSections().isEmpty()) return withHasMore(current, hasMore);
+        MobileSection first = current.getSections().get(0);
+        List<MobileMediaItem> merged = new ArrayList<>(first.getItems());
+        for (MobileSection section : fresh.getSections()) merged.addAll(section.getItems());
+        MobileSection combined = new MobileSection(first.getId(), first.getTitle(),
+                mergeItems(Collections.emptyList(), merged));
+        return new MobileBrowsePayload(current.getTitle(),
+                Collections.singletonList(combined), hasMore);
+    }
+
+    private int countItems(MobileBrowsePayload payload) {
+        int count = 0;
+        if (payload != null) {
+            for (MobileSection section : payload.getSections()) count += section.getItems().size();
+        }
+        return count;
+    }
+
+    private MobileBrowsePayload appendContinuation(
+            LegacyBrowsePage page, MobileBrowsePayload current, MediaGroup nextPage,
+            int groupIndex, boolean hasMore) {
+        MobileSection mapped = mapper.map(nextPage, groupIndex,
+                page == LegacyBrowsePage.SHORTS ? MobileMediaItem.Kind.SHORT : null);
+        mapped = normalizeSection(page, mapped);
+        if (mapped == null || mapped.getItems().isEmpty()) {
+            return withHasMore(current, hasMore);
+        }
+        List<MobileSection> sections = new ArrayList<>(current.getSections());
+        if (page.source() == LegacyBrowsePage.Source.GRID && !sections.isEmpty()) {
+            MobileSection first = sections.get(0);
+            sections.set(0, new MobileSection(first.getId(), first.getTitle(),
+                    mergeItems(first.getItems(), mapped.getItems())));
+        } else {
+            // Home is a vertical feed of shelves. A continuation is appended below the
+            // existing feed so loading more never moves the item currently under the finger.
+            sections.add(new MobileSection(mapped.getId() + ":more:" + sections.size(),
+                    mapped.getTitle(), mapped.getItems()));
+        }
+        return new MobileBrowsePayload(current.getTitle(), sections, hasMore);
+    }
+
+    private MobileSection normalizeSection(LegacyBrowsePage page, MobileSection section) {
+        if (section == null) return null;
+        List<MobileMediaItem> filtered = new ArrayList<>();
+        for (MobileMediaItem item : section.getItems()) {
+            if (item == null) continue;
+            // The dedicated Shorts screen owns vertical videos. "All" remains a normal
+            // video feed and no longer injects a Short between full-length videos.
+            if (page == LegacyBrowsePage.HOME
+                    && item.getKind() == MobileMediaItem.Kind.SHORT) continue;
+            if (page == LegacyBrowsePage.SHORTS
+                    && item.getKind() != MobileMediaItem.Kind.SHORT) continue;
+            filtered.add(item);
+        }
+        return new MobileSection(section.getId(), section.getTitle(), filtered);
+    }
+
+    private List<MobileMediaItem> mergeItems(
+            List<MobileMediaItem> first, List<MobileMediaItem> second) {
+        List<MobileMediaItem> result = new ArrayList<>();
+        Set<String> ids = new LinkedHashSet<>();
+        List<List<MobileMediaItem>> sources = new ArrayList<>();
+        sources.add(first);
+        sources.add(second);
+        for (List<MobileMediaItem> source : sources) {
+            if (source == null) continue;
+            for (MobileMediaItem item : source) {
+                if (item == null || item.getId() == null || !ids.add(item.getId())) continue;
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    private MobileBrowsePayload withHasMore(MobileBrowsePayload payload, boolean hasMore) {
+        return new MobileBrowsePayload(payload.getTitle(), payload.getSections(), hasMore);
+    }
+
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
         switch (page) {
             // The legacy Trending endpoint may never emit on current YouTube accounts.
@@ -221,6 +431,50 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             case KIDS: return content.getKidsHomeObserve();
             case HOME:
             default: return content.getHomeObserve();
+        }
+    }
+
+    private static boolean hasNextPage(MediaGroup group) {
+        if (group == null) return false;
+        String key = group.getNextPageKey();
+        return key != null && !key.trim().isEmpty();
+    }
+
+    private static final class BrowseContinuation {
+        private final List<MediaGroup> groups = new ArrayList<>();
+        private int cursor;
+
+        BrowseContinuation(List<MediaGroup> initial) {
+            if (initial != null) groups.addAll(initial);
+        }
+
+        synchronized int nextGroupIndex() {
+            if (groups.isEmpty()) return -1;
+            for (int offset = 0; offset < groups.size(); offset++) {
+                int index = (cursor + offset) % groups.size();
+                if (hasNextPage(groups.get(index))) {
+                    cursor = (index + 1) % groups.size();
+                    return index;
+                }
+            }
+            return -1;
+        }
+
+        synchronized MediaGroup groupAt(int index) {
+            return index < 0 || index >= groups.size() ? null : groups.get(index);
+        }
+
+        synchronized void replace(int index, MediaGroup group) {
+            if (index >= 0 && index < groups.size()) groups.set(index, group);
+        }
+
+        synchronized void markFinished(int index) {
+            if (index >= 0 && index < groups.size()) groups.set(index, null);
+        }
+
+        synchronized boolean hasMore() {
+            for (MediaGroup group : groups) if (hasNextPage(group)) return true;
+            return false;
         }
     }
 

@@ -7,6 +7,7 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileNavigator;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
+import java.util.List;
 
 public final class MobileFragmentNavigator implements MobileNavigator {
     private final MobileNativeActivity host;
@@ -88,8 +89,10 @@ public final class MobileFragmentNavigator implements MobileNavigator {
         showDetail(MobilePlaybackFragment.newInstance(mediaId, startPositionMs));
     }
 
-    @Override public void openShortPlayback(String mediaId, long startPositionMs) {
-        showDetail(MobilePlaybackFragment.newShortInstance(mediaId, startPositionMs));
+    @Override public void openShortPlayback(String mediaId, long startPositionMs,
+                                            List<String> shortQueue) {
+        showDetail(MobilePlaybackFragment.newShortInstance(
+                mediaId, startPositionMs, shortQueue));
     }
 
     @Override public void goBack() {
