@@ -2,17 +2,17 @@
   "package": {
     "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk"
   },
-  "32.04-mobile-p13-aa1.18": {
-    "versionCode": 2402,
+  "32.04-mobile-p13-aa1.19": {
+    "versionCode": 2403,
     "changelog": [
-      "Android Auto: playlisty, radio i stabilne wznawianie audio",
-      "Tryb Offline: automatyczny zapis, playlisty i zapas na podróż",
-      "Usprawnienia mobilnego interfejsu, odtwarzacza i diagnostyki"
+      "Automatyczny wybór preferowanego polskiego lektora",
+      "Jasność automatyczna systemu na dolnym końcu gestu",
+      "Przenośny helper GitHub uruchamiany z katalogu projektu"
     ],
     "changelog_pl": [
-      "Android Auto: playlisty, radio i stabilne wznawianie audio",
-      "Tryb Offline: automatyczny zapis, playlisty i zapas na podróż",
-      "Usprawnienia mobilnego interfejsu, odtwarzacza i diagnostyki"
+      "Automatyczny wybór preferowanego polskiego lektora",
+      "Jasność automatyczna systemu na dolnym końcu gestu",
+      "Przenośny helper GitHub uruchamiany z katalogu projektu"
     ]
   }
 }

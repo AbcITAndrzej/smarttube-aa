@@ -15,10 +15,7 @@ public final class PreferredTrackResolver {
     public static int findPreferred(List<MobileTrack> tracks, String preference,
                                     String excludedTrackId) {
         if (tracks == null || tracks.isEmpty()) return -1;
-        String wanted = normalize(preference);
-        if (MobilePlayerPreferences.LANGUAGE_SYSTEM.equals(wanted)) {
-            wanted = normalize(Locale.getDefault().getLanguage());
-        }
+        String wanted = resolveLanguagePreference(preference);
         if (wanted.isEmpty()) return -1;
 
         for (int i = 0; i < tracks.size(); i++) {
@@ -38,12 +35,33 @@ public final class PreferredTrackResolver {
         return index >= 0 ? tracks.get(index) : null;
     }
 
+    /** Normalizes a saved language choice, including the special device-language value. */
+    public static String resolveLanguagePreference(String preference) {
+        String wanted = normalize(preference);
+        if (MobilePlayerPreferences.LANGUAGE_SYSTEM.equals(wanted)) {
+            wanted = normalize(Locale.getDefault().getLanguage());
+        }
+        return wanted;
+    }
+
+    /**
+     * Matches YouTube language metadata such as {@code pl}, {@code pl-PL} and
+     * {@code pl (dubbed)}. The last form is currently returned by dubbed audio tracks.
+     */
+    public static boolean matchesLanguageOrLabel(String value, String label,
+                                                 String preference) {
+        String wanted = resolveLanguagePreference(preference);
+        return !wanted.isEmpty() && (matches(value, wanted) || matchesLabel(label, wanted));
+    }
+
     private static boolean matches(String value, String wanted) {
         String language = normalize(value);
         return language.equals(wanted)
                 || language.startsWith(wanted + "-")
                 || language.startsWith(wanted + "_")
-                || language.startsWith(wanted + ".");
+                || language.startsWith(wanted + ".")
+                || language.startsWith(wanted + " ")
+                || language.startsWith(wanted + "(");
     }
 
     private static boolean matchesLabel(String label, String wanted) {

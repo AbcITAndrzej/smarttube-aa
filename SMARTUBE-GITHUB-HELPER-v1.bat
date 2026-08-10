@@ -1,29 +1,21 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 chcp 65001 >nul
-title SmartTube AA - GitHub Helper v1
+title SmartTube AA - GitHub Helper Portable
 
 set "SCRIPT_DIR=%~dp0"
 set "HELPER_NAME=SMARTUBE-GITHUB-HELPER-v1.bat"
 set "DEFAULT_REPO=AbcITAndrzej/smarttube-aa"
 set "BRANCH=main"
-set "CONFIG_DIR=%LOCALAPPDATA%\SmartTubeGithubHelper"
+set "PROJECT_DIR=%SCRIPT_DIR:~0,-1%"
+set "SOURCE_DIR=%PROJECT_DIR%"
+set "PUBLIC_DIR=%PROJECT_DIR%"
+set "WORKSPACE_DIR=%PROJECT_DIR%"
+set "RELEASES_DIR=%PROJECT_DIR%\releases"
+set "CONFIG_DIR=%RELEASES_DIR%\helper-config"
 set "CONFIG_FILE=%CONFIG_DIR%\config.txt"
-
-rem The helper works both from the workspace root and from a public project clone.
-if exist "%SCRIPT_DIR%smarttubetv\build.gradle" (
-  set "SOURCE_DIR=%SCRIPT_DIR:~0,-1%"
-  set "PUBLIC_DIR=%SCRIPT_DIR:~0,-1%"
-  set "WORKSPACE_DIR=%SCRIPT_DIR:~0,-1%"
-) else (
-  set "WORKSPACE_DIR=%SCRIPT_DIR:~0,-1%"
-  set "SOURCE_DIR=%SCRIPT_DIR%SmartTube-Mobile-Part9-Kit\SmartTube-Mobile"
-  set "PUBLIC_DIR=%SCRIPT_DIR%SmartTube-AA-PUBLIC"
-)
-
-set "APK_STORE=%WORKSPACE_DIR%\P13-AA1.9-LIKED-MUSIC-MOBILE-PLAYER-APK"
+set "APK_STORE=%RELEASES_DIR%\apk-cache"
 set "BUILD_APK_DIR=%SOURCE_DIR%\smarttubetv\build\outputs\apk\stmobile\debug"
-set "RELEASES_DIR=%PUBLIC_DIR%\releases"
 set "REPO=%DEFAULT_REPO%"
 
 if exist "%CONFIG_FILE%" (
@@ -36,25 +28,26 @@ if exist "%CONFIG_FILE%" (
 if /I "%~1"=="--self-test" goto SELF_TEST
 if /I "%~1"=="--status" goto STATUS_ONCE
 if /I "%~1"=="--prepare" goto PREPARE_ONCE
+if /I "%~1"=="--build" goto BUILD_ONCE
 if /I "%~1"=="--package" goto PACKAGE_ONCE
 if /I "%~1"=="--version" goto VERSION_ONCE
+if /I "%~1"=="--manifest" goto MANIFEST_ONCE
 if /I "%~1"=="--init-local" goto INIT_ONCE
 
 :MENU
 cls
 echo ============================================================
-echo            SMARTTUBE AA - GITHUB HELPER v1
+echo       SMARTTUBE AA - GITHUB HELPER PORTABLE
 echo ============================================================
-echo Dzialajacy projekt : %SOURCE_DIR%
-echo Publiczne repo     : %PUBLIC_DIR%
+echo Projekt            : %PROJECT_DIR%
 echo GitHub             : %REPO%
 echo Branch             : %BRANCH%
 echo Paczki lokalne     : %RELEASES_DIR%
 echo ============================================================
 echo.
 echo  1 - Status i kontrola projektu
-echo  2 - Przygotuj/synchronizuj czysta kopie publiczna
-echo  3 - Zainicjuj Git w kopii publicznej
+echo  2 - Sprawdz przenosny katalog projektu
+echo  3 - Zainicjuj Git w tym projekcie
 echo  4 - Ustaw repo GitHub i remote origin
 echo  5 - Zaloguj/sprawdz GitHub CLI
 echo  6 - Utworz PUBLICZNE repo GitHub i wykonaj pierwszy push
@@ -88,15 +81,17 @@ if "%OPT%"=="0" exit /b 0
 goto MENU
 
 :SELF_TEST
-echo [SELF-TEST] SmartTube GitHub Helper v1
+echo [SELF-TEST] SmartTube GitHub Helper Portable
 call :CHECK_SOURCE
 if errorlevel 1 exit /b 1
 call :CHECK_GIT_TOOL
 if errorlevel 1 exit /b 1
-echo [OK] SOURCE_DIR=%SOURCE_DIR%
-echo [OK] PUBLIC_DIR=%PUBLIC_DIR%
+call :GET_VERSION
+if errorlevel 1 exit /b 1
+echo [OK] PROJECT_DIR=%PROJECT_DIR%
 echo [OK] REPO=%REPO%
 echo [OK] BRANCH=%BRANCH%
+echo [OK] APP_VERSION=!APP_VERSION! ^(versionCode !APP_VERSION_CODE!^)
 if exist "%BUILD_APK_DIR%" (
   echo [OK] Katalog wynikow APK istnieje.
 ) else (
@@ -112,6 +107,10 @@ exit /b %errorlevel%
 call :SYNC_PUBLIC_COPY
 exit /b %errorlevel%
 
+:BUILD_ONCE
+call :RUN_LOCAL_BUILD
+exit /b %errorlevel%
+
 :PACKAGE_ONCE
 call :CREATE_RELEASE_PACKAGE
 exit /b %errorlevel%
@@ -120,7 +119,12 @@ exit /b %errorlevel%
 call :GET_VERSION
 if errorlevel 1 exit /b 1
 echo APP_VERSION=!APP_VERSION!
+echo APP_VERSION_CODE=!APP_VERSION_CODE!
 exit /b 0
+
+:MANIFEST_ONCE
+call :WRITE_UPDATE_MANIFEST "%PUBLIC_DIR%\update.json"
+exit /b %errorlevel%
 
 :INIT_ONCE
 call :INIT_LOCAL_REPO
@@ -137,8 +141,7 @@ goto MENU
 call :CHECK_SOURCE
 if errorlevel 1 exit /b 1
 echo ============================================================
-echo Projekt zrodlowy : %SOURCE_DIR%
-echo Kopia publiczna  : %PUBLIC_DIR%
+echo Projekt          : %PROJECT_DIR%
 echo Repo GitHub      : %REPO%
 echo Branch           : %BRANCH%
 echo ============================================================
@@ -148,14 +151,19 @@ if exist "%PUBLIC_DIR%\.git" (
   echo.
   git -C "%PUBLIC_DIR%" remote -v
 ) else (
-  echo [INFO] Kopia publiczna nie ma jeszcze Git. Uzyj opcji 2 i 3.
+  echo [INFO] Projekt nie ma jeszcze Git. Uzyj opcji 3.
 )
 echo.
 call :FIND_LATEST_APK
 if defined LATEST_APK (
-  echo Najnowszy APK: !LATEST_APK!
+  echo APK arm64    : !LATEST_APK!
 ) else (
-  echo [INFO] Brak gotowego APK. Uzyj opcji 9.
+  echo [INFO] Brak gotowego APK arm64. Uzyj opcji 9.
+)
+if defined LATEST_UNIVERSAL_APK (
+  echo APK universal: !LATEST_UNIVERSAL_APK!
+) else (
+  echo [INFO] Brak gotowego APK universal. Uzyj opcji 9.
 )
 exit /b 0
 
@@ -164,8 +172,8 @@ cls
 call :SYNC_PUBLIC_COPY
 if errorlevel 1 goto COMMAND_FAILED
 echo.
-echo [OK] Kopia publiczna jest gotowa:
-echo %PUBLIC_DIR%
+echo [OK] Przenosny katalog projektu jest gotowy:
+echo %PROJECT_DIR%
 echo.
 pause
 goto MENU
@@ -173,34 +181,9 @@ goto MENU
 :SYNC_PUBLIC_COPY
 call :CHECK_SOURCE
 if errorlevel 1 exit /b 1
-if /I "%SOURCE_DIR%"=="%PUBLIC_DIR%" (
-  echo [INFO] Helper dziala juz wewnatrz publicznego projektu. Synchronizacja pominieta.
-  exit /b 0
-)
-if not exist "%PUBLIC_DIR%" mkdir "%PUBLIC_DIR%"
-echo Synchronizuje kod do czystej kopii publicznej...
-echo Buildy, cache, lokalne ustawienia i stare metadane submodulow sa pomijane.
-robocopy "%SOURCE_DIR%" "%PUBLIC_DIR%" /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP ^
-  /XD build .gradle .idea captures releases tmp .externalNativeBuild ^
-  /XF .git .gitmodules local.properties *.apk *.ap_ *.hprof hs_err_pid*.log replay_pid*.log *.tmp *.bak
-set "ROBOCOPY_CODE=!errorlevel!"
-if !ROBOCOPY_CODE! GEQ 8 (
-  echo [BLAD] Robocopy zakonczyl sie kodem !ROBOCOPY_CODE!.
-  exit /b 1
-)
-copy /y "%~f0" "%PUBLIC_DIR%\%HELPER_NAME%" >nul
-if errorlevel 1 (
-  echo [BLAD] Nie udalo sie dolaczyc helpera do publicznego projektu.
-  exit /b 1
-)
-(
-  echo SmartTube AA public source snapshot
-  echo.
-  echo This public tree is generated from the working project by %HELPER_NAME%.
-  echo Generated build folders, local SDK settings and broken historical gitfiles are excluded.
-  echo SharedModules and MediaServiceCore are included as regular source directories.
-  echo Original LICENSE and upstream attribution files must remain in the repository.
-) > "%PUBLIC_DIR%\PUBLIC-SOURCE-NOTE.txt"
+echo [OK] Helper pracuje bezposrednio w swoim katalogu:
+echo %PROJECT_DIR%
+echo [INFO] Po przeniesieniu calego folderu uruchom %HELPER_NAME% z jego nowej lokalizacji.
 exit /b 0
 
 :INIT_GIT
@@ -324,6 +307,10 @@ call :ENSURE_GH_AUTH
 if errorlevel 1 goto COMMAND_FAILED
 call :ENSURE_REMOTE
 if errorlevel 1 goto COMMAND_FAILED
+call :CHECK_REMOTE_BASE
+if errorlevel 1 goto COMMAND_FAILED
+call :WRITE_UPDATE_MANIFEST "%PUBLIC_DIR%\update.json"
+if errorlevel 1 goto COMMAND_FAILED
 echo Zmiany do wyslania:
 git -C "%PUBLIC_DIR%" status --short
 echo.
@@ -394,9 +381,15 @@ if not defined LATEST_APK (
   echo [BLAD] Build zakonczony, ale nie znaleziono arm64 APK.
   exit /b 1
 )
+if not defined LATEST_UNIVERSAL_APK (
+  echo [BLAD] Build zakonczony, ale nie znaleziono universal APK.
+  exit /b 1
+)
 if not exist "%APK_STORE%" mkdir "%APK_STORE%"
 copy /y "!LATEST_APK!" "%APK_STORE%\" >nul
-echo [OK] APK: !LATEST_APK!
+copy /y "!LATEST_UNIVERSAL_APK!" "%APK_STORE%\" >nul
+echo [OK] APK arm64    : !LATEST_APK!
+echo [OK] APK universal: !LATEST_UNIVERSAL_APK!
 exit /b 0
 
 :LOCAL_PACKAGE
@@ -412,26 +405,54 @@ pause
 goto MENU
 
 :CREATE_RELEASE_PACKAGE
+echo [INFO] Sprawdzam repozytorium Git...
 call :REQUIRE_GIT_REPO
 if errorlevel 1 exit /b 1
+echo [INFO] Odczytuje wersje stmobile...
 call :GET_VERSION
 if errorlevel 1 exit /b 1
+echo [INFO] Szukam gotowych plikow APK...
 call :FIND_LATEST_APK
 if not defined LATEST_APK (
   echo [BLAD] Brak arm64 APK. Najpierw uzyj opcji 9.
   exit /b 1
 )
+if not defined LATEST_UNIVERSAL_APK (
+  echo [BLAD] Brak universal APK. Najpierw uzyj opcji 9.
+  exit /b 1
+)
+for %%F in ("!LATEST_APK!") do set "ARM64_SOURCE_NAME=%%~nxF"
+for %%F in ("!LATEST_UNIVERSAL_APK!") do set "UNIVERSAL_SOURCE_NAME=%%~nxF"
+set "EXPECTED_ARM64_NAME=SmartTube_mobile_!APP_VERSION!_arm64-v8a.apk"
+set "EXPECTED_UNIVERSAL_NAME=SmartTube_mobile_!APP_VERSION!_universal.apk"
+if /I not "!ARM64_SOURCE_NAME!"=="!EXPECTED_ARM64_NAME!" (
+  echo [BLAD] APK arm64 pochodzi z innej wersji: !ARM64_SOURCE_NAME!
+  echo Oczekiwano: !EXPECTED_ARM64_NAME!
+  exit /b 1
+)
+if /I not "!UNIVERSAL_SOURCE_NAME!"=="!EXPECTED_UNIVERSAL_NAME!" (
+  echo [BLAD] APK universal pochodzi z innej wersji: !UNIVERSAL_SOURCE_NAME!
+  echo Oczekiwano: !EXPECTED_UNIVERSAL_NAME!
+  exit /b 1
+)
 for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"`) do set "STAMP=%%T"
 set "PACKAGE_DIR=%RELEASES_DIR%\SmartTube-AA-!APP_VERSION!-!STAMP!"
 if not exist "!PACKAGE_DIR!" mkdir "!PACKAGE_DIR!"
-copy /y "!LATEST_APK!" "!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-arm64-v8a.apk" >nul
+copy /y "!LATEST_APK!" "!PACKAGE_DIR!\!EXPECTED_ARM64_NAME!" >nul
+copy /y "!LATEST_UNIVERSAL_APK!" "!PACKAGE_DIR!\!EXPECTED_UNIVERSAL_NAME!" >nul
+copy /y "!LATEST_UNIVERSAL_APK!" "!PACKAGE_DIR!\SmartTube-AA-latest.apk" >nul
 git -C "%PUBLIC_DIR%" archive --format=zip --output="!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-source.zip" HEAD
 if errorlevel 1 exit /b 1
 copy /y "%~f0" "!PACKAGE_DIR!\%HELPER_NAME%" >nul
+call :WRITE_UPDATE_MANIFEST "!PACKAGE_DIR!\update.json"
+if errorlevel 1 exit /b 1
 (
   echo SmartTube AA !APP_VERSION!
   echo.
-  echo APK: SmartTube-AA-!APP_VERSION!-arm64-v8a.apk
+  echo APK arm64: !EXPECTED_ARM64_NAME!
+  echo APK universal: !EXPECTED_UNIVERSAL_NAME!
+  echo Latest alias: SmartTube-AA-latest.apk
+  echo OTA manifest: update.json ^(versionCode !APP_VERSION_CODE!^)
   echo Source: SmartTube-AA-!APP_VERSION!-source.zip
   echo Build type: stmobile debug/test build
   echo Package: app.smarttube.mobile
@@ -449,6 +470,8 @@ if errorlevel 1 goto COMMAND_FAILED
 call :ENSURE_GH_AUTH
 if errorlevel 1 goto COMMAND_FAILED
 call :ENSURE_REMOTE
+if errorlevel 1 goto COMMAND_FAILED
+call :CHECK_REMOTE_BASE
 if errorlevel 1 goto COMMAND_FAILED
 call :REQUIRE_CLEAN_TREE
 if errorlevel 1 (
@@ -482,7 +505,10 @@ if errorlevel 1 goto COMMAND_FAILED
 call :ENSURE_RELEASE_TAG
 if errorlevel 1 goto COMMAND_FAILED
 gh release create "!TAG_NAME!" ^
-  "!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-arm64-v8a.apk" ^
+  "!PACKAGE_DIR!\!EXPECTED_ARM64_NAME!" ^
+  "!PACKAGE_DIR!\!EXPECTED_UNIVERSAL_NAME!" ^
+  "!PACKAGE_DIR!\SmartTube-AA-latest.apk" ^
+  "!PACKAGE_DIR!\update.json" ^
   "!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-source.zip" ^
   "!PACKAGE_DIR!\SHA256SUMS.txt" ^
   -R "%REPO%" --title "SmartTube AA !APP_VERSION!" ^
@@ -622,13 +648,41 @@ if not exist "%PUBLIC_DIR%\.git" (
 exit /b 0
 
 :ENSURE_REMOTE
-git -C "%PUBLIC_DIR%" remote get-url origin >nul 2>nul
-if errorlevel 1 (
+set "ACTUAL_REMOTE="
+for /f "usebackq delims=" %%U in (`git -C "%PUBLIC_DIR%" remote get-url origin 2^>nul`) do set "ACTUAL_REMOTE=%%U"
+if not defined ACTUAL_REMOTE (
   git -C "%PUBLIC_DIR%" remote add origin "https://github.com/%REPO%.git"
-) else (
-  git -C "%PUBLIC_DIR%" remote set-url origin "https://github.com/%REPO%.git"
+  if errorlevel 1 exit /b 1
+  set "ACTUAL_REMOTE=https://github.com/%REPO%.git"
 )
-git -C "%PUBLIC_DIR%" branch -M "%BRANCH%"
+set "REMOTE_MATCH="
+if /I "!ACTUAL_REMOTE!"=="https://github.com/%REPO%.git" set "REMOTE_MATCH=1"
+if /I "!ACTUAL_REMOTE!"=="https://github.com/%REPO%" set "REMOTE_MATCH=1"
+if /I "!ACTUAL_REMOTE!"=="git@github.com:%REPO%.git" set "REMOTE_MATCH=1"
+if not defined REMOTE_MATCH (
+  echo [BLAD] Origin wskazuje inne repozytorium:
+  echo !ACTUAL_REMOTE!
+  echo Oczekiwano: https://github.com/%REPO%.git
+  echo Uzyj opcji 4 tylko wtedy, gdy swiadomie chcesz zmienic repo.
+  exit /b 1
+)
+set "CURRENT_BRANCH="
+for /f "usebackq delims=" %%B in (`git -C "%PUBLIC_DIR%" branch --show-current`) do set "CURRENT_BRANCH=%%B"
+if /I not "!CURRENT_BRANCH!"=="%BRANCH%" (
+  echo [BLAD] Aktywna galaz to !CURRENT_BRANCH!, a helper oczekuje %BRANCH%.
+  exit /b 1
+)
+exit /b 0
+
+:CHECK_REMOTE_BASE
+git -C "%PUBLIC_DIR%" fetch origin "%BRANCH%" --quiet
+if errorlevel 1 exit /b 1
+git -C "%PUBLIC_DIR%" merge-base --is-ancestor "origin/%BRANCH%" HEAD
+if errorlevel 1 (
+  echo [BLAD] Zdalna galaz origin/%BRANCH% zawiera zmiany, ktorych nie ma lokalnie.
+  echo Uzyj opcji 8 ^(pull --ff-only^) i sprawdz projekt przed wyslaniem.
+  exit /b 1
+)
 exit /b 0
 
 :ENSURE_INITIAL_COMMIT
@@ -653,19 +707,47 @@ exit /b 0
 set "BASE_VERSION="
 set "VERSION_SUFFIX="
 set "APP_VERSION="
-for /f "tokens=2" %%V in ('findstr /C:"versionName " "%SOURCE_DIR%\smarttubetv\build.gradle"') do if not defined BASE_VERSION set "BASE_VERSION=%%~V"
-for /f "tokens=2" %%V in ('findstr /C:"versionNameSuffix " "%SOURCE_DIR%\smarttubetv\build.gradle"') do if not defined VERSION_SUFFIX set "VERSION_SUFFIX=%%~V"
+set "APP_VERSION_CODE="
+set "VERSION_GRADLE=%SOURCE_DIR%\smarttubetv\build.gradle"
+for /f "tokens=2" %%V in ('findstr /C:"versionName " "%VERSION_GRADLE%"') do if not defined BASE_VERSION set "BASE_VERSION=%%~V"
+for /f "tokens=2" %%V in ('findstr /C:"versionNameSuffix " "%VERSION_GRADLE%"') do (
+  set "SUFFIX_CANDIDATE=%%~V"
+  if /I "!SUFFIX_CANDIDATE:~0,7!"=="-mobile" set "VERSION_SUFFIX=!SUFFIX_CANDIDATE!"
+)
+for /f "tokens=2" %%V in ('findstr /C:"versionCode " "%VERSION_GRADLE%"') do if not defined APP_VERSION_CODE set "APP_VERSION_CODE=%%~V"
 if not defined BASE_VERSION (
   echo [BLAD] Nie udalo sie odczytac versionName.
+  exit /b 1
+)
+if not defined VERSION_SUFFIX (
+  echo [BLAD] Nie udalo sie odczytac wersji wariantu stmobile.
+  exit /b 1
+)
+if not defined APP_VERSION_CODE (
+  echo [BLAD] Nie udalo sie odczytac versionCode.
   exit /b 1
 )
 set "APP_VERSION=!BASE_VERSION!!VERSION_SUFFIX!"
 exit /b 0
 
+:WRITE_UPDATE_MANIFEST
+call :GET_VERSION
+if errorlevel 1 exit /b 1
+set "MANIFEST_PATH=%~1"
+powershell -NoProfile -Command "$p=$env:MANIFEST_PATH; $u='https://github.com/'+$env:REPO+'/releases/latest/download/SmartTube-AA-latest.apk'; $ok=$false; if(Test-Path -LiteralPath $p){try{$o=Get-Content -Raw -LiteralPath $p|ConvertFrom-Json; $e=$o.PSObject.Properties[$env:APP_VERSION].Value; $ok=$o.package.downloadUrl -eq $u -and [int]$e.versionCode -eq [int]$env:APP_VERSION_CODE}catch{}}; if($ok){exit 0}; $m=[ordered]@{package=[ordered]@{downloadUrl=$u}; $env:APP_VERSION=[ordered]@{versionCode=[int]$env:APP_VERSION_CODE}}; $j=$m|ConvertTo-Json -Depth 4; [IO.File]::WriteAllText($p,$j+[Environment]::NewLine,(New-Object Text.UTF8Encoding($false)))"
+if errorlevel 1 (
+  echo [BLAD] Nie udalo sie utworzyc update.json.
+  exit /b 1
+)
+exit /b 0
+
 :FIND_LATEST_APK
 set "LATEST_APK="
+set "LATEST_UNIVERSAL_APK="
 for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_APK_DIR%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_APK set "LATEST_APK=%BUILD_APK_DIR%\%%F"
 if not defined LATEST_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%APK_STORE%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_APK set "LATEST_APK=%APK_STORE%\%%F"
+for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_APK_DIR%\*universal.apk" 2^>nul') do if not defined LATEST_UNIVERSAL_APK set "LATEST_UNIVERSAL_APK=%BUILD_APK_DIR%\%%F"
+if not defined LATEST_UNIVERSAL_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%APK_STORE%\*universal.apk" 2^>nul') do if not defined LATEST_UNIVERSAL_APK set "LATEST_UNIVERSAL_APK=%APK_STORE%\%%F"
 exit /b 0
 
 :COMMAND_FAILED

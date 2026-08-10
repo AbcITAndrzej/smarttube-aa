@@ -44,6 +44,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.playbackengine.Media
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.playbackengine.MobilePlaybackEngine;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileInstantPlayController;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileInstantPlayPreferences;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobilePlayerPreferences;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.PreferredTrackResolver;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioDvrProxy;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioPreferences;
@@ -81,6 +83,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private final MobileFeatureFlags featureFlags;
     private final MobileDiagnosticsStore diagnostics;
     private final MobileInstantPlayController instantPlay;
+    private final MobilePlayerPreferences mobilePlayerPreferences;
     private final OfflineListenSaveController listenSaveController;
     private final OfflineTripReserveController tripReserveController;
     private WeakReference<Context> hostContext = new WeakReference<>(null);
@@ -224,9 +227,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     };
 
     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index, LegacyErrorMapper errors) {
-        // The touch player only highlights its preferred language in the picker. It must never
-        // auto-switch an audio track at startup.
-        this(context, index, errors, false, false);
+        // The touch player applies its own mobile preferred language once audio tracks arrive.
+        this(context, index, errors, false, true);
     }
 
     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index,
@@ -246,6 +248,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         this.headlessPlaybackAllowed = headlessPlaybackAllowed;
         this.applyLegacyPreferredAudio = applyLegacyPreferredAudio;
         this.radioPreferences = new RadioPreferences(applicationContext);
+        this.mobilePlayerPreferences = new MobilePlayerPreferences(applicationContext);
         this.featureFlags = new MobileFeatureFlags(applicationContext);
         this.radioTimeShift = new RadioDvrProxy(radioPreferences);
         this.diagnostics = MobileDiagnosticsStore.get(applicationContext);
@@ -1189,8 +1192,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (radioPlayback || video == null || formats == null || formats.isEmpty()) return;
         String mediaId = LegacyMediaMapper.stableId(video);
         if (mediaId == null || mediaId.equals(preferredAudioAppliedMediaId)) return;
-        String preferred = normalizeLanguage(
-                PlayerData.instance(applicationContext).getAudioLanguage());
+        String preferred = PreferredTrackResolver.resolveLanguagePreference(
+                headlessPlaybackAllowed
+                        ? PlayerData.instance(applicationContext).getAudioLanguage()
+                        : mobilePlayerPreferences.getPreferredAudioLanguage());
         if (preferred.isEmpty()) {
             preferredAudioAppliedMediaId = mediaId;
             return;
@@ -1237,14 +1242,9 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     private static boolean languageMatches(FormatItem format, String preferred) {
-        String language = normalizeLanguage(format.getLanguage());
         CharSequence rawTitle = format.getTitle();
-        String title = normalizeLanguage(rawTitle == null ? "" : rawTitle.toString());
-        return language.equals(preferred) || language.startsWith(preferred + "-")
-                || language.startsWith(preferred + "_")
-                || language.startsWith(preferred + ".")
-                || "pl".equals(preferred) && (title.contains("polski")
-                || title.contains("polish"));
+        return PreferredTrackResolver.matchesLanguageOrLabel(format.getLanguage(),
+                rawTitle == null ? "" : rawTitle.toString(), preferred);
     }
 
     private static String normalizeLanguage(String value) {

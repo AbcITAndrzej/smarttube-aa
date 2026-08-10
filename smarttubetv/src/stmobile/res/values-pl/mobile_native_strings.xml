@@ -120,7 +120,7 @@
     <string name="mobile_player_settings_title">Odtwarzacz</string>
     <string name="mobile_player_settings_summary">Personalizuj wyłącznie nowy odtwarzacz telefonu/tabletu. Te opcje nigdy nie zmieniają działania Android Auto.</string>
     <string name="mobile_player_language_section">Preferowane języki</string>
-    <string name="mobile_player_language_summary">Preferowany język jest tylko wyróżniany i przewijany do widoku po otwarciu listy dźwięku lub napisów. Nie jest automatycznie wymuszany przy starcie filmu.</string>
+    <string name="mobile_player_language_summary">Preferowany lektor jest wybierany automatycznie, gdy film go udostępnia. Preferowane napisy są wyróżniane na liście i pozostają wyborem ręcznym.</string>
     <string name="mobile_player_default_audio">Domyślny lektor / dźwięk</string>
     <string name="mobile_player_default_subtitles">Domyślne napisy</string>
     <string name="mobile_player_default_audio_value">Domyślny lektor / dźwięk: %1$s</string>
@@ -154,7 +154,7 @@
     <string name="mobile_player_reset_title">Przywrócić ustawienia odtwarzacza?</string>
     <string name="mobile_player_reset_message">Wszystkie przełączniki mobilnego odtwarzacza, Instant Play, integracji mobilnych i preferowane języki wrócą do wartości domyślnych. Ustawienia Android Auto pozostaną bez zmian.</string>
     <string name="mobile_player_reset_confirm">Przywróć</string>
-    <string name="mobile_track_picker_hint">★ = preferowany język z ustawień. Wybór nie następuje automatycznie.</string>
+    <string name="mobile_track_picker_hint">★ Preferowany język • ✓ Aktywna ścieżka</string>
     <string name="mobile_track_badge_default">★ Domyślna</string>
     <string name="mobile_track_badge_selected">✓ Aktywna</string>
     <string name="mobile_track_badge_selected_default">✓ Aktywna • ★ Domyślna</string>
@@ -250,6 +250,7 @@
     <string name="mobile_player_unlock">Odblokuj sterowanie</string>
     <string name="mobile_player_locked_hint">Sterowanie zablokowane. Stuknij ekran, aby pokazać Odblokuj.</string>
     <string name="mobile_player_gesture_brightness">Jasność %1$d%%</string>
+    <string name="mobile_player_gesture_brightness_automatic">Jasność automatyczna systemu</string>
     <string name="mobile_player_gesture_volume">Głośność %1$d%%</string>
     <string name="mobile_player_sleep_timer_menu">Timer uśpienia</string>
     <string name="mobile_player_sleep_timer_off">Wyłączony</string>

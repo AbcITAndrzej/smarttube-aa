@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.18`
+Aktualne wydanie: `32.04-mobile-p13-aa1.19`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -34,7 +34,13 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.18
+## Co zmienia aa1.19
+
+- automatycznie wybiera preferowany polski lektor także dla ścieżek opisanych przez YouTube jako `pl (dubbed)`,
+- dodaje stan „Jasność automatyczna systemu” na dolnym końcu lewego gestu jasności,
+- poprawia przenośny helper GitHub, aby działał bezpośrednio z katalogu projektu.
+
+## Zmiany z aa1.18
 
 - dodaje bezpieczny domyślny zapis offline wyłącznie dla utworów z aktywnej playlisty odtwarzanej przez Android Auto,
 - zapisuje wyłącznie strumień audio; radio, transmisje live, Shorts i materiały już offline pozostają wykluczone,

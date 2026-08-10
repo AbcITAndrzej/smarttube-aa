@@ -159,7 +159,7 @@
     <string name="mobile_player_settings_title">Player</string>
     <string name="mobile_player_settings_summary">Customize only the new phone/tablet player. These options never change Android Auto playback.</string>
     <string name="mobile_player_language_section">Preferred languages</string>
-    <string name="mobile_player_language_summary">A preferred language is only highlighted and scrolled into view when you open the audio or subtitle list. It is not forced automatically at playback start.</string>
+    <string name="mobile_player_language_summary">Preferred audio is selected automatically when the video provides it. Preferred subtitles are highlighted in the list and remain a manual choice.</string>
     <string name="mobile_player_default_audio">Default dubbing / audio</string>
     <string name="mobile_player_default_subtitles">Default subtitles</string>
     <string name="mobile_player_default_audio_value">Default dubbing / audio: %1$s</string>
@@ -254,6 +254,7 @@
     <string name="mobile_player_unlock">Unlock controls</string>
     <string name="mobile_player_locked_hint">Controls locked. Tap to show Unlock.</string>
     <string name="mobile_player_gesture_brightness">Brightness %1$d%%</string>
+    <string name="mobile_player_gesture_brightness_automatic">System automatic brightness</string>
     <string name="mobile_player_gesture_volume">Volume %1$d%%</string>
     <string name="mobile_player_sleep_timer_menu">Sleep timer</string>
     <string name="mobile_player_sleep_timer_off">Off</string>

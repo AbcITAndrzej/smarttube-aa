@@ -41,6 +41,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileFe
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileLoadState;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.BrightnessGesturePolicy;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileEnhancementPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobilePlayerPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.performance.MobilePerformanceMonitor;
@@ -976,10 +977,16 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
             }
             float fraction = (gestureDownY - event.getY()) / Math.max(1f, root.getHeight());
             if (verticalGestureMode == GESTURE_BRIGHTNESS) {
-                float brightness = clamp01(gestureStartBrightness + fraction * 1.35f);
-                setWindowBrightness(brightness);
-                showGestureFeedback(R.string.mobile_player_gesture_brightness,
-                        Math.round(brightness * 100f));
+                float requestedBrightness = gestureStartBrightness + fraction * 1.35f;
+                if (BrightnessGesturePolicy.usesSystemBrightness(requestedBrightness)) {
+                    setWindowBrightnessAutomatic();
+                    showAutomaticBrightnessFeedback();
+                } else {
+                    float brightness = clamp01(requestedBrightness);
+                    setWindowBrightness(brightness);
+                    showGestureFeedback(R.string.mobile_player_gesture_brightness,
+                            Math.round(brightness * 100f));
+                }
             } else if (verticalGestureMode == GESTURE_VOLUME && audioManager != null) {
                 int volume = Math.round(gestureStartVolume + fraction * 1.35f * maxMusicVolume);
                 volume = Math.max(0, Math.min(maxMusicVolume, volume));
@@ -1019,7 +1026,19 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
         if (!isAdded()) return;
         try {
             WindowManager.LayoutParams params = requireActivity().getWindow().getAttributes();
-            params.screenBrightness = Math.max(0.01f, clamp01(value));
+            params.screenBrightness = BrightnessGesturePolicy.clampManualBrightness(value);
+            requireActivity().getWindow().setAttributes(params);
+            brightnessAdjusted = true;
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void setWindowBrightnessAutomatic() {
+        if (!isAdded()) return;
+        try {
+            WindowManager.LayoutParams params = requireActivity().getWindow().getAttributes();
+            // Remove the app override and follow Android's current brightness policy.
+            params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
             requireActivity().getWindow().setAttributes(params);
             brightnessAdjusted = true;
         } catch (Throwable ignored) {
@@ -1043,6 +1062,15 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
         int safe = Math.max(0, Math.min(100, percent));
         gestureFeedbackText.setText(getString(labelRes, safe));
         gestureFeedbackProgress.setProgress(safe);
+        gestureFeedback.setVisibility(View.VISIBLE);
+        ui.removeCallbacks(hideGestureFeedback);
+    }
+
+    private void showAutomaticBrightnessFeedback() {
+        if (gestureFeedback == null || gestureFeedbackText == null
+                || gestureFeedbackProgress == null) return;
+        gestureFeedbackText.setText(R.string.mobile_player_gesture_brightness_automatic);
+        gestureFeedbackProgress.setProgress(0);
         gestureFeedback.setVisibility(View.VISIBLE);
         ui.removeCallbacks(hideGestureFeedback);
     }

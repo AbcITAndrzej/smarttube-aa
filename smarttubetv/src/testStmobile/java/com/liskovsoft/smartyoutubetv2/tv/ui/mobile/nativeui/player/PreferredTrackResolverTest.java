@@ -47,4 +47,20 @@ public class PreferredTrackResolverTest {
                 PreferredTrackResolver.preferredTrack(audio, "pl", "base").getId());
         assertNull(PreferredTrackResolver.preferredTrack(audio, "en", "base"));
     }
+
+    @Test public void youtubeDubbedSuffixMatchesPreferredLanguage() {
+        List<MobileTrack> audio = Arrays.asList(
+                new MobileTrack("base", MobileTrack.Type.AUDIO,
+                        "en (original), 0.15Mbps, opus", "en (original)", true),
+                new MobileTrack("arabic", MobileTrack.Type.AUDIO,
+                        "ar (dubbed), 0.15Mbps, opus", "ar (dubbed)", false),
+                new MobileTrack("polish", MobileTrack.Type.AUDIO,
+                        "pl (dubbed), 0.15Mbps, opus", "pl (dubbed)", false));
+
+        assertEquals(2, PreferredTrackResolver.findPreferred(audio, "pl"));
+        assertEquals("polish",
+                PreferredTrackResolver.preferredTrack(audio, "pl", "base").getId());
+        assertEquals(true, PreferredTrackResolver.matchesLanguageOrLabel(
+                "pl (dubbed)", "pl (dubbed), 0.15Mbps, opus", "pl"));
+    }
 }
