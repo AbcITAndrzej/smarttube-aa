@@ -13,6 +13,7 @@ public final class OfflineMediaPreferences {
     private static final String KEY_PLAYLIST_DOWNLOADS = "playlist_downloads_enabled";
     private static final String KEY_PLAYLIST_WIFI_ONLY = "playlist_wifi_only";
     private static final String KEY_LISTEN_SAVE = "listen_save_enabled";
+    private static final String KEY_LISTEN_SAVE_MODE = "listen_save_mode";
     private static final String KEY_LISTEN_SAVE_WIFI_ONLY = "listen_save_wifi_only";
     private static final String KEY_LISTEN_SAVE_COMPLETE = "listen_save_complete_after_switch";
     private static final String KEY_LISTEN_SAVE_RECENT_LIMIT = "listen_save_recent_limit";
@@ -30,6 +31,10 @@ public final class OfflineMediaPreferences {
     public static final int DEFAULT_RESERVED_FREE_MB = 512;
     public static final int DEFAULT_LISTEN_SAVE_RECENT_LIMIT = 50;
     public static final int DEFAULT_LISTEN_SAVE_THRESHOLD_SEC = 15;
+    public static final String LISTEN_SAVE_MODE_AA_PLAYLIST = "aa_playlist";
+    public static final String LISTEN_SAVE_MODE_AA_ALL = "aa_all";
+    public static final String LISTEN_SAVE_MODE_PLAYLIST_ALL = "playlist_all";
+    public static final String LISTEN_SAVE_MODE_ALL = "all";
     public static final int DEFAULT_TRIP_RESERVE_RECENT_COUNT = 30;
     public static final int DEFAULT_TRIP_RESERVE_FAVORITE_COUNT = 20;
     public static final int DEFAULT_TRIP_RESERVE_PLAYLIST_COUNT = 2;
@@ -113,6 +118,33 @@ public final class OfflineMediaPreferences {
 
     public void setListenSaveEnabled(boolean enabled) {
         preferences.edit().putBoolean(KEY_LISTEN_SAVE, enabled).apply();
+    }
+
+    /**
+     * Selects which normal finite YouTube audio may be captured. The deliberately conservative
+     * default also applies to upgrades where the key has not been written yet.
+     */
+    public String getListenSaveMode() {
+        return normalizeListenSaveMode(preferences.getString(
+                KEY_LISTEN_SAVE_MODE, LISTEN_SAVE_MODE_AA_PLAYLIST));
+    }
+
+    public void setListenSaveMode(String mode) {
+        preferences.edit().putString(KEY_LISTEN_SAVE_MODE, normalizeListenSaveMode(mode)).apply();
+    }
+
+    public boolean shouldListenSave(boolean androidAutoPlayback, boolean playlistPlayback) {
+        switch (getListenSaveMode()) {
+            case LISTEN_SAVE_MODE_AA_ALL:
+                return androidAutoPlayback;
+            case LISTEN_SAVE_MODE_PLAYLIST_ALL:
+                return playlistPlayback;
+            case LISTEN_SAVE_MODE_ALL:
+                return true;
+            case LISTEN_SAVE_MODE_AA_PLAYLIST:
+            default:
+                return androidAutoPlayback && playlistPlayback;
+        }
     }
 
     /** Safe default: passive saves only run on Wi-Fi/Ethernet. */
@@ -245,6 +277,15 @@ public final class OfflineMediaPreferences {
 
     private static boolean isAllowedListenThreshold(int value) {
         return value == 5 || value == 15 || value == 30 || value == 60;
+    }
+
+    private static String normalizeListenSaveMode(String mode) {
+        if (LISTEN_SAVE_MODE_AA_ALL.equals(mode)
+                || LISTEN_SAVE_MODE_PLAYLIST_ALL.equals(mode)
+                || LISTEN_SAVE_MODE_ALL.equals(mode)) {
+            return mode;
+        }
+        return LISTEN_SAVE_MODE_AA_PLAYLIST;
     }
 
     private static boolean isAllowedTripRecentCount(int value) {

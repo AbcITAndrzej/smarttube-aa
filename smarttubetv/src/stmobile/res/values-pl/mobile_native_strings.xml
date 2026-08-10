@@ -338,8 +338,14 @@ Wolne na urządzeniu: %9$s</string>
 
     <!-- Etap 7: słucham i zapisuję -->
     <string name="mobile_offline_listen_section">Słucham i zapisuję</string>
-    <string name="mobile_offline_listen_summary">Po faktycznym słuchaniu przez wybrany czas SmartTube może zapisać w tle skończoną kopię tylko audio. Radio, transmisje live, Shorts, odtwarzanie headless Android Auto i elementy już offline są wykluczone. Podpisane adresy streamów nigdy nie są zapisywane.</string>
+    <string name="mobile_offline_listen_summary">Po wybranym czasie słuchania SmartTube może zapisać w tle kopię tylko audio. Domyślnie dotyczy to wyłącznie utworów z playlisty odtwarzanej przez Android Auto. Radio, transmisje live, Shorts i elementy już offline są zawsze wykluczone.</string>
     <string name="mobile_offline_listen_enabled">Automatycznie zapisuj słuchane audio</string>
+    <string name="mobile_offline_listen_mode_title">Tryb automatycznego zapisu</string>
+    <string name="mobile_offline_listen_mode_button">Tryb zapisu: %1$s</string>
+    <string name="mobile_offline_listen_mode_aa_playlist">Tylko playlista w Android Auto (zalecane)</string>
+    <string name="mobile_offline_listen_mode_aa_all">Wszystkie zwykłe utwory w Android Auto</string>
+    <string name="mobile_offline_listen_mode_playlist_all">Playlisty w telefonie i Android Auto</string>
+    <string name="mobile_offline_listen_mode_all">Wszystkie zwykłe materiały YouTube</string>
     <string name="mobile_offline_listen_wifi_only">Zapisuj słuchane audio tylko przez Wi‑Fi / Ethernet</string>
     <string name="mobile_offline_listen_complete_after_switch">Dokończ rozpoczęty zapis po przełączeniu na inny utwór</string>
     <string name="mobile_offline_listen_threshold_title">Czas słuchania przed zapisem</string>

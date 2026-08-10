@@ -1809,6 +1809,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
         boolean radioSelection = RadioStationRepository.isRadioMediaId(item.getId());
         forceZeroUntilMs = radioSelection ? 0L : System.currentTimeMillis() + FORCE_ZERO_GUARD_MS;
         boolean localPlayback = OfflineMediaRepository.isOfflinePlaybackId(activePlaybackMediaId);
+        String activeSourceId = activeContainerId == null
+                ? null : sourceByContainer.get(activeContainerId);
+        boolean playlistPlayback = isPlaylistPlaybackSource(item, activeSourceId);
+        playbackRepository.setPlaybackContext(playlistPlayback);
         MobileDiagnostics.info("P13-AA-Playback",
                 "selected browserId=" + browserId + " mediaId=" + item.getId()
                         + " playbackId=" + activePlaybackMediaId
@@ -1817,6 +1821,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
                         + " auto=" + fromAutoAdvance
                         + " resume=" + fromResume
                         + " local=" + localPlayback
+                        + " playlist=" + playlistPlayback
+                        + " source=" + activeSourceId
                         + " start=0 forceZero=" + !radioSelection);
         if (localPlayback) {
             MobileDiagnostics.info("P17-AA-Offline",
@@ -1837,6 +1843,12 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             radioRepository.reportClick(
                     RadioStationRepository.stationIdFromMediaId(item.getId()));
         }
+    }
+
+    private boolean isPlaylistPlaybackSource(MobileMediaItem item, String sourceId) {
+        String playlistId = item == null ? null : item.getPlaylistId();
+        return (playlistId != null && !playlistId.trim().isEmpty())
+                || (sourceId != null && sourceId.startsWith(ITEM_PREFIX + "playlist:"));
     }
 
     private boolean isOfflineSourceId(String sourceId) {

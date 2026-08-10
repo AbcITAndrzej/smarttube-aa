@@ -47,6 +47,11 @@ public class OfflineMediaPreferencesTest {
         assertFalse(preferences.isListenSaveEnabled());
         assertTrue(preferences.isListenSaveWifiOnly());
         assertTrue(preferences.isListenSaveCompleteAfterSwitch());
+        assertEquals(OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_PLAYLIST,
+                preferences.getListenSaveMode());
+        assertTrue(preferences.shouldListenSave(true, true));
+        assertFalse(preferences.shouldListenSave(true, false));
+        assertFalse(preferences.shouldListenSave(false, true));
         assertEquals(50, preferences.getListenSaveRecentLimit());
         assertEquals(15, preferences.getListenSaveThresholdSec());
     }
@@ -63,6 +68,27 @@ public class OfflineMediaPreferencesTest {
         assertFalse(preferences.isListenSaveCompleteAfterSwitch());
         assertEquals(50, preferences.getListenSaveRecentLimit());
         assertEquals(15, preferences.getListenSaveThresholdSec());
+    }
+
+    @Test public void listenSaveModesApplyExpectedPlayerAndPlaylistRules() {
+        OfflineMediaPreferences preferences = new OfflineMediaPreferences(context);
+
+        preferences.setListenSaveMode(OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_ALL);
+        assertTrue(preferences.shouldListenSave(true, false));
+        assertFalse(preferences.shouldListenSave(false, true));
+
+        preferences.setListenSaveMode(OfflineMediaPreferences.LISTEN_SAVE_MODE_PLAYLIST_ALL);
+        assertTrue(preferences.shouldListenSave(false, true));
+        assertFalse(preferences.shouldListenSave(true, false));
+
+        preferences.setListenSaveMode(OfflineMediaPreferences.LISTEN_SAVE_MODE_ALL);
+        assertTrue(preferences.shouldListenSave(false, false));
+
+        preferences.setListenSaveMode("unsupported");
+        assertEquals(OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_PLAYLIST,
+                preferences.getListenSaveMode());
+        assertTrue(preferences.shouldListenSave(true, true));
+        assertFalse(preferences.shouldListenSave(false, false));
     }
 
 }

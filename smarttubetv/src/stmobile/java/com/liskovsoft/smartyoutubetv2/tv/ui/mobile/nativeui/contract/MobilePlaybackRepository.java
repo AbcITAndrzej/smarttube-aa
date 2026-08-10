@@ -17,6 +17,9 @@ public interface MobilePlaybackRepository {
     void setListener(Listener listener);
     default void setPlaybackQueue(List<String> mediaIds, String currentMediaId) {
     }
+    /** Supplies source context that cannot always be reconstructed from an individual media id. */
+    default void setPlaybackContext(boolean playlistPlayback) {
+    }
     void prepare(String mediaId, long startPositionMs);
     void play();
     void pause();

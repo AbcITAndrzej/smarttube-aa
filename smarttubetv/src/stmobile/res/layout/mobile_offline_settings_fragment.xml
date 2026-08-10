@@ -137,6 +137,14 @@
                         android:minHeight="48dp"
                         android:text="@string/mobile_offline_listen_enabled" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/mobile_offline_listen_mode"
+                        style="@style/Widget.SmartTube.Mobile.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp" />
+
                     <com.google.android.material.switchmaterial.SwitchMaterial
                         android:id="@+id/mobile_offline_listen_wifi_only"
                         android:layout_width="match_parent"

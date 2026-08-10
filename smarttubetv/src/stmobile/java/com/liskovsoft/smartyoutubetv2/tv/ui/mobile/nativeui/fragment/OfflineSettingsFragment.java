@@ -43,6 +43,7 @@ public final class OfflineSettingsFragment extends Fragment {
     private TextView status;
     private MaterialButton storageLimit;
     private MaterialButton freeReserve;
+    private MaterialButton listenMode;
     private MaterialButton listenThreshold;
     private MaterialButton listenRecentLimit;
     private MaterialButton tripRecentCount;
@@ -72,6 +73,7 @@ public final class OfflineSettingsFragment extends Fragment {
         status = view.findViewById(R.id.mobile_offline_status);
         storageLimit = view.findViewById(R.id.mobile_offline_storage_limit);
         freeReserve = view.findViewById(R.id.mobile_offline_free_reserve);
+        listenMode = view.findViewById(R.id.mobile_offline_listen_mode);
         listenThreshold = view.findViewById(R.id.mobile_offline_listen_threshold);
         listenRecentLimit = view.findViewById(R.id.mobile_offline_listen_recent_limit);
         tripRecentCount = view.findViewById(R.id.mobile_offline_trip_recent_count);
@@ -153,6 +155,7 @@ public final class OfflineSettingsFragment extends Fragment {
 
         storageLimit.setOnClickListener(v -> chooseStorageLimit());
         freeReserve.setOnClickListener(v -> chooseFreeReserve());
+        listenMode.setOnClickListener(v -> chooseListenSaveMode());
         listenThreshold.setOnClickListener(v -> chooseListenThreshold());
         listenRecentLimit.setOnClickListener(v -> chooseListenRecentLimit());
         tripRecentCount.setOnClickListener(v -> chooseTripRecentCount());
@@ -249,6 +252,35 @@ public final class OfflineSettingsFragment extends Fragment {
                 .setTitle(R.string.mobile_offline_listen_threshold_title)
                 .setSingleChoiceItems(labels, checked, (dialog, which) -> {
                     preferences.setListenSaveThresholdSec(values[which]);
+                    updatePolicyLabels();
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void chooseListenSaveMode() {
+        final String[] values = {
+                OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_PLAYLIST,
+                OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_ALL,
+                OfflineMediaPreferences.LISTEN_SAVE_MODE_PLAYLIST_ALL,
+                OfflineMediaPreferences.LISTEN_SAVE_MODE_ALL
+        };
+        final String[] labels = {
+                getString(R.string.mobile_offline_listen_mode_aa_playlist),
+                getString(R.string.mobile_offline_listen_mode_aa_all),
+                getString(R.string.mobile_offline_listen_mode_playlist_all),
+                getString(R.string.mobile_offline_listen_mode_all)
+        };
+        String current = preferences.getListenSaveMode();
+        int checked = 0;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(current)) checked = i;
+        }
+        new AlertDialog.Builder(requireContext())
+                .setTitle(R.string.mobile_offline_listen_mode_title)
+                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                    preferences.setListenSaveMode(values[which]);
                     updatePolicyLabels();
                     dialog.dismiss();
                 })
@@ -414,6 +446,10 @@ public final class OfflineSettingsFragment extends Fragment {
             listenThreshold.setText(getString(R.string.mobile_offline_listen_threshold_button,
                     preferences.getListenSaveThresholdSec()));
         }
+        if (listenMode != null) {
+            listenMode.setText(getString(R.string.mobile_offline_listen_mode_button,
+                    listenSaveModeLabel(preferences.getListenSaveMode())));
+        }
         if (listenRecentLimit != null) {
             listenRecentLimit.setText(getString(R.string.mobile_offline_listen_recent_limit_button,
                     preferences.getListenSaveRecentLimit()));
@@ -440,6 +476,19 @@ public final class OfflineSettingsFragment extends Fragment {
                     : getString(R.string.mobile_offline_mb_value, mb);
             freeReserve.setText(getString(R.string.mobile_offline_free_reserve_button, value));
         }
+    }
+
+    private String listenSaveModeLabel(String mode) {
+        if (OfflineMediaPreferences.LISTEN_SAVE_MODE_AA_ALL.equals(mode)) {
+            return getString(R.string.mobile_offline_listen_mode_aa_all);
+        }
+        if (OfflineMediaPreferences.LISTEN_SAVE_MODE_PLAYLIST_ALL.equals(mode)) {
+            return getString(R.string.mobile_offline_listen_mode_playlist_all);
+        }
+        if (OfflineMediaPreferences.LISTEN_SAVE_MODE_ALL.equals(mode)) {
+            return getString(R.string.mobile_offline_listen_mode_all);
+        }
+        return getString(R.string.mobile_offline_listen_mode_aa_playlist);
     }
 
     private void setStatus(String value) {

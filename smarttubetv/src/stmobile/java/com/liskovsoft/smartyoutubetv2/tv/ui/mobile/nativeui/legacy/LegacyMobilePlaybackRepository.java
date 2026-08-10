@@ -103,6 +103,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private Video video;
     private boolean radioPlayback;
     private boolean offlinePlayback;
+    private boolean playlistPlaybackContext;
     private String offlineMediaId;
     private String radioMediaId;
     private String radioTitle = "";
@@ -663,6 +664,12 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (item != null) setFormat(item);
     }
 
+    @Override public void setPlaybackContext(boolean playlistPlayback) {
+        playlistPlaybackContext = playlistPlayback;
+        MobileDiagnostics.debug("OfflineListen", "playback context androidAuto="
+                + headlessPlaybackAllowed + " playlist=" + playlistPlayback);
+    }
+
     @Override public void selectAudioTrack(String trackId) {
         FormatItem item = trackMapper.find(getAudioFormats(), trackId);
         if (item != null) {
@@ -685,6 +692,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         MobileDiagnostics.debug("DataPlayer", "release");
         instantPlay.cancel();
         listenSaveController.reset();
+        playlistPlaybackContext = false;
         tripReserveController.reset();
         radioTimeShift.close();
         engineGeneration++;
@@ -1170,7 +1178,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         diagnostics.onSnapshot(snapshot, getVideoFormat(), getAudioFormat(), getSubtitleFormat(),
                 radioPlayback, radioTimeShift);
         listenSaveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback,
-                headlessPlaybackAllowed);
+                headlessPlaybackAllowed, playlistPlaybackContext);
         tripReserveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback);
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;

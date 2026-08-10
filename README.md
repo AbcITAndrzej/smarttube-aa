@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.17`
+Aktualne wydanie: `32.04-mobile-p13-aa1.18`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -32,7 +32,13 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.17
+## Co zmienia aa1.18
+
+- dodaje bezpieczny domyślny zapis offline wyłącznie dla utworów z aktywnej playlisty odtwarzanej przez Android Auto,
+- zapisuje wyłącznie strumień audio; radio, transmisje live, Shorts i materiały już offline pozostają wykluczone,
+- pozwala wybrać szerszy tryb zapisu: całe AA, wszystkie playlisty albo całe zwykłe odtwarzanie YouTube.
+
+## Zmiany z aa1.17
 
 - integruje etapy 1–12 przebudowy mobilnej, diagnostyki, wydajności i pracy offline,
 - dodaje fundament zapisu audio offline, jawne pobieranie playlist i rezerwę na podróż,

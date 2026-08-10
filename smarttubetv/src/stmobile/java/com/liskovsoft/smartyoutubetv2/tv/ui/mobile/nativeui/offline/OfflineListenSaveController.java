@@ -10,8 +10,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileFe
 /**
  * Mobile-player bridge for Stage 7. Counts actual playing time instead of wall-clock time, so an
  * accidental tap/paused item does not immediately consume bandwidth. Radio, live, Shorts, offline
- * playback are intentionally excluded. Headless Android Auto is accepted because it is a real,
- * user-visible media session and uses the same finite YouTube audio resolver as mobile playback.
+ * playback are intentionally excluded. The selected policy additionally limits capture by player
+ * and playlist context. The download service always resolves an audio-only format.
  */
 public final class OfflineListenSaveController {
     private final Context app;
@@ -29,8 +29,10 @@ public final class OfflineListenSaveController {
     }
 
     public void onPlayback(Video video, boolean playing, boolean radioPlayback,
-                           boolean offlinePlayback, boolean headlessPlayback) {
-        if (!eligible(video, radioPlayback, offlinePlayback, headlessPlayback)) {
+                           boolean offlinePlayback, boolean headlessPlayback,
+                           boolean playlistPlayback) {
+        if (!eligible(video, radioPlayback, offlinePlayback, headlessPlayback,
+                playlistPlayback)) {
             reset();
             return;
         }
@@ -83,11 +85,14 @@ public final class OfflineListenSaveController {
     }
 
     private boolean eligible(Video video, boolean radioPlayback, boolean offlinePlayback,
-                             boolean headlessPlayback) {
+                             boolean headlessPlayback, boolean playlistPlayback) {
         if (!flags.isOfflineListenSaveEnabled() || !preferences.isListenSaveEnabled()) return false;
         if (!OfflineMediaRepository.get(app).isEnabled()) return false;
         if (radioPlayback || offlinePlayback || video == null) return false;
         if (video.isLive || video.isUpcoming || video.isShorts || video.isUnplayable) return false;
+        boolean resolvedPlaylist = playlistPlayback
+                || (video.getPlaylistId() != null && !video.getPlaylistId().trim().isEmpty());
+        if (!preferences.shouldListenSave(headlessPlayback, resolvedPlaylist)) return false;
         return video.videoId != null && !video.videoId.trim().isEmpty();
     }
 

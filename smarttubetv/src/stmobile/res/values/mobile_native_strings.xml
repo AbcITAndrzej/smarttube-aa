@@ -342,8 +342,14 @@ Device free: %9$s</string>
 
     <!-- Stage 7: passive listen-and-save -->
     <string name="mobile_offline_listen_section">Listen and save</string>
-    <string name="mobile_offline_listen_summary">After you actually listen for the selected time, SmartTube can save a finite audio-only copy in the background. Radio, live streams, Shorts, Android Auto headless playback and already-offline items are excluded. Signed stream URLs are never stored.</string>
+    <string name="mobile_offline_listen_summary">After the selected listening time, SmartTube can save an audio-only copy in the background. The default accepts only playlist tracks playing through Android Auto. Radio, live streams, Shorts and already-offline items are always excluded.</string>
     <string name="mobile_offline_listen_enabled">Automatically save listened audio</string>
+    <string name="mobile_offline_listen_mode_title">Automatic save mode</string>
+    <string name="mobile_offline_listen_mode_button">Save mode: %1$s</string>
+    <string name="mobile_offline_listen_mode_aa_playlist">Android Auto playlist only (recommended)</string>
+    <string name="mobile_offline_listen_mode_aa_all">All normal tracks in Android Auto</string>
+    <string name="mobile_offline_listen_mode_playlist_all">Playlists in the phone app and Android Auto</string>
+    <string name="mobile_offline_listen_mode_all">All normal YouTube playback</string>
     <string name="mobile_offline_listen_wifi_only">Save listened audio only on Wi-Fi / Ethernet</string>
     <string name="mobile_offline_listen_complete_after_switch">Finish a started save after switching to another track</string>
     <string name="mobile_offline_listen_threshold_title">Listening time before saving</string>
