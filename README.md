@@ -12,6 +12,8 @@ Aktualne wydanie: `32.04-mobile-p13-aa1.18`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
+**[Krótka instrukcja korzystania z aplikacji](docs/INSTRUKCJA-UZYTKOWNIKA.md)** — Android Auto, Radio, playlisty i tryb Offline.
+
 ## Najważniejsze funkcje
 
 - logowanie do konta YouTube,

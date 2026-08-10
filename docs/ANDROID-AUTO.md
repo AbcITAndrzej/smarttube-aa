@@ -30,8 +30,18 @@ później są automatycznie dodawane na końcu lokalnego układu.
 
 ## Radio
 
-Pozycja `Radio` jest obecnie tylko przygotowanym miejscem w interfejsie. Nie pobiera
-danych i nie łączy się jeszcze z katalogiem Radio Browser.
+Sekcja `Radio` korzysta z katalogu Radio Browser zsynchronizowanego w aplikacji
+mobilnej. Ulubione stacje są zapisywane lokalnie na telefonie i pojawiają się również
+w Android Auto. Przy błędzie synchronizacji HTTP 503 spróbuj ponownie albo użyj
+innego połączenia internetowego.
+
+## Offline
+
+Po włączeniu `Pokaż bibliotekę Offline w Android Auto` dostępne są sekcje
+`Ostatnio zapisane`, `Playlisty offline` i `Ulubione offline`. Android Auto odtwarza
+tylko ukończone lokalne pliki audio; samo otwarcie sekcji nie uruchamia pobierania.
+
+Sposoby przygotowania plików opisuje [krótka instrukcja użytkownika](INSTRUKCJA-UZYTKOWNIKA.md#jak-działa-offline).
 
 ## Wyłączenie dostępu
 
