@@ -15,15 +15,24 @@ public final class MobileBrowseViewModel extends ViewModel {
     private final MobileRequestSlot requestSlot = new MobileRequestSlot();
     private final MutableLiveData<MobileLoadState<MobileBrowsePayload>> state =
             new MutableLiveData<>(MobileLoadState.<MobileBrowsePayload>idle());
+    private final MutableLiveData<Boolean> loadingMoreState = new MutableLiveData<>(false);
     private boolean loadingMore;
 
     public MobileBrowseViewModel(MobileBrowseRepository repository, String pageId, String itemId) {
         this.repository = repository;
         this.pageId = pageId;
         this.itemId = itemId;
+        if (itemId != null && !itemId.isEmpty()) {
+            repository.setItemUpdateListener((updatedId, payload) -> {
+                if (itemId.equals(updatedId) && payload != null) {
+                    publish(MobileLoadState.content(payload));
+                }
+            });
+        }
     }
 
     public LiveData<MobileLoadState<MobileBrowsePayload>> getState() { return state; }
+    public LiveData<Boolean> getLoadingMore() { return loadingMoreState; }
 
     public void load() { load(false); }
     public void refresh() { load(true); }
@@ -34,16 +43,19 @@ public final class MobileBrowseViewModel extends ViewModel {
         if (loadingMore || previous == null || !previous.hasMore()
                 || itemId != null && !itemId.isEmpty()) return;
         loadingMore = true;
+        loadingMoreState.setValue(true);
         final long token = requestSlot.begin();
         MobileRequest request = repository.loadMoreBrowse(pageId,
                 new MobileResultCallback<MobileBrowsePayload>() {
                     @Override public void onSuccess(MobileBrowsePayload value) {
                         loadingMore = false;
+                        loadingMoreState.postValue(false);
                         if (requestSlot.isCurrent(token)) publish(MobileLoadState.content(value));
                     }
 
                     @Override public void onError(MobileError error) {
                         loadingMore = false;
+                        loadingMoreState.postValue(false);
                         if (requestSlot.isCurrent(token)) {
                             publish(MobileLoadState.error(previous, error));
                         }
@@ -54,6 +66,7 @@ public final class MobileBrowseViewModel extends ViewModel {
 
     private void load(boolean refreshing) {
         loadingMore = false;
+        loadingMoreState.setValue(false);
         MobileLoadState<MobileBrowsePayload> current = state.getValue();
         MobileBrowsePayload previous = current == null ? null : current.getData();
         state.setValue(MobileLoadState.loading(previous, refreshing));
@@ -95,5 +108,8 @@ public final class MobileBrowseViewModel extends ViewModel {
         repository.prefetchBrowse("news");
     }
 
-    @Override protected void onCleared() { requestSlot.clear(); }
+    @Override protected void onCleared() {
+        requestSlot.clear();
+        if (itemId != null && !itemId.isEmpty()) repository.setItemUpdateListener(null);
+    }
 }

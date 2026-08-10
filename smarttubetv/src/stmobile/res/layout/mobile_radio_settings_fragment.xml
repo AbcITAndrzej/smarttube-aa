@@ -49,7 +49,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -59,43 +59,170 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:minHeight="48dp"
+                    android:minHeight="44dp"
                     android:text="@string/mobile_radio_sync" />
 
                 <ProgressBar
                     android:id="@+id/mobile_radio_progress"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:layout_marginStart="12dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="10dp"
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                style="@style/TextAppearance.SmartTube.Mobile.TitleMedium"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/mobile_radio_search_layout"
+                style="@style/Widget.SmartTube.Mobile.SearchInput"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:text="@string/mobile_radio_sort_label" />
+                android:layout_marginTop="8dp"
+                android:hint="@string/mobile_radio_search_hint"
+                app:boxBackgroundMode="outline"
+                app:endIconMode="clear_text">
 
-            <Spinner
-                android:id="@+id/mobile_radio_sort"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:contentDescription="@string/mobile_radio_sort_label" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/mobile_radio_search"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:minHeight="44dp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-            <com.google.android.material.switchmaterial.SwitchMaterial
-                android:id="@+id/mobile_radio_favorites_only"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="48dp"
-                android:text="@string/mobile_radio_favorites_only" />
+                android:layout_marginTop="4dp"
+                android:orientation="horizontal">
+
+                <Spinner
+                    android:id="@+id/mobile_radio_collection"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/mobile_radio_collection_label" />
+
+                <Spinner
+                    android:id="@+id/mobile_radio_sort"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/mobile_radio_sort_label" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/mobile_radio_country_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Spinner
+                    android:id="@+id/mobile_radio_country"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/mobile_radio_country_filter" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/mobile_radio_tag_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <Spinner
+                    android:id="@+id/mobile_radio_tag"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/mobile_radio_genre_filter" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_timeshift_enabled"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_timeshift_enabled" />
+
+                <Spinner
+                    android:id="@+id/mobile_radio_timeshift_duration"
+                    android:layout_width="100dp"
+                    android:layout_height="44dp"
+                    android:contentDescription="@string/mobile_radio_timeshift_duration" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_radio_advanced_toggle"
+                style="@style/Widget.SmartTube.Mobile.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="44dp"
+                android:text="@string/mobile_radio_advanced_options" />
+
+            <LinearLayout
+                android:id="@+id/mobile_radio_advanced_options"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_server_search_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_server_search_enabled" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_recent_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_recent_enabled" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_failover_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_failover_enabled" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_categories_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_categories_enabled" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_aa_directory_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_aa_directory_enabled" />
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/mobile_radio_live_offset_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="44dp"
+                    android:text="@string/mobile_radio_live_offset_enabled" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/mobile_radio_status"
                 style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="6dp" />
+                android:layout_marginTop="4dp" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -105,7 +232,7 @@
         android:layout_height="0dp"
         android:clipToPadding="false"
         android:paddingStart="8dp"
-        android:paddingTop="6dp"
+        android:paddingTop="4dp"
         android:paddingEnd="8dp"
         android:paddingBottom="20dp"
         app:layout_constraintBottom_toBottomOf="parent"

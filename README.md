@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.16`
+Aktualne wydanie: `32.04-mobile-p13-aa1.17`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -32,7 +32,15 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.16
+## Co zmienia aa1.17
+
+- integruje etapy 1–12 przebudowy mobilnej, diagnostyki, wydajności i pracy offline,
+- dodaje fundament zapisu audio offline, jawne pobieranie playlist i rezerwę na podróż,
+- przygotowuje osobny, eksperymentalny wariant AA Video bez usługi muzycznej Android Auto,
+- poprawia wybór ścieżek w poziomie, preferowany język, kolejkę zwykłych filmów i obrót playera,
+- wcześniej doładowuje Shorts i pokazuje stan oczekiwania na kolejną stronę.
+
+## Zmiany z aa1.16
 
 - preferowany język audio jest ponownie sprawdzany po załadowaniu ścieżek; polska ścieżka zostaje wybrana, gdy YouTube ją udostępnia,
 - Shorts korzystają z własnej kolejki, dlatego gest góra/dół nie przełącza już na zwykły film,

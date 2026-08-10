@@ -5,6 +5,7 @@ import android.content.res.Configuration;
 import android.view.*;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
@@ -18,6 +19,10 @@ import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.adapter.MobileMediaAdapter;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflinePlaylistDownloadService;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.performance.MobilePerformanceMonitor;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflinePlaylistRecord;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflinePlaylistRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobileBrowseViewModel;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,6 +55,14 @@ public final class MobileBrowseFragment extends Fragment {
         return getArguments() != null && !getArguments().getString(ARG_ITEM_ID, "").isEmpty();
     }
 
+    public String getItemId() {
+        return getArguments() == null ? "" : getArguments().getString(ARG_ITEM_ID, "");
+    }
+
+    private boolean isPlaylistDetail() {
+        return isItemDetail() && getItemId().startsWith("playlist:");
+    }
+
     @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
                                                  @Nullable ViewGroup container,
                                                  @Nullable Bundle state) {
@@ -60,6 +73,7 @@ public final class MobileBrowseFragment extends Fragment {
         MobileBrowseViewModel vm = new ViewModelProvider(this,
                 new MobileNativeViewModelFactory(MobileNativeDependencies.get(), getArguments()))
                 .get(MobileBrowseViewModel.class);
+        MobilePerformanceMonitor performance = MobilePerformanceMonitor.get(requireContext());
         RecyclerView list = view.findViewById(R.id.mobile_list);
         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
         ChipGroup categories = view.findViewById(R.id.mobile_category_chips);
@@ -80,8 +94,9 @@ public final class MobileBrowseFragment extends Fragment {
                             item.getId(), item.getProgressMs(),
                             adapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
-                    MobileFragmentSupport.navigator(this).openPlayback(
-                            item.getId(), item.getProgressMs());
+                    MobileFragmentSupport.navigator(this).openPlaybackQueue(
+                            item.getId(), item.getProgressMs(),
+                            adapterRef[0].getRegularPlayableIds());
                 }
             }
         });
@@ -108,7 +123,10 @@ public final class MobileBrowseFragment extends Fragment {
                         ? ((GridLayoutManager) manager).findLastVisibleItemPosition()
                         : manager instanceof LinearLayoutManager
                         ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
-                if (last >= adapter.getItemCount() - 6) vm.loadMore();
+                int trigger = "shorts".equals(getPageId())
+                        ? Math.max(1, adapter.getItemCount() * 3 / 5)
+                        : adapter.getItemCount() - 6;
+                if (last >= trigger) vm.loadMore();
             }
         });
         boolean showCategories = !isItemDetail() && isCategoryPage(getPageId());
@@ -146,7 +164,14 @@ public final class MobileBrowseFragment extends Fragment {
             if (value.getData() != null && value.getData() != lastRenderedPayload[0]) {
                 lastRenderedPayload[0] = value.getData();
                 if (isItemDetail()) toolbar.setTitle(value.getData().getTitle());
+                if (isPlaylistDetail()) configurePlaylistOfflineAction(toolbar, value.getData());
+                long renderStarted = performance.beginTrace("ST:BrowseRender");
                 adapter.submitSections(localizeTopLevelSections(value.getData().getSections(), showCategories));
+                performance.endBrowseTrace(renderStarted, isItemDetail() ? "detail" : getPageId(),
+                        adapter.getItemCount());
+                if (!isItemDetail() && "home".equals(getPageId())) {
+                    performance.onHomeContentReady(requireActivity(), adapter.getItemCount());
+                }
                 if (value.getData().hasMore()) {
                     // Large tablets can display the whole first Shorts page without producing
                     // a scroll event. Fill one more page until the list is actually scrollable.
@@ -156,8 +181,63 @@ public final class MobileBrowseFragment extends Fragment {
                 }
             }
         });
+        ProgressBar loadMore = view.findViewById(R.id.mobile_load_more);
+        vm.getLoadingMore().observe(getViewLifecycleOwner(), loading ->
+                loadMore.setVisibility(Boolean.TRUE.equals(loading) ? View.VISIBLE : View.GONE));
         if (vm.getState().getValue() == null
                 || vm.getState().getValue().getStatus() == MobileLoadState.Status.IDLE) vm.load();
+    }
+
+    private void configurePlaylistOfflineAction(MaterialToolbar toolbar, MobileBrowsePayload payload) {
+        toolbar.getMenu().clear();
+        android.view.MenuItem download = toolbar.getMenu().add(R.string.mobile_offline_playlist_download_action);
+        download.setIcon(R.drawable.mobile_ic_download_24);
+        download.setShowAsAction(android.view.MenuItem.SHOW_AS_ACTION_ALWAYS);
+        boolean complete = payload != null && !payload.hasMore();
+        download.setEnabled(complete);
+        download.setOnMenuItemClickListener(item -> {
+            if (!complete) {
+                Toast.makeText(requireContext(), R.string.mobile_offline_playlist_preparing,
+                        Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            queuePlaylistOffline(payload);
+            return true;
+        });
+    }
+
+    private void queuePlaylistOffline(MobileBrowsePayload payload) {
+        OfflinePlaylistRepository repository = OfflinePlaylistRepository.get(requireContext());
+        if (!repository.isEnabled()) {
+            Toast.makeText(requireContext(), R.string.mobile_offline_playlist_feature_disabled,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        List<MobileMediaItem> media = new ArrayList<>();
+        String thumbnail = "";
+        if (payload != null && payload.getSections() != null) {
+            for (MobileSection section : payload.getSections()) {
+                if (section == null || section.getItems() == null) continue;
+                for (MobileMediaItem item : section.getItems()) {
+                    if (item == null) continue;
+                    media.add(item);
+                    if (thumbnail.isEmpty() && item.getThumbnailUrl() != null) {
+                        thumbnail = item.getThumbnailUrl();
+                    }
+                }
+            }
+        }
+        String rawId = getItemId().substring("playlist:".length());
+        OfflinePlaylistRecord queued = repository.enqueue(rawId,
+                payload == null ? "" : payload.getTitle(), thumbnail, media);
+        if (queued == null) {
+            Toast.makeText(requireContext(), R.string.mobile_offline_playlist_unavailable,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+        OfflinePlaylistDownloadService.wake(requireContext());
+        Toast.makeText(requireContext(), R.string.mobile_offline_playlist_queued,
+                Toast.LENGTH_SHORT).show();
     }
 
     private void setupCategories(ChipGroup group, String selectedPage) {

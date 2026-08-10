@@ -11,6 +11,9 @@
 # generated files
 bin/
 gen/
+# MediaServiceCore stores required API model sources in directories named "gen".
+!MediaServiceCore/youtubeapi/src/main/java/**/gen/
+!MediaServiceCore/youtubeapi/src/main/java/**/gen/**
 
 # Local configuration file (sdk path, etc)
 local.properties

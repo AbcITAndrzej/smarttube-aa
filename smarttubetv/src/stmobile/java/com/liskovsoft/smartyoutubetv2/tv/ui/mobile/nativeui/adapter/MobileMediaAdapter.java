@@ -7,12 +7,14 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.DiffUtil;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileImageLoader;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     public interface Listener { void onMediaClicked(MobileMediaItem item); }
@@ -31,9 +33,44 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
     }
 
     public void submitSections(List<MobileSection> sections) {
+        List<Row> next = buildRows(sections);
+        if (rows.isEmpty()) {
+            rows.addAll(next);
+            if (!next.isEmpty()) notifyItemRangeInserted(0, next.size());
+            return;
+        }
+
+        // Continuation pages normally append to an unchanged prefix. Handle that hot path without
+        // re-binding every visible card and without paying DiffUtil cost for the whole feed.
+        if (isPureAppend(rows, next)) {
+            int start = rows.size();
+            if (next.size() > start) {
+                rows.addAll(next.subList(start, next.size()));
+                notifyItemRangeInserted(start, next.size() - start);
+            }
+            return;
+        }
+
+        List<Row> previous = new ArrayList<>(rows);
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+            @Override public int getOldListSize() { return previous.size(); }
+            @Override public int getNewListSize() { return next.size(); }
+            @Override public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+                return previous.get(oldItemPosition).key.equals(next.get(newItemPosition).key);
+            }
+            @Override public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+                return previous.get(oldItemPosition).sameContent(next.get(newItemPosition));
+            }
+        }, false);
         rows.clear();
+        rows.addAll(next);
+        diff.dispatchUpdatesTo(this);
+    }
+
+    private static List<Row> buildRows(List<MobileSection> sections) {
+        List<Row> result = new ArrayList<>();
         for (MobileSection section : sections == null ? Collections.<MobileSection>emptyList() : sections) {
-            if (!section.getTitle().isEmpty()) rows.add(Row.header(section.getId(), section.getTitle()));
+            if (!section.getTitle().isEmpty()) result.add(Row.header(section.getId(), section.getTitle()));
             List<MobileMediaItem> items = section.getItems();
             for (int index = 0; index < items.size();) {
                 MobileMediaItem item = items.get(index);
@@ -41,15 +78,25 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
                     MobileMediaItem second = index + 1 < items.size()
                             && items.get(index + 1).getKind() == MobileMediaItem.Kind.SHORT
                             ? items.get(index + 1) : null;
-                    rows.add(Row.shortPair(section.getId(), index, item, second));
+                    result.add(Row.shortPair(section.getId(), index, item, second));
                     index += second == null ? 1 : 2;
                 } else {
-                    rows.add(Row.media(section.getId(), index, item));
+                    result.add(Row.media(section.getId(), index, item));
                     index++;
                 }
             }
         }
-        notifyDataSetChanged();
+        return result;
+    }
+
+    private static boolean isPureAppend(List<Row> oldRows, List<Row> newRows) {
+        if (newRows.size() < oldRows.size()) return false;
+        for (int index = 0; index < oldRows.size(); index++) {
+            Row oldRow = oldRows.get(index);
+            Row newRow = newRows.get(index);
+            if (!oldRow.key.equals(newRow.key) || !oldRow.sameContent(newRow)) return false;
+        }
+        return true;
     }
 
     /** Current visible queue, kept in feed order and de-duplicated by media id. */
@@ -60,6 +107,22 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
             appendPlayableId(result, row.secondItem, kind);
         }
         return result;
+    }
+
+    /** Regular-video queue in the same order as the currently rendered feed. */
+    public ArrayList<String> getRegularPlayableIds() {
+        ArrayList<String> result = new ArrayList<>();
+        for (Row row : rows) {
+            appendRegularPlayableId(result, row.item);
+            appendRegularPlayableId(result, row.secondItem);
+        }
+        return result;
+    }
+
+    private static void appendRegularPlayableId(List<String> result, MobileMediaItem item) {
+        if (item == null || !item.isPlayable() || item.getKind() == MobileMediaItem.Kind.SHORT
+                || item.getId() == null || result.contains(item.getId())) return;
+        result.add(item.getId());
     }
 
     private static void appendPlayableId(List<String> result, MobileMediaItem item,
@@ -198,6 +261,26 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
             String secondId = second == null ? "" : ":" + second.getId();
             return new Row("short:" + sectionId + ":" + position + ":" + first.getId() + secondId,
                     null, first, second, true);
+        }
+        boolean sameContent(Row other) {
+            return other != null
+                    && Objects.equals(header, other.header)
+                    && sameItem(item, other.item)
+                    && sameItem(secondItem, other.secondItem)
+                    && shortPair == other.shortPair;
+        }
+        private static boolean sameItem(MobileMediaItem left, MobileMediaItem right) {
+            if (left == right) return true;
+            if (left == null || right == null) return false;
+            return Objects.equals(left.getId(), right.getId())
+                    && left.getKind() == right.getKind()
+                    && Objects.equals(left.getTitle(), right.getTitle())
+                    && Objects.equals(left.getSubtitle(), right.getSubtitle())
+                    && Objects.equals(left.getThumbnailUrl(), right.getThumbnailUrl())
+                    && Objects.equals(left.getDurationText(), right.getDurationText())
+                    && left.getProgressMs() == right.getProgressMs()
+                    && left.getDurationMs() == right.getDurationMs()
+                    && left.isPlayable() == right.isPlayable();
         }
         long stableId() { return key.hashCode(); }
     }

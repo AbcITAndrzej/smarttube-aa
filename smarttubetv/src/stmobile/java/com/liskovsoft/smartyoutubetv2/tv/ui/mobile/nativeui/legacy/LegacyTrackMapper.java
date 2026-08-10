@@ -22,7 +22,9 @@ public final class LegacyTrackMapper {
         List<MobileTrack> result = new ArrayList<>();
         for (FormatItem item : ordered) {
             if (item == null) continue;
-            result.add(new MobileTrack(id(item), type, label(item, type), safe(item.getLanguage()), item.isSelected()));
+            result.add(new MobileTrack(id(item), type, label(item, type), safe(item.getLanguage()),
+                    item.isSelected(), type == MobileTrack.Type.VIDEO ? item.getWidth() : 0,
+                    type == MobileTrack.Type.VIDEO ? item.getHeight() : 0));
         }
         return result;
     }

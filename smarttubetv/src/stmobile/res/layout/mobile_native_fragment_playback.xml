@@ -94,6 +94,27 @@
                     android:maxLines="1" />
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/mobile_player_sleep_badge"
+                style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_player_lock"
+                style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/mobile_player_lock"
+                app:icon="@drawable/mobile_ic_lock_24"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/mobile_player_more"
                 style="@style/Widget.SmartTube.Mobile.PlayerIconButton"
@@ -173,7 +194,7 @@
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent">
 
-            <SeekBar
+            <com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileSegmentSeekBar
                 android:id="@+id/mobile_player_seek"
                 android:layout_width="match_parent"
                 android:layout_height="36dp"
@@ -191,13 +212,26 @@
                 <TextView
                     android:id="@+id/mobile_player_time"
                     style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1" />
+                    android:layout_marginEnd="12dp"
+                    android:maxLines="1"
+                    android:minWidth="104dp"
+                    android:singleLine="true" />
 
-                <HorizontalScrollView
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/mobile_player_go_live"
+                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
+                    android:layout_marginEnd="8dp"
+                    android:text="@string/mobile_radio_go_live"
+                    android:visibility="gone" />
+
+                <HorizontalScrollView
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
                     android:fillViewport="true"
                     android:scrollbars="none">
 
@@ -283,4 +317,49 @@
             </LinearLayout>
         </LinearLayout>
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <LinearLayout
+        android:id="@+id/mobile_player_gesture_feedback"
+        android:layout_width="220dp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/mobile_smart_player_feedback_background"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/mobile_player_gesture_feedback_text"
+            style="@style/TextAppearance.SmartTube.Mobile.PlayerTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:maxLines="1" />
+
+        <ProgressBar
+            android:id="@+id/mobile_player_gesture_feedback_progress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginTop="10dp"
+            android:max="100" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/mobile_player_unlock_button"
+        style="@style/Widget.SmartTube.Mobile.PlayerButton"
+        android:layout_width="wrap_content"
+        android:layout_height="56dp"
+        android:minWidth="144dp"
+        android:text="@string/mobile_player_unlock"
+        android:visibility="gone"
+        app:icon="@drawable/mobile_ic_lock_open_24"
+        app:iconGravity="textStart"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 </androidx.constraintlayout.widget.ConstraintLayout>

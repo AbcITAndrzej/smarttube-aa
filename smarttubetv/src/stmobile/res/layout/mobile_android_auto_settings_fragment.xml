@@ -235,6 +235,59 @@
                         style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:text="@string/mobile_aa_offline_section" />
+
+                    <TextView
+                        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/mobile_aa_offline_summary" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/mobile_aa_offline_library"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/mobile_aa_offline_library" />
+
+                    <com.google.android.material.switchmaterial.SwitchMaterial
+                        android:id="@+id/mobile_aa_offline_auto_fallback"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:text="@string/mobile_aa_offline_auto_fallback" />
+
+                    <TextView
+                        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/mobile_aa_offline_note" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/mobile_outline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:text="@string/mobile_aa_video_section" />
 
                     <TextView
@@ -264,7 +317,6 @@
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:alpha="0.65"
                 app:cardBackgroundColor="?attr/colorSurface"
                 app:cardCornerRadius="16dp"
                 app:cardElevation="0dp"
@@ -295,7 +347,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="@string/mobile_aa_coming_soon" />
+                        android:text="@string/mobile_aa_radio_ready" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
         </LinearLayout>

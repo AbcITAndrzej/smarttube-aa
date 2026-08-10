@@ -1,5 +1,7 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model;
 
+import com.liskovsoft.smartyoutubetv2.common.app.models.playback.ui.SeekBarSegment;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -19,6 +21,7 @@ public final class MobilePlaybackSnapshot {
     private final List<MobileTrack> videoTracks;
     private final List<MobileTrack> audioTracks;
     private final List<MobileTrack> subtitleTracks;
+    private final List<SeekBarSegment> seekBarSegments;
 
     public MobilePlaybackSnapshot(String mediaId, String title, String subtitle,
                                   boolean prepared, boolean playing, boolean buffering,
@@ -48,6 +51,19 @@ public final class MobilePlaybackSnapshot {
                                   List<MobileTrack> videoTracks,
                                   List<MobileTrack> audioTracks,
                                   List<MobileTrack> subtitleTracks) {
+        this(mediaId, title, subtitle, prepared, playing, buffering, ended,
+                positionMs, durationMs, bufferedPositionMs, speed, videoTracks, audioTracks,
+                subtitleTracks, Collections.<SeekBarSegment>emptyList());
+    }
+
+    public MobilePlaybackSnapshot(String mediaId, String title, String subtitle,
+                                  boolean prepared, boolean playing, boolean buffering,
+                                  boolean ended, long positionMs, long durationMs,
+                                  long bufferedPositionMs, float speed,
+                                  List<MobileTrack> videoTracks,
+                                  List<MobileTrack> audioTracks,
+                                  List<MobileTrack> subtitleTracks,
+                                  List<SeekBarSegment> seekBarSegments) {
         this.mediaId = mediaId;
         this.title = title == null ? "" : title;
         this.subtitle = subtitle == null ? "" : subtitle;
@@ -62,11 +78,26 @@ public final class MobilePlaybackSnapshot {
         this.videoTracks = immutable(videoTracks);
         this.audioTracks = immutable(audioTracks);
         this.subtitleTracks = immutable(subtitleTracks);
+        this.seekBarSegments = immutableSegments(seekBarSegments);
     }
 
     private static List<MobileTrack> immutable(List<MobileTrack> value) {
         return Collections.unmodifiableList(new ArrayList<>(
                 value == null ? Collections.<MobileTrack>emptyList() : value));
+    }
+
+    private static List<SeekBarSegment> immutableSegments(List<SeekBarSegment> value) {
+        if (value == null || value.isEmpty()) return Collections.emptyList();
+        List<SeekBarSegment> copy = new ArrayList<>(value.size());
+        for (SeekBarSegment source : value) {
+            if (source == null) continue;
+            SeekBarSegment item = new SeekBarSegment();
+            item.startProgress = source.startProgress;
+            item.endProgress = source.endProgress;
+            item.color = source.color;
+            copy.add(item);
+        }
+        return Collections.unmodifiableList(copy);
     }
 
     public String getMediaId() { return mediaId; }
@@ -83,4 +114,5 @@ public final class MobilePlaybackSnapshot {
     public List<MobileTrack> getVideoTracks() { return videoTracks; }
     public List<MobileTrack> getAudioTracks() { return audioTracks; }
     public List<MobileTrack> getSubtitleTracks() { return subtitleTracks; }
+    public List<SeekBarSegment> getSeekBarSegments() { return seekBarSegments; }
 }

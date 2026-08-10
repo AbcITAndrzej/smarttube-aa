@@ -20,11 +20,14 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.MobileSearc
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment.MobileSettingsFragment;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.legacy.SmartTubeMobileNativeProvider;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.performance.MobilePerformanceMonitor;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.AndroidAutoPreferences;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoGate;
 import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
 import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
 
 /** Preview host for the Leanback-free mobile UI. */
-public final class MobileNativeActivity extends AppCompatActivity implements MobileNavigatorOwner {
+public class MobileNativeActivity extends AppCompatActivity implements MobileNavigatorOwner {
     public static final String ACTION_OPEN_BACKGROUND_PLAYER =
             "app.smarttube.mobile.action.OPEN_BACKGROUND_PLAYER";
     public static final String EXTRA_MEDIA_ID = "mobile_media_id";
@@ -33,9 +36,20 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
     private MobileFragmentNavigator navigator;
     private BottomNavigationView bottomNavigation;
     private boolean syncingBottomNavigation;
+    private MobilePerformanceMonitor performanceMonitor;
 
     @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!isHostAllowed()) {
+            finish();
+            return;
+        }
+        // Package updates may restore a manifest-disabled component even though the opt-in
+        // preference survives. Reconcile both states on every normal app start.
+        ExperimentalCarVideoGate.setEnabled(this,
+                new AndroidAutoPreferences(this).isExperimentalParkedVideoEnabled());
+        performanceMonitor = MobilePerformanceMonitor.get(this);
+        performanceMonitor.onActivityCreated();
         if (!MobileNativeDependencies.isConfigured()) {
             MobileNativeDependencies.install(SmartTubeMobileNativeProvider.create(this));
         }
@@ -68,7 +82,7 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
             return false;
         });
         getSupportFragmentManager().addOnBackStackChangedListener(navigator::syncChromeWithCurrentFragment);
-        requestNotificationPermissionIfNeeded();
+        if (shouldRequestNotificationPermission()) requestNotificationPermissionIfNeeded();
         boolean openedFromNotification = openPlaybackIntent(getIntent());
         if (!openedFromNotification && savedInstanceState == null) {
             navigator.openBrowse("home");
@@ -79,7 +93,18 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
 
     @Override protected void onResume() {
         super.onResume();
+        if (performanceMonitor != null) performanceMonitor.onActivityResumed();
         ViewManager.instance(this).addTop(this);
+    }
+
+    @Override protected void onPause() {
+        if (performanceMonitor != null) performanceMonitor.onActivityPaused();
+        super.onPause();
+    }
+
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (performanceMonitor != null) performanceMonitor.onTrimMemory(level);
     }
 
     public void openClassicHome() {
@@ -103,6 +128,12 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
         intent.setAction(null); // Avoid reopening after Activity recreation.
         return true;
     }
+
+    /** Parked/embedded hosts can suppress a phone-only permission prompt. */
+    protected boolean shouldRequestNotificationPermission() { return true; }
+
+    /** Specialized hosts may reject creation before dependencies, UI or a player are created. */
+    protected boolean isHostAllowed() { return true; }
 
     private void requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < 33) return;

@@ -9,6 +9,8 @@ public final class RadioStation {
     private final String name;
     private final String streamUrl;
     private final String faviconUrl;
+    private final String country;
+    private final String countryCode;
     private final String codec;
     private final String tags;
     private final int bitrate;
@@ -16,12 +18,15 @@ public final class RadioStation {
     private final boolean favorite;
 
     public RadioStation(String id, String name, String streamUrl, String faviconUrl,
-                        String codec, String tags, int bitrate, int clickCount,
+                        String country, String countryCode, String codec, String tags,
+                        int bitrate, int clickCount,
                         boolean favorite) {
         this.id = clean(id);
         this.name = clean(name);
         this.streamUrl = clean(streamUrl);
         this.faviconUrl = clean(faviconUrl);
+        this.country = clean(country);
+        this.countryCode = clean(countryCode);
         this.codec = clean(codec);
         this.tags = clean(tags);
         this.bitrate = Math.max(0, bitrate);
@@ -33,6 +38,8 @@ public final class RadioStation {
     public String getName() { return name; }
     public String getStreamUrl() { return streamUrl; }
     public String getFaviconUrl() { return faviconUrl; }
+    public String getCountry() { return country; }
+    public String getCountryCode() { return countryCode; }
     public String getCodec() { return codec; }
     public String getTags() { return tags; }
     public int getBitrate() { return bitrate; }
@@ -40,8 +47,14 @@ public final class RadioStation {
     public boolean isFavorite() { return favorite; }
 
     public RadioStation withFavorite(boolean value) {
-        return new RadioStation(id, name, streamUrl, faviconUrl, codec, tags,
+        return new RadioStation(id, name, streamUrl, faviconUrl, country, countryCode, codec, tags,
                 bitrate, clickCount, value);
+    }
+
+    /** Same logical station metadata with a different stream candidate. */
+    public RadioStation withStreamUrl(String value) {
+        return new RadioStation(id, name, value, faviconUrl, country, countryCode, codec, tags,
+                bitrate, clickCount, favorite);
     }
 
     JSONObject toJson() throws JSONException {
@@ -50,6 +63,8 @@ public final class RadioStation {
                 .put("name", name)
                 .put("url_resolved", streamUrl)
                 .put("favicon", faviconUrl)
+                .put("country", country)
+                .put("countrycode", countryCode)
                 .put("codec", codec)
                 .put("tags", tags)
                 .put("bitrate", bitrate)
@@ -64,6 +79,7 @@ public final class RadioStation {
         if (stream.isEmpty()) stream = clean(value.optString("url"));
         if (id.isEmpty() || name.isEmpty() || !isSupportedStream(stream)) return null;
         return new RadioStation(id, name, stream, value.optString("favicon"),
+                value.optString("country"), value.optString("countrycode"),
                 value.optString("codec"), value.optString("tags"),
                 value.optInt("bitrate", 0), value.optInt("clickcount", 0), false);
     }

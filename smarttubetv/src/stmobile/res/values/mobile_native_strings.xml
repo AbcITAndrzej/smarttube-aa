@@ -32,11 +32,11 @@
     <string name="mobile_aa_disable_message">SmartTube will disappear from Android Auto after the next refresh. Phone playback and YouTube data will not be changed.</string>
     <string name="mobile_aa_disable_confirm">Disable</string>
     <string name="mobile_aa_video_section">Experimental car video</string>
-    <string name="mobile_aa_video_summary">Parked mode uses the normal phone video player. While driving, SmartTube remains audio-only by default. The optional passenger mode is experimental.</string>
-    <string name="mobile_aa_video_switch">Display video while driving (passenger)</string>
-    <string name="mobile_aa_video_platform_note">The option never bypasses Android Auto safety restrictions. The car display remains controlled by Android Auto; video may only be presented on an allowed phone surface.</string>
-    <string name="mobile_aa_video_confirm_title">Enable experimental passenger mode?</string>
-    <string name="mobile_aa_video_confirm_message">Use this only for a passenger. The driver must not watch or operate video while the vehicle is moving. Android Auto can still block the image.</string>
+    <string name="mobile_aa_video_summary">Optional parked-car surface built separately from the stable Android Auto audio service. Normal AA music and radio playback are not modified.</string>
+    <string name="mobile_aa_video_switch">Enable experimental parked video launcher</string>
+    <string name="mobile_aa_video_platform_note">No game/navigation spoofing is used. Android Auto decides whether CAR_LAUNCHER video is available on the connected platform. The activity is disabled by default.</string>
+    <string name="mobile_aa_video_confirm_title">Enable experimental parked video?</string>
+    <string name="mobile_aa_video_confirm_message">This exposes a separate CAR_LAUNCHER activity and reuses the normal mobile player when Android Auto allows parked apps. It does not change the stable AA media service and does not bypass driving restrictions.</string>
     <string name="mobile_aa_video_confirm_enable">Enable experimentally</string>
     <string name="mobile_aa_playlists_section">Android Auto playlist layout</string>
     <string name="mobile_aa_playlists_summary">Change the order or hide playlists only on the SmartTube Android Auto screen. Your YouTube account is never modified.</string>
@@ -49,8 +49,9 @@
     <string name="mobile_aa_playlist_down">Move down</string>
     <string name="mobile_aa_playlist_position">%1$d. %2$s</string>
     <string name="mobile_aa_radio_section">Radio</string>
-    <string name="mobile_aa_radio_summary">Reserved for a future integration with the Radio Browser directory. No network connection or radio playback is implemented yet.</string>
+    <string name="mobile_aa_radio_summary">Worldwide Radio Browser stations, shared favorites and radio-only rewind are available in the mobile app and Android Auto. Progressive streams use the rolling DVR buffer when enabled.</string>
     <string name="mobile_aa_coming_soon">Coming later</string>
+    <string name="mobile_aa_radio_ready">Ready • favorites + time-shift</string>
     <string name="mobile_native_shorts">Shorts</string>
     <string name="mobile_native_subscriptions">Subscriptions</string>
     <string name="mobile_native_notifications">Notifications</string>
@@ -84,9 +85,15 @@
     <string name="mobile_update_permission_open">Open settings</string>
     <string name="mobile_radio_settings_entry">Radio (experimental)</string>
     <string name="mobile_radio_title">Radio</string>
-    <string name="mobile_radio_summary">Experimental directory of working Polish stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
+    <string name="mobile_radio_summary">Experimental worldwide directory of working stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
     <string name="mobile_radio_sync">Synchronize stations</string>
     <string name="mobile_radio_syncing">Synchronizing Radio Browser…</string>
+    <string name="mobile_radio_search_hint">Search station, country, codec or tag</string>
+    <string name="mobile_radio_timeshift_enabled">Time-shift: allow rewinding live radio</string>
+    <string name="mobile_radio_timeshift_summary">Keeps a small rolling in-memory buffer for progressive radio streams. HLS stations fall back to normal live playback.</string>
+    <string name="mobile_radio_timeshift_duration">Radio rewind buffer</string>
+    <string name="mobile_radio_go_live">LIVE</string>
+    <string name="mobile_radio_behind_live">−%1$s • LIVE</string>
     <string name="mobile_radio_sort_label">Sort stations</string>
     <string name="mobile_radio_favorites_only">Show favorites only</string>
     <string name="mobile_radio_empty">No stations to display. Synchronize the directory or disable the favorites-only filter.</string>
@@ -103,6 +110,11 @@
         <item>Popularity</item>
         <item>Name</item>
         <item>Bitrate</item>
+    </string-array>
+    <string-array name="mobile_radio_timeshift_options">
+        <item>1 minute</item>
+        <item>3 minutes</item>
+        <item>5 minutes</item>
     </string-array>
     <string name="mobile_native_back">Back</string>
     <string name="mobile_native_retry">Retry</string>
@@ -141,4 +153,313 @@
     <string name="mobile_background_forward">Forward 10 seconds</string>
     <string name="mobile_background_stop">Stop playback</string>
     <string name="aa_app_name">SmartTube Music</string>
+
+    <!-- Mobile player personalization (phone/tablet only; Android Auto does not read these prefs). -->
+    <string name="mobile_player_settings_entry">Player</string>
+    <string name="mobile_player_settings_title">Player</string>
+    <string name="mobile_player_settings_summary">Customize only the new phone/tablet player. These options never change Android Auto playback.</string>
+    <string name="mobile_player_language_section">Preferred languages</string>
+    <string name="mobile_player_language_summary">A preferred language is only highlighted and scrolled into view when you open the audio or subtitle list. It is not forced automatically at playback start.</string>
+    <string name="mobile_player_default_audio">Default dubbing / audio</string>
+    <string name="mobile_player_default_subtitles">Default subtitles</string>
+    <string name="mobile_player_default_audio_value">Default dubbing / audio: %1$s</string>
+    <string name="mobile_player_default_subtitles_value">Default subtitles: %1$s</string>
+    <string name="mobile_player_language_system">System language</string>
+    <string name="mobile_player_language_none">No preference</string>
+    <string name="mobile_player_gestures_section">Gestures and behavior</string>
+    <string name="mobile_player_auto_hide">Automatically hide controls while playing</string>
+    <string name="mobile_player_pinch_zoom">Pinch to zoom video</string>
+    <string name="mobile_player_double_tap_seek">Enable double-tap seek</string>
+    <string name="mobile_player_swipe_seek">Horizontal swipe to seek ±10 seconds</string>
+    <string name="mobile_player_controls_section">Visible controls</string>
+    <string name="mobile_player_controls_summary">Play/pause, Back and the timeline remain available so the player cannot become unusable.</string>
+    <string name="mobile_player_show_previous_next">Previous / next buttons</string>
+    <string name="mobile_player_show_quick_options">Audio and subtitles quick options</string>
+    <string name="mobile_player_show_subtitles">Subtitles button</string>
+    <string name="mobile_player_show_audio">Dubbing / audio button</string>
+    <string name="mobile_player_show_quality">Quality button</string>
+    <string name="mobile_player_show_speed">Playback speed button</string>
+    <string name="mobile_player_show_fit">Video fit button</string>
+    <string name="mobile_player_show_pip">Picture-in-picture button</string>
+    <string name="mobile_player_show_fullscreen">Fullscreen button</string>
+    <string name="mobile_player_show_more">More-options button</string>
+    <string name="mobile_player_enhancements_section">Mobile integrations</string>
+    <string name="mobile_player_enhancements_summary">These switches only control how the new phone/tablet UI uses existing SponsorBlock/DeArrow settings. All are enabled by default and can be disabled independently. Android Auto is not affected.</string>
+    <string name="mobile_player_sponsorblock_markers">Colored SponsorBlock / chapter markers on timeline</string>
+    <string name="mobile_player_dearrow_native_lists">DeArrow titles and thumbnails on native mobile lists</string>
+    <string name="mobile_player_original_titles_native_lists">Original/unlocalized titles on native mobile lists</string>
+    <string name="mobile_player_fallback_thumbnails_native_lists">Fallback start/middle/end YouTube thumbnail frame on native lists</string>
+    <string name="mobile_player_reset">Reset player settings</string>
+    <string name="mobile_player_reset_title">Reset player settings?</string>
+    <string name="mobile_player_reset_message">All mobile-player switches, Instant Play options, mobile integrations and preferred-language choices will return to their defaults. Android Auto settings are not affected.</string>
+    <string name="mobile_player_reset_confirm">Reset</string>
+    <string name="mobile_track_picker_hint">★ Preferred language • ✓ Currently active</string>
+    <string name="mobile_track_badge_default">★ Default</string>
+    <string name="mobile_track_badge_selected">✓ Active</string>
+    <string name="mobile_track_badge_selected_default">✓ Active  ★ Default</string>
+    <string name="mobile_track_language_unknown">Automatic / unspecified</string>
+
+    <!-- Stage 1: local diagnostics + FeatureFlags. -->
+    <string name="mobile_diagnostics_entry">Diagnostics</string>
+    <string name="mobile_diagnostics_title">Diagnostics</string>
+    <string name="mobile_diagnostics_summary">This local report helps diagnose Instant Play/startup, 403 recovery, quality, SponsorBlock/DeArrow, Radio DVR and Android Auto. Nothing is uploaded automatically to an external server.</string>
+    <string name="mobile_diagnostics_flags_section">Feature flags and capture</string>
+    <string name="mobile_diagnostics_flags_summary">This is the common rollout base for later stages. New mechanisms can be guarded so they can be disabled without deleting or reverting their code.</string>
+    <string name="mobile_diagnostics_capture">Capture diagnostic data</string>
+    <string name="mobile_diagnostics_recent_events">Include recent app events in copied report</string>
+    <string name="mobile_diagnostics_refresh">Refresh report</string>
+    <string name="mobile_diagnostics_copy">Copy report</string>
+    <string name="mobile_diagnostics_copied">Diagnostic report copied to clipboard</string>
+    <string name="mobile_diagnostics_reset">Clear diagnostic counters and recent events</string>
+    <string name="mobile_diagnostics_reset_title">Clear diagnostics?</string>
+    <string name="mobile_diagnostics_reset_message">Only local error/retry counters and recent events are cleared. Player, Radio and Android Auto settings are not changed.</string>
+    <string name="mobile_diagnostics_reset_confirm">Clear</string>
+
+
+    <!-- Stage 2: mobile-only Instant Play startup/recovery. -->
+    <string name="mobile_player_instant_play_section">Instant Play</string>
+    <string name="mobile_player_instant_play_summary">Smart startup applies only to mobile VOD/Shorts. It lets SmartTube’s normal recovery run first, then adds a delayed safety fallback. Radio and Android Auto are not changed.</string>
+    <string name="mobile_player_instant_play">Enable smart video startup</string>
+    <string name="mobile_player_instant_403_recovery">Extra fallback after a transient 403</string>
+    <string name="mobile_player_startup_watchdog">Watchdog: retry startup when player is stuck before READY</string>
+    <string name="mobile_player_startup_timeout">The video did not start in the expected time. You can try again.</string>
+
+    <!-- Stage 3: continuation paging and full Radio Browser catalog. -->
+    <string name="mobile_paging_flags_section">Stage 3: infinite lists</string>
+    <string name="mobile_paging_flags_summary">These rollout switches are enabled by default. Disabling one stops new continuation pages for that surface without removing its code.</string>
+    <string name="mobile_paging_search">Infinite Search results</string>
+    <string name="mobile_paging_channel">Infinite Channel lists</string>
+    <string name="mobile_paging_radio">Full paged Radio catalog (remove 200-station cap)</string>
+    <string name="mobile_radio_loading_more">Loading the next Radio catalog page…</string>
+    <string name="mobile_radio_page_error">Could not load the next Radio page: %1$s</string>
+    <string name="mobile_radio_catalog_complete">catalog fully loaded</string>
+    <string name="mobile_radio_catalog_more_available">more pages available</string>
+    <string name="mobile_radio_catalog_legacy_limit">full-catalog paging disabled</string>
+    <string name="mobile_radio_status_paged">Showing %1$d / %2$d matching • %3$d stations cached • %4$d favorites • %5$s • %6$s</string>
+    <string name="mobile_radio_status_paged_no_date">Showing %1$d / %2$d matching • %3$d stations cached • %4$d favorites • %5$s</string>
+
+
+    <!-- Stage 4: Smart Player UX. -->
+    <string name="mobile_player_brightness_gesture">Left vertical swipe adjusts brightness (VOD only)</string>
+    <string name="mobile_player_volume_gesture">Right vertical swipe adjusts volume (VOD only)</string>
+    <string name="mobile_player_double_tap_interval">Double-tap seek: %1$d seconds</string>
+    <string name="mobile_player_double_tap_interval_title">Double-tap seek interval</string>
+    <string name="mobile_player_smart_ux_section">Smart Player UX</string>
+    <string name="mobile_player_smart_ux_summary">Optional mobile-only helpers. They never alter Android Auto. Features are enabled by default, but nothing is locked or timed automatically.</string>
+    <string name="mobile_player_screen_lock">Enable touch-lock button</string>
+    <string name="mobile_player_sleep_timer">Enable sleep timer</string>
+    <string name="mobile_player_remember_zoom">Remember pinch zoom separately for VOD and Shorts</string>
+    <string name="mobile_player_smart_fit">Automatically choose safe FIT/ZOOM from video aspect ratio</string>
+    <string name="mobile_player_lock">Lock controls</string>
+    <string name="mobile_player_unlock">Unlock controls</string>
+    <string name="mobile_player_locked_hint">Controls locked. Tap to show Unlock.</string>
+    <string name="mobile_player_gesture_brightness">Brightness %1$d%%</string>
+    <string name="mobile_player_gesture_volume">Volume %1$d%%</string>
+    <string name="mobile_player_sleep_timer_menu">Sleep timer</string>
+    <string name="mobile_player_sleep_timer_off">Off</string>
+    <string name="mobile_player_sleep_timer_15">15 minutes</string>
+    <string name="mobile_player_sleep_timer_30">30 minutes</string>
+    <string name="mobile_player_sleep_timer_45">45 minutes</string>
+    <string name="mobile_player_sleep_timer_60">60 minutes</string>
+    <string name="mobile_player_sleep_timer_end_video">End of current video</string>
+    <string name="mobile_player_sleep_timer_active">Sleep %1$d min</string>
+    <string name="mobile_player_sleep_timer_set">Sleep timer set for %1$d minutes</string>
+    <string name="mobile_player_sleep_timer_cancelled">Sleep timer disabled</string>
+    <string name="mobile_player_sleep_timer_finished">Sleep timer finished. Playback paused.</string>
+    <string name="mobile_player_smart_fit_applied">Smart fit: %1$s</string>
+    <string name="mobile_smart_player_flags_section">Stage 4: Smart Player UX</string>
+    <string name="mobile_smart_player_flags_summary">Emergency rollout gate for Stage 4. User choices remain stored; disabling this switch temporarily bypasses the new Smart Player UX code.</string>
+    <string name="mobile_smart_player_master">Enable Stage 4 Smart Player UX</string>
+
+    <string name="mobile_player_sleep_timer_unavailable">The current video duration is not available yet.</string>
+    <string name="mobile_player_sleep_timer_active_end_video">Sleep: end of video</string>
+    <string name="mobile_player_sleep_timer_set_end_video">Sleep timer will pause at the end of the current video</string>
+
+    <!-- Stage 05: Radio 2.0 -->
+    <string name="mobile_radio_collection_label">Radio collection</string>
+    <string name="mobile_radio_country_filter">Country filter</string>
+    <string name="mobile_radio_genre_filter">Genre filter</string>
+    <string name="mobile_radio_all_countries">All countries</string>
+    <string name="mobile_radio_all_genres">All genres</string>
+    <string name="mobile_radio_advanced_options">Radio 2.0 options</string>
+    <string name="mobile_radio_advanced_options_hide">Hide Radio 2.0 options</string>
+    <string name="mobile_radio_server_search_enabled">Search the full Radio Browser catalog online</string>
+    <string name="mobile_radio_recent_enabled">Keep recently played stations on this device</string>
+    <string name="mobile_radio_failover_enabled">Automatically try an alternative station stream after a failure</string>
+    <string name="mobile_radio_categories_enabled">Country and genre filters</string>
+    <string name="mobile_radio_aa_directory_enabled">Radio 2.0 folders and search in Android Auto</string>
+    <string name="mobile_radio_live_offset_enabled">Show LIVE / LIVE −time while rewound</string>
+    <string name="mobile_radio_searching_server">Searching the full Radio Browser catalog…</string>
+    <string name="mobile_radio_server_search_error">Online radio search failed: %1$s</string>
+    <string name="mobile_radio_live_label">LIVE</string>
+    <string name="mobile_radio_live_offset_label">LIVE −%1$s</string>
+    <string name="mobile_radio_status_radio2">Showing %1$d / %2$d matching • %3$d cached • %4$d favorites • %5$d recent • %6$s • %7$s</string>
+    <string name="mobile_radio_status_radio2_no_date">Showing %1$d / %2$d matching • %3$d cached • %4$d favorites • %5$d recent • %6$s</string>
+    <string name="mobile_radio2_flags_section">Stage 5: Radio 2.0</string>
+    <string name="mobile_radio2_flags_summary">Emergency gates for the new Radio directory, server search, stream failover and Android Auto folders. User-facing Radio switches are separate.</string>
+    <string name="mobile_radio2_master">Radio 2.0 master</string>
+    <string name="mobile_radio2_remote_search">Radio 2.0 online search</string>
+    <string name="mobile_radio2_failover">Radio 2.0 stream failover</string>
+    <string name="mobile_radio2_android_auto">Radio 2.0 Android Auto directory</string>
+    <string-array name="mobile_radio_collection_options">
+        <item>All stations</item>
+        <item>Favorites</item>
+        <item>Recently played</item>
+    </string-array>
+
+    <!-- Stage 06: offline audio foundation. -->
+    <string name="mobile_offline_entry">Offline</string>
+    <string name="mobile_offline_title">Offline</string>
+    <string name="mobile_offline_foundation_section">Offline audio foundation</string>
+    <string name="mobile_offline_foundation_summary">Stage 6 provides the private audio store, local metadata database and storage policy. Stage 7 passive listen-and-save and Stage 8 explicit playlist downloads both use this same store.</string>
+    <string name="mobile_offline_foundation_enabled">Enable offline foundation</string>
+    <string name="mobile_offline_auto_cleanup">Automatically remove expired/failed and oldest items when space is needed</string>
+    <string name="mobile_offline_storage_limit_title">Maximum offline storage</string>
+    <string name="mobile_offline_storage_limit_button">Storage limit: %1$d GB</string>
+    <string name="mobile_offline_free_reserve_title">Minimum free device space</string>
+    <string name="mobile_offline_free_reserve_button">Keep at least %1$s free</string>
+    <string name="mobile_offline_storage_section">Local storage status</string>
+    <string name="mobile_offline_cleanup_now">Run storage cleanup now</string>
+    <string name="mobile_offline_clear_all">Clear all offline data</string>
+    <string name="mobile_offline_clear_title">Clear offline storage?</string>
+    <string name="mobile_offline_clear_message">This removes offline metadata, partial downloads and completed offline audio managed by the new subsystem. It does not change playlists, Radio or normal SmartTube playback.</string>
+    <string name="mobile_offline_clear_confirm">Clear</string>
+    <string name="mobile_offline_cleared">Offline storage cleared</string>
+    <string name="mobile_offline_working">Updating offline storage…</string>
+    <string name="mobile_offline_cleanup_result">Cleanup removed %1$d items (%2$s)</string>
+    <string name="mobile_offline_gb_value">%1$d GB</string>
+    <string name="mobile_offline_mb_value">%1$d MB</string>
+    <string name="mobile_offline_state_on">ON</string>
+    <string name="mobile_offline_state_off">OFF</string>
+    <string name="mobile_offline_status_format">Foundation: %1$s
+Records: %2$d • available %3$d • downloading %4$d • failed %5$d • expired %6$d
+Tracked audio: %7$s / %8$s
+Device free: %9$s</string>
+    <string name="mobile_offline_flags_section">Stage 6: Offline foundation</string>
+    <string name="mobile_offline_flags_summary">Emergency rollout gate for the local database, private audio store and storage manager. This does not enable automatic downloading.</string>
+    <string name="mobile_offline_master_flag">Offline foundation — master gate</string>
+
+
+    <!-- Stage 7: passive listen-and-save -->
+    <string name="mobile_offline_listen_section">Listen and save</string>
+    <string name="mobile_offline_listen_summary">After you actually listen for the selected time, SmartTube can save a finite audio-only copy in the background. Radio, live streams, Shorts, Android Auto headless playback and already-offline items are excluded. Signed stream URLs are never stored.</string>
+    <string name="mobile_offline_listen_enabled">Automatically save listened audio</string>
+    <string name="mobile_offline_listen_wifi_only">Save listened audio only on Wi-Fi / Ethernet</string>
+    <string name="mobile_offline_listen_complete_after_switch">Finish a started save after switching to another track</string>
+    <string name="mobile_offline_listen_threshold_title">Listening time before saving</string>
+    <string name="mobile_offline_listen_threshold_button">Start saving after %1$d s of listening</string>
+    <string name="mobile_offline_listen_seconds">%1$d seconds</string>
+    <string name="mobile_offline_listen_recent_limit_title">Recent auto-saved limit</string>
+    <string name="mobile_offline_listen_recent_limit_button">Keep last %1$d auto-saved tracks</string>
+    <string name="mobile_offline_listen_recent_count">Last %1$d tracks</string>
+    <string name="mobile_offline_manage_listen_saved">Recently auto-saved</string>
+    <string name="mobile_offline_listen_summary_status">Listen-and-save: %1$d ready • %2$d queued • %3$d downloading • %4$d failed</string>
+    <string name="mobile_offline_listen_saved_title">Recently auto-saved</string>
+    <string name="mobile_offline_listen_saved_empty">Nothing has been auto-saved yet. Enable Listen and save, then listen to a normal finite video long enough to reach the configured threshold.</string>
+    <string name="mobile_offline_listen_saved_play">Play offline</string>
+    <string name="mobile_offline_listen_no_playable">This local audio file is no longer available</string>
+    <string name="mobile_offline_listen_delete_title">Remove auto-saved audio?</string>
+    <string name="mobile_offline_listen_delete_message">Removes passive listen-and-save ownership and deletes the local audio only when no offline playlist still uses it.</string>
+    <string name="mobile_offline_listen_deleted">Removed %1$s of auto-saved audio</string>
+    <string name="mobile_offline_listen_state_pending">Queued</string>
+    <string name="mobile_offline_listen_state_downloading">Saving</string>
+    <string name="mobile_offline_listen_state_available">Available offline</string>
+    <string name="mobile_offline_listen_state_failed">Save failed</string>
+    <string name="mobile_offline_listen_service_title">Saving listened audio</string>
+    <string name="mobile_offline_listen_preparing">Preparing audio-only offline copy…</string>
+    <string name="mobile_offline_listen_notification_channel">Listen-and-save</string>
+    <string name="mobile_offline_listen_notification_channel_summary">Progress of optional passive audio-only offline saves</string>
+    <string name="mobile_offline_listen_flag">Stage 7 listen-and-save — master gate</string>
+
+
+    <!-- Stage 8: explicit offline playlists -->
+    <string name="mobile_offline_playlists_section">Offline playlists</string>
+    <string name="mobile_offline_playlists_summary">Explicit audio-only downloads for whole playlists. Nothing starts automatically: open a playlist and tap the download icon. Transfers use the private Stage 6 store.</string>
+    <string name="mobile_offline_playlist_downloads_enabled">Enable offline playlist downloads</string>
+    <string name="mobile_offline_playlist_wifi_only">Download playlists only on Wi-Fi / Ethernet</string>
+    <string name="mobile_offline_manage_playlists">Manage offline playlists</string>
+    <string name="mobile_offline_playlist_summary_status">Offline playlists: %1$d • active: %2$d</string>
+    <string name="mobile_offline_playlists_title">Offline playlists</string>
+    <string name="mobile_offline_playlists_empty">No offline playlists yet. Open a YouTube playlist and tap the download icon.</string>
+    <string name="mobile_offline_playlist_download_action">Download playlist offline</string>
+    <string name="mobile_offline_playlist_queued">Playlist queued for offline audio</string>
+    <string name="mobile_offline_playlist_unavailable">This playlist cannot be queued for offline audio</string>
+    <string name="mobile_offline_playlist_feature_disabled">Offline playlist downloads are disabled in Offline settings</string>
+    <string name="mobile_offline_playlist_pause">Pause</string>
+    <string name="mobile_offline_playlist_resume">Resume / retry</string>
+    <string name="mobile_offline_playlist_delete">Delete</string>
+    <string name="mobile_offline_playlist_delete_title">Delete offline playlist?</string>
+    <string name="mobile_offline_playlist_delete_message">Removes this playlist and audio used only by it. Audio shared with another offline playlist is kept.</string>
+    <string name="mobile_offline_playlist_deleted">Removed %1$s of offline audio</string>
+    <string name="mobile_offline_playlist_state_queued">Queued</string>
+    <string name="mobile_offline_playlist_state_downloading">Downloading</string>
+    <string name="mobile_offline_playlist_state_paused">Paused</string>
+    <string name="mobile_offline_playlist_state_available">Available offline</string>
+    <string name="mobile_offline_playlist_state_partial">Partially available</string>
+    <string name="mobile_offline_playlist_state_failed">Failed</string>
+    <string name="mobile_offline_playlist_status_format">%1$s • %2$d/%3$d ready • %4$d failed • %5$s</string>
+    <string name="mobile_offline_playlist_service_title">Offline playlist download</string>
+    <string name="mobile_offline_playlist_preparing">Preparing audio queue…</string>
+    <string name="mobile_offline_playlist_downloading">Downloading offline playlist</string>
+    <string name="mobile_offline_playlist_item_progress">Track %1$d/%2$d • %3$s</string>
+    <string name="mobile_offline_playlist_waiting_wifi">Waiting for Wi-Fi / Ethernet</string>
+    <string name="mobile_offline_playlist_waiting_network">Waiting for network</string>
+    <string name="mobile_offline_playlist_notification_channel">Offline downloads</string>
+    <string name="mobile_offline_playlist_notification_channel_summary">Progress and controls for explicit offline playlist downloads</string>
+    <string name="mobile_offline_playlists_flag">Stage 8 offline playlists — master gate</string>
+
+    <string name="mobile_offline_playlist_play">Play offline</string>
+    <string name="mobile_offline_playlist_no_playable">No completed offline tracks are available yet</string>
+    <!-- Stage 09: offline playback in Android Auto -->
+    <string name="mobile_aa_offline_section">Offline in Android Auto</string>
+    <string name="mobile_aa_offline_summary">Expose completed local audio to the stable Android Auto media service. This does not start downloads and does not change the experimental video component.</string>
+    <string name="mobile_aa_offline_library">Show Offline library in Android Auto</string>
+    <string name="mobile_aa_offline_auto_fallback">Automatically use a local copy when connectivity is lost</string>
+    <string name="mobile_aa_offline_note">Android Auto can browse Recent, Offline playlists and Offline favorites. Automatic fallback is used only when a complete local audio file already exists.</string>
+    <string name="mobile_offline_android_auto_flag">Stage 9 Android Auto offline — master gate</string>
+
+    <!-- Stage 10: smart trip reserve -->
+    <string name="mobile_offline_trip_section">Smart trip reserve</string>
+    <string name="mobile_offline_trip_summary">Keeps a small audio-only reserve ready for weak or missing coverage: recent tracks, a limited set of liked music and your most recently used playlists. It reuses the Stage 8 downloader and Stage 6 storage limits.</string>
+    <string name="mobile_offline_trip_enabled">Enable smart trip reserve</string>
+    <string name="mobile_offline_trip_wifi_only">Prepare trip reserve only on Wi-Fi / Ethernet</string>
+    <string name="mobile_offline_trip_favorites_enabled">Keep liked music in the reserve</string>
+    <string name="mobile_offline_trip_recent_count_title">Recent tracks in trip reserve</string>
+    <string name="mobile_offline_trip_recent_count_button">Keep last %1$d played tracks</string>
+    <string name="mobile_offline_trip_favorite_count_title">Liked tracks in trip reserve</string>
+    <string name="mobile_offline_trip_favorite_count_button">Keep up to %1$d liked tracks</string>
+    <string name="mobile_offline_trip_playlist_count_title">Recent playlists in trip reserve</string>
+    <string name="mobile_offline_trip_playlist_count_button">Keep last %1$d playlists</string>
+    <string name="mobile_offline_trip_playlist_track_limit_title">Maximum tracks per reserved playlist</string>
+    <string name="mobile_offline_trip_playlist_track_limit_button">Up to %1$d tracks per playlist</string>
+    <string name="mobile_offline_trip_prepare_now">Prepare reserve now</string>
+    <string name="mobile_offline_trip_enable_first">Enable Smart trip reserve first</string>
+    <string name="mobile_offline_trip_prepare_started">Trip reserve refresh started</string>
+    <string name="mobile_offline_trip_status">Trip reserve: %1$s • history %2$d tracks / %3$d playlists • reserve queues %4$d</string>
+    <string name="mobile_offline_trip_recent_title">Trip reserve • Recent</string>
+    <string name="mobile_offline_trip_favorites_title">Trip reserve • Liked music</string>
+    <string name="mobile_offline_trip_playlist_title">Trip reserve • %1$s</string>
+    <string name="mobile_offline_trip_playlist_fallback">Recent playlist</string>
+    <string name="mobile_offline_trip_service_title">Preparing trip reserve</string>
+    <string name="mobile_offline_trip_preparing">Planning offline audio for your next trip…</string>
+    <string name="mobile_offline_trip_notification_channel">Trip reserve</string>
+    <string name="mobile_offline_trip_notification_channel_summary">Background planning of optional audio-only trip reserve</string>
+    <string name="mobile_offline_trip_flag">Stage 10 smart trip reserve — master gate</string>
+
+    <string name="mobile_offline_trip_managed_label">Managed by Smart trip reserve</string>
+
+    <!-- Stage 11: gradual Media3 migration -->
+    <string name="mobile_media3_flags_section">Stage 11 • Media3 migration</string>
+    <string name="mobile_media3_flags_summary">Reversible first migration wave. Radio and Offline audio may use AndroidX Media3; YouTube VOD/Shorts and the stable Android Auto media session remain on the existing path. A failed Media3 source can fall back to legacy ExoPlayer 2.</string>
+    <string name="mobile_media3_master_flag">Enable Media3 playback-engine foundation</string>
+    <string name="mobile_media3_radio_flag">Use Media3 for Radio audio</string>
+    <string name="mobile_media3_offline_flag">Use Media3 for Offline audio</string>
+    <string name="mobile_media3_fallback_flag">Fall back to legacy ExoPlayer 2 on Media3 failure</string>
+
+    <!-- Stage 12: local performance measurement and benchmark tooling -->
+    <string name="mobile_performance_flags_section">Stage 12 • Performance</string>
+    <string name="mobile_performance_flags_summary">Local-only timing, memory and lightweight frame-gap sampling. No performance data is uploaded. Disable frame sampling independently if you want zero continuous measurement overhead.</string>
+    <string name="mobile_performance_monitor_flag">Enable local performance monitor</string>
+    <string name="mobile_performance_frames_flag">Sample UI frame gaps while the mobile app is visible</string>
+
 </resources>

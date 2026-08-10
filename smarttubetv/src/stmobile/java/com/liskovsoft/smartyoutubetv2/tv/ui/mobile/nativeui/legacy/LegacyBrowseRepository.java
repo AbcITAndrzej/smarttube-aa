@@ -11,6 +11,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileMediaIte
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileSection;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import io.reactivex.Observable;
+import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 import java.util.ArrayList;
@@ -19,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LegacyBrowseRepository implements MobileBrowseRepository {
     private static final long BROWSE_CACHE_TTL_MS = 10 * 60 * 1000L;
@@ -28,19 +30,24 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     private final LegacyMediaIndex index;
     private final LegacyMediaMapper mapper;
     private final LegacyErrorMapper errors;
+    private final MobileMetadataEnhancer metadataEnhancer;
     private final ConcurrentHashMap<String, MobileBrowsePayload> browseCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> browseCacheTimes =
             new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> browseCacheEnhancementSignatures =
+            new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> browsePrefetches =
             new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, BrowseContinuation> browseContinuations =
+    private final ConcurrentHashMap<String, LegacyGroupPaginator> browseContinuations =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Integer> emptyReloadCounts =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, MobileBrowsePayload> playlistCache =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> playlistCacheTimes =
+            new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> playlistCacheEnhancementSignatures =
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> playlistBackgroundLoads =
             new ConcurrentHashMap<>();
@@ -49,11 +56,19 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     public LegacyBrowseRepository(ContentService content, NotificationsService notifications,
                                   LegacyMediaIndex index, LegacyMediaMapper mapper,
                                   LegacyErrorMapper errors) {
+        this(content, notifications, index, mapper, errors, null);
+    }
+
+    public LegacyBrowseRepository(ContentService content, NotificationsService notifications,
+                                  LegacyMediaIndex index, LegacyMediaMapper mapper,
+                                  LegacyErrorMapper errors,
+                                  MobileMetadataEnhancer metadataEnhancer) {
         this.content = content;
         this.notifications = notifications;
         this.index = index;
         this.mapper = mapper;
         this.errors = errors;
+        this.metadataEnhancer = metadataEnhancer;
     }
 
     @Override public MobileRequest loadBrowse(String pageId, MobileResultCallback<MobileBrowsePayload> callback) {
@@ -67,34 +82,33 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         }
         MobileDiagnostics.debug("DataBrowse", "load page=" + page.id() + " source=" + page.source());
         try {
+            CompositeDisposable request = new CompositeDisposable();
             if (page.source() == LegacyBrowsePage.Source.ROWS) {
                 List<MediaGroup> accumulated = new ArrayList<>();
                 Disposable d = rows(page).subscribe(
                         groups -> {
                             if (groups != null) accumulated.addAll(groups);
-                            BrowseContinuation continuation = new BrowseContinuation(accumulated);
+                            LegacyGroupPaginator continuation = new LegacyGroupPaginator(accumulated);
                             browseContinuations.put(page.id(), continuation);
-                            MobileBrowsePayload payload = mapBrowsePayload(page, accumulated,
-                                    continuation.hasMore());
-                            cacheBrowse(page, payload);
-                            callback.onSuccess(payload);
+                            publishBrowse(page, accumulated, continuation.hasMore(), callback, request);
                         },
                         e -> { MobileDiagnostics.error("DataBrowse", "rows failed: " + page.id(), e); callback.onError(errors.map(e)); });
-                return new RxMobileRequest(d);
+                request.add(d);
+                return new RxMobileRequest(request);
             }
             List<MediaGroup> accumulated = new ArrayList<>();
             Disposable d = grid(page).subscribe(
                     group -> {
                         if (group != null) accumulated.add(group);
-                        BrowseContinuation continuation = new BrowseContinuation(accumulated);
+                        LegacyGroupPaginator continuation = new LegacyGroupPaginator(accumulated);
                         browseContinuations.put(page.id(), continuation);
-                        MobileBrowsePayload payload = mapBrowsePayload(page, accumulated,
-                                continuation.hasMore() || page == LegacyBrowsePage.SHORTS);
-                        cacheBrowse(page, payload);
-                        callback.onSuccess(payload);
+                        publishBrowse(page, accumulated,
+                                continuation.hasMore() || page == LegacyBrowsePage.SHORTS,
+                                callback, request);
                     },
                     e -> { MobileDiagnostics.error("DataBrowse", "grid failed: " + page.id(), e); callback.onError(errors.map(e)); });
-            return new RxMobileRequest(d);
+            request.add(d);
+            return new RxMobileRequest(request);
         } catch (Throwable error) {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
@@ -105,19 +119,21 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
         browseCache.remove(page.id());
         browseCacheTimes.remove(page.id());
+        browseCacheEnhancementSignatures.remove(page.id());
         browseContinuations.remove(page.id());
+        emptyReloadCounts.remove(page.id());
     }
 
     @Override public MobileRequest loadMoreBrowse(
             String pageId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback == null) return MobileRequest.NONE;
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
-        BrowseContinuation continuation = browseContinuations.get(page.id());
+        LegacyGroupPaginator continuation = browseContinuations.get(page.id());
         MobileBrowsePayload current = browseCache.get(page.id());
         if (continuation == null || current == null) {
             return loadBrowse(page.id(), callback);
         }
-        int groupIndex = continuation.nextGroupIndex();
+        int groupIndex = continuation.nextSlotIndex();
         if (groupIndex < 0) {
             if (page == LegacyBrowsePage.SHORTS) {
                 return reloadShorts(page, current, callback);
@@ -125,13 +141,18 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             callback.onSuccess(withHasMore(current, false));
             return MobileRequest.NONE;
         }
-        MediaGroup source = continuation.groupAt(groupIndex);
+        MediaGroup source = continuation.sourceAt(groupIndex);
+        int beforeCount = countItems(current);
+        long startedNanos = System.nanoTime();
         MobileDiagnostics.debug("DataBrowse", "continue page=" + page.id()
-                + " group=" + groupIndex);
+                + " group=" + groupIndex + " items=" + beforeCount);
         try {
+            AtomicBoolean emitted = new AtomicBoolean(false);
+            CompositeDisposable request = new CompositeDisposable();
             Disposable disposable = content.continueGroupObserve(source)
                     .subscribeOn(Schedulers.io())
                     .subscribe(nextPage -> {
+                        emitted.set(true);
                         if (nextPage == null) {
                             continuation.markFinished(groupIndex);
                             MobileBrowsePayload done = withHasMore(current,
@@ -140,18 +161,47 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                             callback.onSuccess(done);
                             return;
                         }
-                        continuation.replace(groupIndex, nextPage);
-                        MobileBrowsePayload combined = appendContinuation(
-                                page, current, nextPage, groupIndex,
-                                continuation.hasMore());
-                        cacheBrowse(page, combined);
-                        callback.onSuccess(combined);
+                        continuation.append(groupIndex, nextPage);
+                        MobileBrowsePayload combined = appendContinuation(page, current, nextPage,
+                                groupIndex, continuation.hasMore());
+                        MobileDiagnostics.info("DataBrowse", "continue ready page=" + page.id()
+                                + " items=" + beforeCount + "->" + countItems(combined)
+                                + " elapsedMs=" + ((System.nanoTime() - startedNanos) / 1_000_000L));
+                        publishContinuation(page, current, nextPage, groupIndex,
+                                continuation.hasMore(), callback, request);
                     }, error -> {
                         MobileDiagnostics.error("DataBrowse",
                                 "continue failed page=" + page.id(), error);
+                        if (page == LegacyBrowsePage.SHORTS) {
+                            // Short continuations are more volatile than ordinary browse
+                            // pages. A duplicate/expired token is reported by the media
+                            // service as an error (often "fromNullable result is null").
+                            // Re-fetch the Shorts root and merge only new IDs instead of
+                            // terminating infinite scrolling on the first dead token.
+                            continuation.markFinished(groupIndex);
+                            reloadShorts(page, current, callback);
+                            return;
+                        }
                         callback.onError(errors.map(error));
+                    }, () -> {
+                        // Defensive path for ContentService implementations that complete
+                        // without emitting a continuation. Recover Shorts by refreshing the
+                        // root feed; ordinary pages simply mark the group as finished.
+                        if (emitted.get()) return;
+                        continuation.markFinished(groupIndex);
+                        if (page == LegacyBrowsePage.SHORTS) {
+                            MobileDiagnostics.debug("DataBrowse",
+                                    "shorts continuation empty; reload feed");
+                            reloadShorts(page, current, callback);
+                        } else {
+                            MobileBrowsePayload done = withHasMore(current,
+                                    continuation.hasMore());
+                            cacheBrowse(page, done);
+                            callback.onSuccess(done);
+                        }
                     });
-            return new RxMobileRequest(disposable);
+            request.add(disposable);
+            return new RxMobileRequest(request);
         } catch (Throwable error) {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
@@ -164,24 +214,23 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         if (browsePrefetches.putIfAbsent(page.id(), Boolean.TRUE) != null) return;
         MobileDiagnostics.debug("DataBrowse", "prefetch page=" + page.id());
         try {
-            Observable<MobileBrowsePayload> source = page.source() == LegacyBrowsePage.Source.ROWS
-                    ? rows(page).map(groups -> {
-                        BrowseContinuation continuation = new BrowseContinuation(groups);
-                        browseContinuations.put(page.id(), continuation);
-                        return mapBrowsePayload(page, groups, continuation.hasMore());
-                    })
-                    : grid(page).map(group -> {
-                        List<MediaGroup> groups = Collections.singletonList(group);
-                        BrowseContinuation continuation = new BrowseContinuation(groups);
-                        browseContinuations.put(page.id(), continuation);
-                        return mapBrowsePayload(page, groups, continuation.hasMore());
-                    });
+            Observable<List<MediaGroup>> source = page.source() == LegacyBrowsePage.Source.ROWS
+                    ? rows(page)
+                    : grid(page).map(group -> Collections.singletonList(group));
             source.subscribeOn(Schedulers.io()).take(1).subscribe(
-                    payload -> {
-                        cacheBrowse(page, payload);
+                    groups -> {
+                        LegacyGroupPaginator continuation = new LegacyGroupPaginator(groups);
+                        browseContinuations.put(page.id(), continuation);
+                        boolean hasMore = continuation.hasMore();
+                        cacheBrowse(page, mapBrowsePayload(page, groups, hasMore));
                         browsePrefetches.remove(page.id());
                         MobileDiagnostics.debug("DataBrowse",
                                 "prefetch ready page=" + page.id());
+                        if (metadataEnhancer != null && groups != null && !groups.isEmpty()) {
+                            List<MediaGroup> snapshot = new ArrayList<>(groups);
+                            metadataEnhancer.enhance(snapshot, () ->
+                                    cacheBrowse(page, mapBrowsePayload(page, snapshot, hasMore)));
+                        }
                     },
                     error -> {
                         browsePrefetches.remove(page.id());
@@ -201,7 +250,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         if (callback == null) return MobileRequest.NONE;
         MobileBrowsePayload cached = playlistCache.get(itemId);
         Long cachedAt = playlistCacheTimes.get(itemId);
+        String enhancementSignature = metadataEnhancer == null
+                ? "" : metadataEnhancer.preferenceSignature();
+        String cachedSignature = playlistCacheEnhancementSignatures.get(itemId);
         if (cached != null && cachedAt != null
+                && enhancementSignature.equals(cachedSignature)
                 && System.currentTimeMillis() - cachedAt < PLAYLIST_CACHE_TTL_MS) {
             MobileDiagnostics.info("DataBrowse", "playlist cache hit id=" + itemId);
             callback.onSuccess(cached);
@@ -230,6 +283,7 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         }
         final Video resolvedItem = item;
         try {
+            CompositeDisposable request = new CompositeDisposable();
             Disposable d = Observable.fromCallable(() -> content.getGroup(
                             resolvedItem.mediaItem != null
                                     ? resolvedItem.mediaItem : resolvedItem.toMediaItem()))
@@ -247,12 +301,29 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                                 itemId, resolvedItem, group);
                         playlistCache.put(itemId, firstPage);
                         playlistCacheTimes.put(itemId, System.currentTimeMillis());
+                        playlistCacheEnhancementSignatures.put(itemId, enhancementSignature);
                         callback.onSuccess(firstPage);
+
+                        if (metadataEnhancer != null) {
+                            // Keep metadata warming alive even if the UI leaves after the fast
+                            // first-page callback. The cache is still refreshed, while a disposed
+                            // request never receives a late UI callback.
+                            metadataEnhancer.enhance(Collections.singletonList(group), () -> {
+                                MobileBrowsePayload enhanced = mapPlaylistPage(
+                                        itemId, resolvedItem, group);
+                                playlistCache.put(itemId, enhanced);
+                                playlistCacheTimes.put(itemId, System.currentTimeMillis());
+                                playlistCacheEnhancementSignatures.put(
+                                        itemId, enhancementSignature);
+                                if (!request.isDisposed()) callback.onSuccess(enhanced);
+                            });
+                        }
                         loadPlaylistRemainderInBackground(itemId, resolvedItem, group);
                     },
                     e -> { MobileDiagnostics.error("DataBrowse", "item failed: " + itemId, e);
                         callback.onError(errors.map(e)); });
-            return new RxMobileRequest(d);
+            request.add(d);
+            return new RxMobileRequest(request);
         } catch (Throwable error) {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
@@ -265,9 +336,14 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     private MobileBrowsePayload getCachedBrowse(LegacyBrowsePage page) {
         Long cachedAt = browseCacheTimes.get(page.id());
-        if (cachedAt == null || System.currentTimeMillis() - cachedAt >= BROWSE_CACHE_TTL_MS) {
+        String expectedSignature = metadataEnhancer == null
+                ? "" : metadataEnhancer.preferenceSignature();
+        String cachedSignature = browseCacheEnhancementSignatures.get(page.id());
+        if (cachedAt == null || !expectedSignature.equals(cachedSignature)
+                || System.currentTimeMillis() - cachedAt >= BROWSE_CACHE_TTL_MS) {
             browseCache.remove(page.id());
             browseCacheTimes.remove(page.id());
+            browseCacheEnhancementSignatures.remove(page.id());
             return null;
         }
         return browseCache.get(page.id());
@@ -277,6 +353,46 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         if (payload == null) return;
         browseCache.put(page.id(), payload);
         browseCacheTimes.put(page.id(), System.currentTimeMillis());
+        browseCacheEnhancementSignatures.put(page.id(), metadataEnhancer == null
+                ? "" : metadataEnhancer.preferenceSignature());
+    }
+
+    /** Render the YouTube payload first, then publish one optional metadata-enhanced refresh. */
+    private void publishBrowse(LegacyBrowsePage page, List<MediaGroup> groups, boolean hasMore,
+                               MobileResultCallback<MobileBrowsePayload> callback,
+                               CompositeDisposable request) {
+        List<MediaGroup> snapshot = groups == null
+                ? Collections.emptyList() : new ArrayList<>(groups);
+        MobileBrowsePayload payload = mapBrowsePayload(page, snapshot, hasMore);
+        cacheBrowse(page, payload);
+        callback.onSuccess(payload);
+
+        if (metadataEnhancer == null || snapshot.isEmpty() || request == null) return;
+        // Enhancement is a cache-warming background task rather than part of the screen request.
+        // Cancelling navigation therefore cannot leave a permanently unenhanced cache entry.
+        metadataEnhancer.enhance(snapshot, () -> {
+            MobileBrowsePayload enhanced = mapBrowsePayload(page, snapshot, hasMore);
+            cacheBrowse(page, enhanced);
+            if (!request.isDisposed()) callback.onSuccess(enhanced);
+        });
+    }
+
+    private void publishContinuation(LegacyBrowsePage page, MobileBrowsePayload current,
+                                     MediaGroup nextPage, int groupIndex, boolean hasMore,
+                                     MobileResultCallback<MobileBrowsePayload> callback,
+                                     CompositeDisposable request) {
+        MobileBrowsePayload combined = appendContinuation(
+                page, current, nextPage, groupIndex, hasMore);
+        cacheBrowse(page, combined);
+        callback.onSuccess(combined);
+
+        if (metadataEnhancer == null || nextPage == null || request == null) return;
+        metadataEnhancer.enhance(Collections.singletonList(nextPage), () -> {
+            MobileBrowsePayload enhanced = appendContinuation(
+                    page, current, nextPage, groupIndex, hasMore);
+            cacheBrowse(page, enhanced);
+            if (!request.isDisposed()) callback.onSuccess(enhanced);
+        });
     }
 
     private MobileBrowsePayload mapBrowsePayload(
@@ -307,28 +423,44 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                                        MobileResultCallback<MobileBrowsePayload> callback) {
         MobileDiagnostics.debug("DataBrowse", "reload shorts without continuation token");
         try {
+            CompositeDisposable request = new CompositeDisposable();
             Disposable disposable = grid(page).toList().subscribeOn(Schedulers.io())
                     .subscribe(groups -> {
-                        BrowseContinuation nextContinuation = new BrowseContinuation(groups);
+                        LegacyGroupPaginator nextContinuation = new LegacyGroupPaginator(groups);
                         browseContinuations.put(page.id(), nextContinuation);
+                        int oldCount = countItems(current);
                         MobileBrowsePayload fresh = mapBrowsePayload(page, groups, true);
                         MobileBrowsePayload combined = mergeGridPayload(current, fresh, true);
-                        int oldCount = countItems(current);
                         int newCount = countItems(combined);
                         int emptyReloads = newCount > oldCount ? 0
                                 : emptyReloadCounts.getOrDefault(page.id(), 0) + 1;
                         emptyReloadCounts.put(page.id(), emptyReloads);
                         boolean canRetry = nextContinuation.hasMore() || emptyReloads < 2;
-                        combined = withHasMore(combined, canRetry);
+                        final boolean finalCanRetry = canRetry;
+                        combined = withHasMore(combined, finalCanRetry);
                         cacheBrowse(page, combined);
                         MobileDiagnostics.debug("DataBrowse", "shorts reload items="
-                                + oldCount + "->" + newCount + " retry=" + canRetry);
+                                + oldCount + "->" + newCount + " retry=" + finalCanRetry);
                         callback.onSuccess(combined);
+
+                        if (metadataEnhancer != null && groups != null && !groups.isEmpty()) {
+                            List<MediaGroup> snapshot = new ArrayList<>(groups);
+                            metadataEnhancer.enhance(snapshot, () -> {
+                                MobileBrowsePayload enhancedFresh =
+                                        mapBrowsePayload(page, snapshot, true);
+                                MobileBrowsePayload enhanced = withHasMore(
+                                        mergeGridPayload(current, enhancedFresh, true),
+                                        finalCanRetry);
+                                cacheBrowse(page, enhanced);
+                                if (!request.isDisposed()) callback.onSuccess(enhanced);
+                            });
+                        }
                     }, error -> {
                         MobileDiagnostics.error("DataBrowse", "shorts reload failed", error);
                         callback.onError(errors.map(error));
                     });
-            return new RxMobileRequest(disposable);
+            request.add(disposable);
+            return new RxMobileRequest(request);
         } catch (Throwable error) {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
@@ -419,10 +551,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
         switch (page) {
-            // The legacy Trending endpoint may never emit on current YouTube accounts.
-            // Use the reliable personalized Home feed and cache the result so category
-            // switches don't rebuild the screen around a visible network wait.
-            case TRENDING: return content.getHomeObserve();
+            // Keep this page independent from Home. Mapping Trending to Home made the
+            // "New recommendations" chip display byte-for-byte the same feed as "All".
+            // Some accounts currently return an empty/failed legacy Trending response;
+            // fall back to one personalized recommendation shelf rather than Home itself.
+            case TRENDING: return trendingRows();
             case LIVE: return content.getLiveObserve();
             case MUSIC: return content.getMusicObserve();
             case GAMING: return content.getGamingObserve();
@@ -434,48 +567,14 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         }
     }
 
-    private static boolean hasNextPage(MediaGroup group) {
-        if (group == null) return false;
-        String key = group.getNextPageKey();
-        return key != null && !key.trim().isEmpty();
-    }
-
-    private static final class BrowseContinuation {
-        private final List<MediaGroup> groups = new ArrayList<>();
-        private int cursor;
-
-        BrowseContinuation(List<MediaGroup> initial) {
-            if (initial != null) groups.addAll(initial);
-        }
-
-        synchronized int nextGroupIndex() {
-            if (groups.isEmpty()) return -1;
-            for (int offset = 0; offset < groups.size(); offset++) {
-                int index = (cursor + offset) % groups.size();
-                if (hasNextPage(groups.get(index))) {
-                    cursor = (index + 1) % groups.size();
-                    return index;
-                }
-            }
-            return -1;
-        }
-
-        synchronized MediaGroup groupAt(int index) {
-            return index < 0 || index >= groups.size() ? null : groups.get(index);
-        }
-
-        synchronized void replace(int index, MediaGroup group) {
-            if (index >= 0 && index < groups.size()) groups.set(index, group);
-        }
-
-        synchronized void markFinished(int index) {
-            if (index >= 0 && index < groups.size()) groups.set(index, null);
-        }
-
-        synchronized boolean hasMore() {
-            for (MediaGroup group : groups) if (hasNextPage(group)) return true;
-            return false;
-        }
+    private Observable<List<MediaGroup>> trendingRows() {
+        Observable<List<MediaGroup>> fallback = content.getRecommendedObserve()
+                .filter(group -> group != null)
+                .map(Collections::singletonList);
+        return content.getTrendingObserve()
+                .filter(groups -> groups != null && !groups.isEmpty())
+                .switchIfEmpty(fallback)
+                .onErrorResumeNext(fallback);
     }
 
     private Observable<MediaGroup> grid(LegacyBrowsePage page) {
@@ -491,25 +590,40 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         }
     }
 
-    private MobileBrowsePayload loadCompletePlaylist(String itemId, Video item, MediaGroup firstPage) {
-        String title = LegacyMediaMapper.safe(item.getTitleFull());
-        List<MobileMediaItem> tracks = new ArrayList<>();
+    private List<MediaGroup> loadCompletePlaylistGroups(MediaGroup firstPage) {
+        List<MediaGroup> pages = new ArrayList<>();
         MediaGroup page = firstPage;
         int pageCount = 0;
 
         // A playlist is returned in pages (often the first page contains only 15 items).
-        // Continue until YouTube reports the end, with a defensive cap for malformed tokens.
+        // Keep the raw pages so the asynchronous DeArrow/original-title pass can remap the
+        // complete playlist instead of enhancing only page one.
         while (page != null && pageCount < 100) {
-            MobileSection mapped = mapper.map(page, pageCount);
-            if (mapped.getItems() != null) {
-                tracks.addAll(mapped.getItems());
-            }
+            pages.add(page);
             pageCount++;
             String nextPageKey = page.getNextPageKey();
             if (nextPageKey == null || nextPageKey.trim().isEmpty()) {
                 break;
             }
             page = content.continueGroup(page);
+        }
+        return pages;
+    }
+
+    private MobileBrowsePayload mapCompletePlaylist(
+            String itemId, Video item, List<MediaGroup> pages) {
+        String title = LegacyMediaMapper.safe(item.getTitleFull());
+        List<MobileMediaItem> tracks = new ArrayList<>();
+        int pageCount = 0;
+        if (pages != null) {
+            for (MediaGroup page : pages) {
+                if (page == null) continue;
+                MobileSection mapped = mapper.map(page, pageCount);
+                if (mapped != null && mapped.getItems() != null) {
+                    tracks.addAll(mapped.getItems());
+                }
+                pageCount++;
+            }
         }
 
         MobileDiagnostics.info("DataBrowse", "playlist loaded id=" + itemId
@@ -526,7 +640,21 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         MobileDiagnostics.info("DataBrowse", "playlist first page id=" + itemId
                 + " title=" + title + " tracks=" + tracks.size());
         MobileSection section = new MobileSection("playlist:" + itemId, title, tracks);
-        return new MobileBrowsePayload(title, Collections.singletonList(section));
+        boolean hasMore = page != null && page.getNextPageKey() != null
+                && !page.getNextPageKey().trim().isEmpty();
+        return new MobileBrowsePayload(title, Collections.singletonList(section), hasMore);
+    }
+
+    private void cachePlaylist(String itemId, MobileBrowsePayload payload, String signature) {
+        if (payload == null) return;
+        playlistCache.put(itemId, payload);
+        playlistCacheTimes.put(itemId, System.currentTimeMillis());
+        playlistCacheEnhancementSignatures.put(itemId, signature == null ? "" : signature);
+    }
+
+    private void notifyPlaylistUpdated(String itemId, MobileBrowsePayload payload) {
+        ItemUpdateListener listener = itemUpdateListener;
+        if (listener != null) listener.onItemUpdated(itemId, payload);
     }
 
     private void loadPlaylistRemainderInBackground(
@@ -541,12 +669,22 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
         Schedulers.io().scheduleDirect(() -> {
             try {
-                MobileBrowsePayload complete = loadCompletePlaylist(itemId, item, firstPage);
-                playlistCache.put(itemId, complete);
-                playlistCacheTimes.put(itemId, System.currentTimeMillis());
-                ItemUpdateListener listener = itemUpdateListener;
-                if (listener != null) {
-                    listener.onItemUpdated(itemId, complete);
+                List<MediaGroup> pages = loadCompletePlaylistGroups(firstPage);
+                String enhancementSignature = metadataEnhancer == null
+                        ? "" : metadataEnhancer.preferenceSignature();
+                MobileBrowsePayload complete = mapCompletePlaylist(itemId, item, pages);
+                cachePlaylist(itemId, complete, enhancementSignature);
+                notifyPlaylistUpdated(itemId, complete);
+
+                if (metadataEnhancer != null && !pages.isEmpty()) {
+                    // The complete playlist is enhanced as one logical payload. This prevents
+                    // the background remainder loader from overwriting the already-enhanced
+                    // first page with raw titles/thumbnails.
+                    metadataEnhancer.enhance(pages, () -> {
+                        MobileBrowsePayload enhanced = mapCompletePlaylist(itemId, item, pages);
+                        cachePlaylist(itemId, enhanced, enhancementSignature);
+                        notifyPlaylistUpdated(itemId, enhanced);
+                    });
                 }
             } catch (Throwable error) {
                 // The first page remains usable. A later open can retry the background fill.

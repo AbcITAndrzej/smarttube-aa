@@ -55,8 +55,9 @@ public final class MobileChannelFragment extends Fragment {
                             item.getId(), item.getProgressMs(),
                             adapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
-                    MobileFragmentSupport.navigator(this).openPlayback(
-                            item.getId(), item.getProgressMs());
+                    MobileFragmentSupport.navigator(this).openPlaybackQueue(
+                            item.getId(), item.getProgressMs(),
+                            adapterRef[0].getRegularPlayableIds());
                 }
             }
         });
@@ -74,6 +75,17 @@ public final class MobileChannelFragment extends Fragment {
         }
         list.setHasFixedSize(true);
         list.setAdapter(adapter);
+        list.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy <= 0) return;
+                RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
+                int last = manager instanceof GridLayoutManager
+                        ? ((GridLayoutManager) manager).findLastVisibleItemPosition()
+                        : manager instanceof LinearLayoutManager
+                        ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
+                if (last >= adapter.getItemCount() - 6) vm.loadMore();
+            }
+        });
         toolbar.setNavigationOnClickListener(v -> MobileFragmentSupport.navigator(this).goBack());
         retry.setOnClickListener(v -> vm.load());
         vm.getState().observe(getViewLifecycleOwner(), value -> {
@@ -89,6 +101,11 @@ public final class MobileChannelFragment extends Fragment {
                 description.setText(payload.getDescription());
                 subscribers.setText(payload.getSubscriberText());
                 adapter.submitSections(payload.getSections());
+                if (payload.hasMore()) {
+                    list.post(() -> {
+                        if (isAdded() && !list.canScrollVertically(1)) vm.loadMore();
+                    });
+                }
             }
         });
         if (vm.getState().getValue() == null

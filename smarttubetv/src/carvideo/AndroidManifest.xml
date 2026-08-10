@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Experimental package only. Android Auto 15 currently exposes direct parked activities only
+      through the game host category. Keeping this declaration in a separate applicationId avoids
+      changing the classification or behavior of the stable music/radio Android Auto package.
+    -->
+    <application
+        android:appCategory="game"
+        tools:replace="android:appCategory">
+
+        <meta-data
+            android:name="distractionOptimized"
+            android:value="true" />
+
+        <activity
+            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoActivity">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.CAR_LAUNCHER" />
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+                <category android:name="android.intent.category.APP_MAPS" />
+            </intent-filter>
+        </activity>
+
+        <!-- The companion is video-only. Music/radio stay in the stable app's proven service. -->
+        <service
+            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.SmartTubeAutoMusicService"
+            tools:node="remove" />
+    </application>
+</manifest>

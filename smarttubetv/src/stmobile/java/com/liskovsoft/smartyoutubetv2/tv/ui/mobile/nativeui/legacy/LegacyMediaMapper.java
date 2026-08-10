@@ -12,7 +12,16 @@ import java.util.Locale;
 
 public final class LegacyMediaMapper {
     private final LegacyMediaIndex index;
-    public LegacyMediaMapper(LegacyMediaIndex index) { this.index = index; }
+    private final MobileMetadataEnhancer metadataEnhancer;
+
+    public LegacyMediaMapper(LegacyMediaIndex index) {
+        this(index, null);
+    }
+
+    public LegacyMediaMapper(LegacyMediaIndex index, MobileMetadataEnhancer metadataEnhancer) {
+        this.index = index;
+        this.metadataEnhancer = metadataEnhancer;
+    }
 
     public MobileMediaItem map(Video video) {
         return map(video, null);
@@ -20,6 +29,7 @@ public final class LegacyMediaMapper {
 
     public MobileMediaItem map(Video video, MobileMediaItem.Kind forcedKind) {
         if (video == null) throw new IllegalArgumentException("video == null");
+        if (metadataEnhancer != null) metadataEnhancer.applyCached(video);
         String id = stableId(video);
         MobileMediaItem.Kind kind = forcedKind == null ? kindOf(video) : forcedKind;
         long duration = Math.max(0, video.getDurationMs());

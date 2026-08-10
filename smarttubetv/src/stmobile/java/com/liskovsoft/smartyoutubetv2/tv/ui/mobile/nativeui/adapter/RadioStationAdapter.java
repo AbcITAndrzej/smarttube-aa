@@ -76,8 +76,11 @@ public final class RadioStationAdapter extends RecyclerView.Adapter<RadioStation
                     ? "STREAM" : station.getCodec().toUpperCase(Locale.US);
             String bitrate = station.getBitrate() > 0
                     ? Integer.toString(station.getBitrate()) : "?";
-            meta.setText(itemView.getContext().getString(R.string.mobile_radio_station_meta,
-                    codec, bitrate, station.getClickCount()));
+            String stationMeta = itemView.getContext().getString(R.string.mobile_radio_station_meta,
+                    codec, bitrate, station.getClickCount());
+            String country = station.getCountry().isEmpty()
+                    ? station.getCountryCode() : station.getCountry();
+            meta.setText(country.isEmpty() ? stationMeta : country + " • " + stationMeta);
             String compactTags = compactTags(station.getTags());
             tags.setText(compactTags);
             tags.setVisibility(compactTags.isEmpty() ? View.GONE : View.VISIBLE);

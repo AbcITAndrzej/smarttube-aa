@@ -5,6 +5,7 @@ import android.content.Context;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.net.Uri;
 import android.view.View;
 import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlaybackException;
@@ -29,10 +30,26 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.background.MobileMediaSessionManager;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBackgroundPlaybackRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlaybackRepository;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileDiagnosticsStore;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileFeatureFlags;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileError;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflineMediaRecord;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflineMediaRepository;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflineListenSaveController;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.offline.OfflineTripReserveController;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.playbackengine.Media3MigrationPolicy;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.playbackengine.Media3PlaybackEngine;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.playbackengine.MobilePlaybackEngine;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileInstantPlayController;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileInstantPlayPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioDvrProxy;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioTimeShiftController;
+import java.io.File;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -54,8 +71,18 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private final LegacyErrorMapper errors;
     private final LegacyTrackMapper trackMapper = new LegacyTrackMapper();
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** Dedicated handler: Instant Play may cancel all of its delayed callbacks without touching ticker/UI work. */
+    private final Handler instantPlayHandler = new Handler(Looper.getMainLooper());
     private final MobileMediaSessionManager mediaSessionManager;
     private final boolean headlessPlaybackAllowed;
+    private final boolean applyLegacyPreferredAudio;
+    private final RadioTimeShiftController radioTimeShift;
+    private final RadioPreferences radioPreferences;
+    private final MobileFeatureFlags featureFlags;
+    private final MobileDiagnosticsStore diagnostics;
+    private final MobileInstantPlayController instantPlay;
+    private final OfflineListenSaveController listenSaveController;
+    private final OfflineTripReserveController tripReserveController;
     private WeakReference<Context> hostContext = new WeakReference<>(null);
     private WeakReference<com.google.android.exoplayer2.ui.PlayerView> surface = new WeakReference<>(null);
     private Listener listener;
@@ -64,13 +91,32 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private ExoPlayerInitializer initializer;
     private DefaultTrackSelector trackSelector;
     private SimpleExoPlayer player;
+    /** Stage 11: transport-neutral facade over the existing ExoPlayer 2 controller. */
+    private final MobilePlaybackEngine legacyEngine = new LegacyEngineBridge();
+    /** Stage 11: first Media3 wave is intentionally audio-only (Radio + Offline). */
+    private Media3PlaybackEngine media3Engine;
+    private boolean media3DirectActive;
+    private String media3DirectUri = "";
+    private Media3MigrationPolicy.SourceKind media3SourceKind;
+    private boolean media3FallbackUsed;
+    private long media3Generation;
     private Video video;
     private boolean radioPlayback;
+    private boolean offlinePlayback;
+    private String offlineMediaId;
     private String radioMediaId;
     private String radioTitle = "";
     private String radioSubtitle = "";
     /** Keeps a newly selected direct stream playing through ExoPlayer's asynchronous reset. */
     private boolean radioAutoplayPending;
+    private String radioDirectStreamUrl = "";
+    private boolean radioDirectFallbackUsed;
+    private RadioStation radioStation;
+    private final List<String> radioAttemptedStreams = new ArrayList<>();
+    private boolean radioFailoverResolving;
+    private Throwable radioPendingFailoverError;
+    private int radioFailoverGeneration;
+    private boolean radioFailoverAwaitingReady;
     /** Invalidates callbacks posted by an ExoPlayer instance after a source/engine switch. */
     private long engineGeneration;
     private boolean initialized;
@@ -85,6 +131,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private boolean ended;
     private int resizeMode;
     private String qualityInfo = "";
+    private List<SeekBarSegment> seekBarSegments = Collections.emptyList();
     private String pendingMediaId;
     private long pendingStartPositionMs;
     private final List<String> scopedPlaybackQueue = new ArrayList<>();
@@ -105,6 +152,16 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
             }
             buffering = playbackState == Player.STATE_BUFFERING;
             ended = playbackState == Player.STATE_ENDED;
+            if (playbackState == Player.STATE_READY) {
+                diagnostics.onPlayerReady(playWhenReady);
+                instantPlay.onReady();
+                if (radioPlayback && radioFailoverAwaitingReady) {
+                    radioFailoverAwaitingReady = false;
+                    diagnostics.onRadioFailoverSuccess(radioDirectStreamUrl);
+                    MobileDiagnostics.info("P19-Radio2",
+                            "alternate stream ready=" + radioDirectStreamUrl);
+                }
+            }
             if (radioPlayback && radioAutoplayPending && playbackState == Player.STATE_READY) {
                 if (!playWhenReady) {
                     MobileDiagnostics.info("P14-Radio",
@@ -115,6 +172,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                     MobileDiagnostics.info("P14-Radio", "autoplay confirmed");
                 }
             }
+            if (ended && offlinePlayback && playScopedNextAtEnd()) return;
+            if (ended && fallbackFromRadioDvr()) return;
             if (ended && headlessPlaybackAllowed) {
                 MobileDiagnostics.info("P13-AA-Playback", "engine reached STATE_ENDED");
             }
@@ -134,6 +193,20 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         "engine error; common recovery remains active: "
                                 + (cause == null ? error : cause));
             }
+            if (fallbackFromRadioDvr()) return;
+            if (tryRadioStreamFailover(error)) return;
+            if (isTransientForbiddenStream(error)) {
+                // SmartTube's ErrorFixerController intentionally refreshes a forbidden
+                // signed YouTube URL and retries it. The TV UI hides this transient 403,
+                // but the mobile bridge used to surface the same recoverable error as a
+                // toast before the retry succeeded a moment later.
+                MobileDiagnostics.debug("DataPlayer",
+                        "suppress transient 403; common recovery pipeline will retry");
+                diagnostics.onTransient403(error);
+                instantPlay.onTransient403();
+                return;
+            }
+            diagnostics.onPlaybackError(error);
             Listener current = listener;
             if (current != null) current.onPlaybackError(errors.playback(error));
         }
@@ -142,44 +215,94 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     private final Runnable ticker = new Runnable() {
         @Override public void run() {
-            if (player == null) return;
+            MobilePlaybackEngine engine = activeEngine();
+            if (engine == null || !engine.isInitialized()) return;
             emitSnapshot();
             main.postDelayed(this, SNAPSHOT_INTERVAL_MS);
         }
     };
 
     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index, LegacyErrorMapper errors) {
-        this(context, index, errors, false);
+        // The touch player only highlights its preferred language in the picker. It must never
+        // auto-switch an audio track at startup.
+        this(context, index, errors, false, false);
     }
 
     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index,
                                           LegacyErrorMapper errors,
                                           boolean headlessPlaybackAllowed) {
+        // Preserve the legacy automatic language policy for the already-stable AA service.
+        this(context, index, errors, headlessPlaybackAllowed, headlessPlaybackAllowed);
+    }
+
+    public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index,
+                                          LegacyErrorMapper errors,
+                                          boolean headlessPlaybackAllowed,
+                                          boolean applyLegacyPreferredAudio) {
         this.applicationContext = context.getApplicationContext();
         this.index = index;
         this.errors = errors;
         this.headlessPlaybackAllowed = headlessPlaybackAllowed;
+        this.applyLegacyPreferredAudio = applyLegacyPreferredAudio;
+        this.radioPreferences = new RadioPreferences(applicationContext);
+        this.featureFlags = new MobileFeatureFlags(applicationContext);
+        this.radioTimeShift = new RadioDvrProxy(radioPreferences);
+        this.diagnostics = MobileDiagnosticsStore.get(applicationContext);
+        this.instantPlay = new MobileInstantPlayController(
+                instantPlayHandler,
+                new MobileInstantPlayPreferences(applicationContext),
+                new MobileFeatureFlags(applicationContext),
+                diagnostics,
+                new MobileInstantPlayController.Callback() {
+                    @Override public boolean isReady() {
+                        return player != null && player.getPlaybackState() == Player.STATE_READY;
+                    }
+
+                    @Override public void reloadAfterForbidden() {
+                        VideoLoaderController loader = presenter == null ? null
+                                : presenter.getController(VideoLoaderController.class);
+                        if (loader != null) loader.reloadVideoAfterStreamRefresh();
+                    }
+
+                    @Override public void reloadForStartupWatchdog() {
+                        VideoLoaderController loader = presenter == null ? null
+                                : presenter.getController(VideoLoaderController.class);
+                        if (loader != null) loader.reloadVideo();
+                    }
+
+                    @Override public void onStartupTimeout() {
+                        Listener current = listener;
+                        if (current != null) {
+                            current.onPlaybackError(new MobileError(
+                                    MobileError.Kind.TIMEOUT,
+                                    applicationContext.getString(
+                                            com.liskovsoft.smartyoutubetv2.tv.R.string.mobile_player_startup_timeout),
+                                    null, true));
+                        }
+                    }
+                });
+        this.listenSaveController = new OfflineListenSaveController(applicationContext);
+        this.tripReserveController = new OfflineTripReserveController(applicationContext);
         if (headlessPlaybackAllowed) {
             // Android Auto already owns the public MediaSession. Creating SmartTubeMobileSession here
             // gives one process two media sessions and two independent audio-focus clients that pause
-            // each other. In automotive mode ExoPlayer is the only audio-focus owner.
+            // each other. In automotive mode the active playback engine owns audio focus.
             this.mediaSessionManager = null;
             MobileDiagnostics.info("P13-AA-Playback",
-                    "internal mobile session disabled; ExoPlayer owns audio focus");
+                    "internal mobile session disabled; active engine owns audio focus");
         } else {
             this.mediaSessionManager = new MobileMediaSessionManager(applicationContext,
                     new MobileMediaSessionManager.PlaybackControl() {
                         @Override public void playFromSystem() { setPlayWhenReady(true); }
                         @Override public void pauseFromSystem() { setPlayWhenReady(false); }
                         @Override public void seekToFromSystem(long positionMs) {
-                            setPositionMs(Math.max(0L, positionMs));
-                            emitSnapshot();
+                            seekTo(positionMs);
                         }
                         @Override public void setVolumeMultiplier(float multiplier) {
                             setVolume(Math.max(0f, Math.min(1f, multiplier)));
                         }
                     });
-            // ExoPlayerController already owns audio focus for YouTube and direct radio streams.
+            // The active playback engine owns audio focus for YouTube and direct audio streams.
             // The companion MediaSession exposes metadata/controls only; a second focus request
             // would make the two clients in this process immediately pause each other.
             this.mediaSessionManager.setPlayerHandlesAudioFocus(true);
@@ -196,12 +319,19 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         // PlaybackPresenter. Mark a pending radio before creating ExoPlayer so it is configured
         // audio-only from the start and cannot restore that video during initialization.
         boolean pendingRadio = RadioStationRepository.isRadioMediaId(pendingMediaId);
+        boolean pendingOffline = OfflineMediaRepository.isOfflinePlaybackId(pendingMediaId);
         if (pendingRadio) radioPlayback = true;
-        ensureEngine();
+        boolean pendingMedia3Direct = (pendingRadio
+                && shouldUseMedia3(Media3MigrationPolicy.SourceKind.RADIO))
+                || (pendingOffline
+                && shouldUseMedia3(Media3MigrationPolicy.SourceKind.OFFLINE));
+        if (!media3DirectActive && !pendingMedia3Direct) ensureEngine();
         // Refresh the singleton presenter's context after Activity recreation.
         presenter = PlaybackPresenter.instance(context);
         presenter.setView(this);
-        playerView.setPlayer(player);
+        // Stage 11 keeps the existing ExoPlayer2 PlayerView for VOD. Media3 is initially
+        // audio-only, so Radio/Offline intentionally leave the video surface detached.
+        playerView.setPlayer(media3DirectActive ? null : player);
         if (pendingMediaId != null) {
             String mediaId = pendingMediaId;
             long startPositionMs = pendingStartPositionMs;
@@ -266,12 +396,54 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     private void prepareNow(String mediaId, long startPositionMs) {
         try {
-            if (RadioStationRepository.isRadioMediaId(mediaId)) {
+            String currentBefore = offlinePlayback ? offlineMediaId
+                    : radioPlayback ? radioMediaId
+                    : video == null ? "" : LegacyMediaMapper.stableId(video);
+            if (currentBefore != null && !currentBefore.isEmpty() && !currentBefore.equals(mediaId)) {
+                listenSaveController.onMediaSwitch();
+                tripReserveController.onMediaSwitch();
+            }
+            boolean preparingRadio = RadioStationRepository.isRadioMediaId(mediaId);
+            boolean preparingOffline = OfflineMediaRepository.isOfflinePlaybackId(mediaId);
+            diagnostics.onPrepare(headlessPlaybackAllowed ? "ANDROID_AUTO" : "MOBILE", mediaId,
+                    preparingRadio);
+            if (!preparingOffline) instantPlay.begin(mediaId, preparingRadio, headlessPlaybackAllowed);
+            else instantPlay.cancel();
+
+            // Stage 11: when the next direct source is going to Media3, release the legacy
+            // PlaybackPresenter engine before Radio/Offline metadata overwrites the previous VOD.
+            // Otherwise presenter.onEngineReleased() could observe the new direct-source Video
+            // object and attempt to restore/resume the wrong item during the migration boundary.
+            boolean preparingMedia3Direct =
+                    (preparingRadio && shouldUseMedia3(Media3MigrationPolicy.SourceKind.RADIO))
+                            || (preparingOffline
+                            && shouldUseMedia3(Media3MigrationPolicy.SourceKind.OFFLINE));
+            if (preparingMedia3Direct && initialized) {
+                MobileDiagnostics.info("P21-Media3",
+                        "release legacy engine before direct metadata switch");
+                releaseEngineOnly();
+            }
+
+            if (preparingOffline) {
+                // Stage 9: the same private .audio file path is now valid in headless Android Auto.
+                // The Automotive MediaSession remains owned by SmartTubeAutoMusicService; this
+                // repository only feeds ExoPlayer audio and does not create a second public session.
+                prepareOffline(mediaId, startPositionMs);
+                return;
+            }
+            offlinePlayback = false;
+            offlineMediaId = null;
+            if (preparingRadio) {
                 radioPlayback = true;
                 prepareRadio(mediaId);
                 return;
             }
             radioPlayback = false;
+            radioTimeShift.stop();
+            releaseMedia3Only("switch to VOD");
+            diagnostics.onPlaybackEngine("legacy ExoPlayer 2", "vod");
+            radioDirectStreamUrl = "";
+            radioDirectFallbackUsed = false;
             preferredAudioAppliedMediaId = null;
             preferredAudioAttemptSignature = null;
             radioMediaId = null;
@@ -304,20 +476,67 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         }
     }
 
+    private void prepareOffline(String playbackId, long startPositionMs) {
+        String rawId = OfflineMediaRepository.rawMediaId(playbackId);
+        OfflineMediaRepository offline = OfflineMediaRepository.get(applicationContext);
+        File file = offline.resolveAvailableFile(rawId);
+        OfflineMediaRecord record = offline.find(rawId);
+        if (file == null || record == null || !record.isAvailable()) {
+            throw new IllegalStateException("Offline audio is no longer available");
+        }
+
+        radioPlayback = false;
+        radioTimeShift.stop();
+        radioMediaId = null;
+        radioAutoplayPending = false;
+        radioDirectStreamUrl = "";
+        radioDirectFallbackUsed = false;
+        radioStation = null;
+        radioTitle = "";
+        radioSubtitle = "";
+        preferredAudioAppliedMediaId = null;
+        preferredAudioAttemptSignature = null;
+        offlinePlayback = true;
+        offlineMediaId = playbackId;
+
+        ended = false;
+        Video metadata = Video.from(rawId);
+        metadata.title = record.getTitle();
+        metadata.secondTitle = record.getAuthor();
+        video = metadata;
+        String localUrl = Uri.fromFile(file).toString();
+        diagnostics.onSource("offline-file", localUrl);
+        MobileDiagnostics.info("OfflinePlaylist", "play local audio media=" + rawId);
+        prepareDirectSource(Media3MigrationPolicy.SourceKind.OFFLINE, localUrl,
+                Math.max(0L, startPositionMs), true);
+        emitSnapshot();
+    }
+
     private void prepareRadio(String mediaId) {
         String stationId = RadioStationRepository.stationIdFromMediaId(mediaId);
-        RadioStation station = RadioStationRepository.get(applicationContext).getStation(stationId);
+        RadioStationRepository radioRepository = RadioStationRepository.get(applicationContext);
+        RadioStation station = radioRepository.getStation(stationId);
         if (station == null) throw new IllegalStateException("Nie znaleziono stacji w lokalnym cache");
+        radioRepository.recordPlayed(stationId);
+        radioStation = station;
+        radioAttemptedStreams.clear();
+        radioAttemptedStreams.add(station.getStreamUrl());
+        radioFailoverResolving = false;
+        radioPendingFailoverError = null;
+        radioFailoverAwaitingReady = false;
+        radioFailoverGeneration++;
         radioPlayback = true;
         radioMediaId = mediaId;
         radioAutoplayPending = true;
+        radioDirectFallbackUsed = false;
+        radioDirectStreamUrl = station.getStreamUrl();
         radioTitle = station.getName();
         String codec = station.getCodec().isEmpty() ? "Radio" : station.getCodec();
         radioSubtitle = station.getBitrate() > 0
                 ? codec + " • " + station.getBitrate() + " kb/s" : codec;
-        // ExoPlayerController shares SmartTube's format/state callbacks. They require a non-null
-        // Video object even for a direct URL, so provide neutral metadata without a YouTube id.
-        // Keeping videoId null prevents radio playback from entering YouTube history/state paths.
+        // SmartTube's higher-level metadata/session callbacks still expect a non-null Video object
+        // even when the direct audio transport is Media3. Keep videoId null so Radio never enters
+        // YouTube history/state paths.
         Video radioMetadata = new Video();
         radioMetadata.title = radioTitle;
         radioMetadata.secondTitle = radioSubtitle;
@@ -325,28 +544,28 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         radioMetadata.isLive = true;
         video = radioMetadata;
         if (mediaSessionManager != null) {
-            // ExoPlayerController already manages focus for its direct stream. Keep the mobile
-            // MediaSession for controls/metadata without letting it compete for the same focus.
+            // The active direct engine (legacy or Media3) owns audio focus. Keep MediaSessionCompat
+            // for controls/metadata without allowing it to compete for a second focus grant.
             mediaSessionManager.setPlayerHandlesAudioFocus(true);
         }
-        ensureEngine();
-        controller.setVideo(radioMetadata);
         ended = false;
+        String playbackUrl = radioTimeShift.start(station);
+        diagnostics.onSource("radio", station.getStreamUrl());
         MobileDiagnostics.info("P14-Radio", "prepare id=" + stationId
-                + " stream=" + station.getStreamUrl());
-        controller.openUrlList(Collections.singletonList(station.getStreamUrl()));
-        play();
+                + " timeshift=" + radioTimeShift.isActive() + " stream=" + station.getStreamUrl());
+        prepareDirectSource(Media3MigrationPolicy.SourceKind.RADIO, playbackUrl, 0L, true);
         emitSnapshot();
     }
 
     @Override public void play() {
-        if (radioPlayback && player != null && player.getPlaybackState() != Player.STATE_READY) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (radioPlayback && engine != null && engine.getState() != MobilePlaybackEngine.State.READY) {
             radioAutoplayPending = true;
         }
         if (mediaSessionManager != null) {
             mediaSessionManager.requestPlay();
         } else {
-            MobileDiagnostics.info("P13-AA-Playback", "direct ExoPlayer play");
+            MobileDiagnostics.info("P13-AA-Playback", "direct engine play=" + activeEngineName());
             setPlayWhenReady(true);
             emitSnapshot();
         }
@@ -357,7 +576,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (mediaSessionManager != null) {
             mediaSessionManager.pauseByUser();
         } else {
-            MobileDiagnostics.info("P13-AA-Playback", "direct ExoPlayer pause");
+            MobileDiagnostics.info("P13-AA-Playback", "direct engine pause=" + activeEngineName());
             setPlayWhenReady(false);
             emitSnapshot();
         }
@@ -385,7 +604,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     private boolean playScoped(int direction) {
         if (scopedPlaybackQueue.size() < 2) return false;
-        String currentId = video == null ? null : LegacyMediaMapper.stableId(video);
+        String currentId = offlinePlayback ? offlineMediaId
+                : video == null ? null : LegacyMediaMapper.stableId(video);
         int current = scopedPlaybackQueue.indexOf(currentId);
         if (current < 0) current = scopedPlaybackIndex;
         if (current < 0) return false;
@@ -400,8 +620,42 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         return true;
     }
 
-    @Override public void seekTo(long positionMs) { setPositionMs(Math.max(0, positionMs)); emitSnapshot(); }
-    @Override public void seekBy(long deltaMs) { seekTo(Math.max(0, getPositionMs() + deltaMs)); }
+    private boolean playScopedNextAtEnd() {
+        if (scopedPlaybackQueue.size() < 2) return false;
+        int current = scopedPlaybackQueue.indexOf(offlineMediaId);
+        if (current < 0) current = scopedPlaybackIndex;
+        if (current < 0 || current + 1 >= scopedPlaybackQueue.size()) return false;
+        scopedPlaybackIndex = current + 1;
+        String nextId = scopedPlaybackQueue.get(scopedPlaybackIndex);
+        MobileDiagnostics.info("OfflinePlaylist", "auto-next " + current + " -> "
+                + scopedPlaybackIndex + " id=" + nextId);
+        prepareNow(nextId, 0L);
+        return true;
+    }
+
+    @Override public void seekTo(long positionMs) {
+        long safe = Math.max(0L, positionMs);
+        if (radioPlayback && radioTimeShift.isActive()) {
+            if (!radioTimeShift.canSeek()) return;
+            long duration = radioTimeShift.getWindowDurationMs();
+            String url = safe >= Math.max(0L, duration - 750L)
+                    ? radioTimeShift.goLive() : radioTimeShift.seekTo(safe);
+            if (url == null || url.isEmpty()) return;
+            radioAutoplayPending = true;
+            replaceDirectSource(url, 0L, true);
+            play();
+            emitSnapshot();
+            return;
+        }
+        setPositionMs(safe);
+        emitSnapshot();
+    }
+
+    @Override public void seekBy(long deltaMs) {
+        long current = radioPlayback && radioTimeShift.isActive()
+                ? radioTimeShift.positionForPlayer(getPositionMs()) : getPositionMs();
+        seekTo(Math.max(0L, current + deltaMs));
+    }
     @Override public void setPlaybackSpeed(float speed) { setSpeed(speed); emitSnapshot(); }
 
     @Override public void selectVideoTrack(String trackId) {
@@ -429,13 +683,20 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     @Override public void release() {
         MobileDiagnostics.debug("DataPlayer", "release");
+        instantPlay.cancel();
+        listenSaveController.reset();
+        tripReserveController.reset();
+        radioTimeShift.close();
         engineGeneration++;
         if (mediaSessionManager != null) mediaSessionManager.release();
         main.removeCallbacks(ticker);
-        if (presenter != null && initialized) {
-            presenter.onViewPaused();
-            presenter.onEngineReleased();
-            presenter.onViewDestroyed();
+        releaseMedia3Only("repository release");
+        if (presenter != null) {
+            if (initialized) {
+                presenter.onViewPaused();
+                presenter.onEngineReleased();
+                presenter.onViewDestroyed();
+            }
             presenter.setView(null);
         }
         com.google.android.exoplayer2.ui.PlayerView view = surface.get();
@@ -448,11 +709,24 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         controller = null;
         initializer = null;
         trackSelector = null;
+        media3DirectUri = "";
+        media3SourceKind = null;
+        media3FallbackUsed = false;
         presenter = null;
         video = null;
+        offlinePlayback = false;
+        offlineMediaId = null;
         radioPlayback = false;
         radioMediaId = null;
         radioAutoplayPending = false;
+        radioDirectStreamUrl = "";
+        radioDirectFallbackUsed = false;
+        radioStation = null;
+        radioAttemptedStreams.clear();
+        radioFailoverResolving = false;
+        radioPendingFailoverError = null;
+        radioFailoverAwaitingReady = false;
+        radioFailoverGeneration++;
         radioTitle = "";
         radioSubtitle = "";
         initialized = false;
@@ -469,6 +743,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     private void ensureEngine() {
+        if (media3DirectActive) releaseMedia3Only("legacy engine requested");
         if (initialized && player != null) return;
         Context context = hostContext.get();
         boolean headless = context == null || surface.get() == null;
@@ -480,13 +755,14 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                 "initialize engine headless=" + headless);
         initializer = new ExoPlayerInitializer(context);
         trackSelector = new DefaultTrackSelector(new AdaptiveTrackSelection.Factory());
-        if (headlessPlaybackAllowed || radioPlayback) {
-            // Android Auto is an audio surface. Do not allocate video/subtitle decoders or a fake
-            // SurfaceTexture; this also prevents a forbidden video representation from killing audio.
+        if (headlessPlaybackAllowed || radioPlayback || offlinePlayback) {
+            // Android Auto, Radio and Offline are audio-only in this source set. Do not allocate
+            // video/subtitle decoders on the legacy rollback path.
             trackSelector.setParameters(trackSelector.buildUponParameters()
                     .setRendererDisabled(TrackSelectorManager.RENDERER_INDEX_VIDEO, true)
                     .setRendererDisabled(TrackSelectorManager.RENDERER_INDEX_SUBTITLE, true));
-            MobileDiagnostics.info(radioPlayback ? "P14-Radio" : "P13-AA-Playback",
+            MobileDiagnostics.info(radioPlayback ? "P14-Radio"
+                            : offlinePlayback ? "OfflinePlaylist" : "P13-AA-Playback",
                     "audio-only renderers selected");
         }
         player = initializer.createPlayer(context, new DefaultRenderersFactory(context), trackSelector);
@@ -515,25 +791,372 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         main.post(ticker);
     }
 
-    private void notifyError(Throwable error) {
-        MobileDiagnostics.error("DataPlayer", "player bridge failure", error);
+    private boolean shouldUseMedia3(Media3MigrationPolicy.SourceKind sourceKind) {
+        return Media3MigrationPolicy.shouldUseMedia3(sourceKind,
+                featureFlags.isMedia3EngineEnabled(),
+                featureFlags.isMedia3RadioEnabled(),
+                featureFlags.isMedia3OfflineEnabled());
+    }
+
+    private MobilePlaybackEngine activeEngine() {
+        if (media3DirectActive && media3Engine != null && media3Engine.isInitialized()) {
+            return media3Engine;
+        }
+        return legacyEngine.isInitialized() ? legacyEngine : null;
+    }
+
+    private boolean hasActiveEngine() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine != null && engine.isInitialized();
+    }
+
+    private String activeEngineName() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine == null ? "none" : engine.getEngineName();
+    }
+
+    private static String sourceKindLabel(Media3MigrationPolicy.SourceKind sourceKind) {
+        return sourceKind == null ? "unknown" : sourceKind.name().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Stage 11 migration boundary. VOD remains on SmartTube's existing controller, while direct
+     * Radio/Offline audio may opt into Media3. Every Media3 source can fail open to legacy.
+     */
+    private void prepareDirectSource(Media3MigrationPolicy.SourceKind sourceKind,
+                                     String uri, long startPositionMs, boolean autoplay) {
+        if (uri == null || uri.trim().isEmpty()) {
+            throw new IllegalArgumentException("Direct source URI is empty");
+        }
+        media3SourceKind = sourceKind;
+        media3DirectUri = uri;
+        media3FallbackUsed = false;
+        ended = false;
+        buffering = true;
+
+        if (shouldUseMedia3(sourceKind)) {
+            com.google.android.exoplayer2.ui.PlayerView view = surface.get();
+            if (view != null) view.setPlayer(null);
+            releaseEngineOnly();
+            ensureMedia3Engine();
+            media3DirectActive = true;
+            diagnostics.onPlaybackEngine(media3Engine.getEngineName(), sourceKindLabel(sourceKind));
+            MobileDiagnostics.info("P21-Media3", "open " + sourceKindLabel(sourceKind)
+                    + " using Media3 uri=" + safeHost(uri));
+            media3Engine.open(uri, Math.max(0L, startPositionMs), autoplay);
+        } else {
+            releaseMedia3Only("feature disabled");
+            if (sourceKind == Media3MigrationPolicy.SourceKind.OFFLINE) {
+                // Offline is not owned by PlaybackPresenter; never restore the previous YouTube VOD
+                // while constructing the fallback legacy engine.
+                suppressPresenterResume = true;
+            }
+            ensureEngine();
+            if (controller != null && video != null) controller.setVideo(video);
+            diagnostics.onPlaybackEngine("legacy ExoPlayer 2", sourceKindLabel(sourceKind));
+            legacyEngine.open(uri, Math.max(0L, startPositionMs), autoplay);
+        }
+        main.removeCallbacks(ticker);
+        main.post(ticker);
+    }
+
+    /** Replaces the current Radio/Offline direct URI without changing the chosen engine. */
+    private void replaceDirectSource(String uri, long startPositionMs, boolean autoplay) {
+        if (uri == null || uri.trim().isEmpty()) return;
+        media3DirectUri = uri;
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine == null) {
+            Media3MigrationPolicy.SourceKind kind = media3SourceKind != null ? media3SourceKind
+                    : radioPlayback ? Media3MigrationPolicy.SourceKind.RADIO
+                    : Media3MigrationPolicy.SourceKind.OFFLINE;
+            prepareDirectSource(kind, uri, startPositionMs, autoplay);
+            return;
+        }
+        buffering = true;
+        ended = false;
+        engine.open(uri, Math.max(0L, startPositionMs), autoplay);
+    }
+
+    private void ensureMedia3Engine() {
+        if (media3Engine != null && media3Engine.isInitialized()) return;
+        final long generation = ++media3Generation;
+        media3Engine = new Media3PlaybackEngine(applicationContext,
+                new MobilePlaybackEngine.Listener() {
+                    @Override public void onEngineStateChanged(MobilePlaybackEngine.State state,
+                                                                boolean playWhenReady) {
+                        if (generation != media3Generation || !media3DirectActive) return;
+                        onMedia3StateChanged(state, playWhenReady);
+                    }
+
+                    @Override public void onEngineError(Throwable error) {
+                        if (generation != media3Generation || !media3DirectActive) return;
+                        onMedia3Error(error);
+                    }
+                });
+        // ExoPlayer is created lazily by open(); media3DirectActive is set before the first open.
+    }
+
+    private void onMedia3StateChanged(MobilePlaybackEngine.State state, boolean playWhenReady) {
+        buffering = state == MobilePlaybackEngine.State.BUFFERING;
+        ended = state == MobilePlaybackEngine.State.ENDED;
+        if (state == MobilePlaybackEngine.State.READY) {
+            diagnostics.onPlayerReady(playWhenReady);
+            diagnostics.onMedia3Ready(sourceKindLabel(media3SourceKind));
+            if (radioPlayback && radioFailoverAwaitingReady) {
+                radioFailoverAwaitingReady = false;
+                diagnostics.onRadioFailoverSuccess(radioDirectStreamUrl);
+                MobileDiagnostics.info("P19-Radio2",
+                        "alternate stream ready via Media3=" + radioDirectStreamUrl);
+            }
+            if (radioPlayback && radioAutoplayPending) {
+                if (!playWhenReady) {
+                    setPlayWhenReady(true);
+                } else {
+                    radioAutoplayPending = false;
+                }
+            }
+        }
+        if (ended && offlinePlayback && playScopedNextAtEnd()) return;
+        if (ended && fallbackFromRadioDvr()) return;
+        if (ended && headlessPlaybackAllowed) {
+            MobileDiagnostics.info("P21-Media3", "direct engine reached ENDED");
+        }
+        emitSnapshot();
+    }
+
+    private void onMedia3Error(Throwable error) {
+        diagnostics.onMedia3Error(sourceKindLabel(media3SourceKind), error);
+        MobileDiagnostics.warn("P21-Media3", "direct engine error source="
+                + sourceKindLabel(media3SourceKind) + " error=" + error);
+
+        // This is the key rollback guarantee of Stage 11. Before changing higher-level Radio
+        // failover policy, retry exactly the same URI with the mature bundled ExoPlayer2 engine.
+        if (fallbackMedia3ToLegacy(error)) return;
+        if (fallbackFromRadioDvr()) return;
+        if (tryRadioStreamFailover(error)) return;
+        diagnostics.onPlaybackError(error);
         Listener current = listener;
         if (current != null) current.onPlaybackError(errors.playback(error));
     }
 
+    private boolean fallbackMedia3ToLegacy(Throwable originalError) {
+        if (!media3DirectActive || media3Engine == null || media3FallbackUsed
+                || !featureFlags.isMedia3LegacyFallbackEnabled()) {
+            return false;
+        }
+        String uri = media3DirectUri;
+        Media3MigrationPolicy.SourceKind sourceKind = media3SourceKind;
+        long position = media3Engine.getPositionMs();
+        boolean autoplay = media3Engine.getPlayWhenReady() || radioPlayback;
+        media3FallbackUsed = true;
+        releaseMedia3Only("fallback to legacy");
+        try {
+            if (sourceKind == Media3MigrationPolicy.SourceKind.OFFLINE) {
+                suppressPresenterResume = true;
+            }
+            ensureEngine();
+            if (controller == null) return false;
+            if (video != null) controller.setVideo(video);
+            media3SourceKind = sourceKind;
+            media3DirectUri = uri;
+            diagnostics.onMedia3LegacyFallback(sourceKindLabel(sourceKind), originalError);
+            diagnostics.onPlaybackEngine("legacy ExoPlayer 2 (Media3 fallback)",
+                    sourceKindLabel(sourceKind));
+            MobileDiagnostics.warn("P21-Media3", "fallback to legacy source="
+                    + sourceKindLabel(sourceKind) + " uri=" + safeHost(uri));
+            legacyEngine.open(uri,
+                    sourceKind == Media3MigrationPolicy.SourceKind.OFFLINE ? position : 0L,
+                    autoplay);
+            main.removeCallbacks(ticker);
+            main.post(ticker);
+            return true;
+        } catch (Throwable legacyError) {
+            MobileDiagnostics.error("P21-Media3", "legacy fallback failed", legacyError);
+            return false;
+        }
+    }
+
+    private void releaseMedia3Only(String reason) {
+        media3Generation++;
+        Media3PlaybackEngine engine = media3Engine;
+        media3Engine = null;
+        boolean wasActive = media3DirectActive;
+        media3DirectActive = false;
+        if (engine != null) {
+            try {
+                engine.release();
+            } catch (Throwable error) {
+                MobileDiagnostics.warn("P21-Media3", "release failed: " + error);
+            }
+        }
+        if (wasActive) MobileDiagnostics.info("P21-Media3", "released: " + reason);
+    }
+
+    private void releaseActiveEngineOnly(String reason) {
+        if (media3DirectActive || media3Engine != null) {
+            releaseMedia3Only(reason);
+        } else {
+            releaseEngineOnly();
+        }
+    }
+
+    private static String safeHost(String uri) {
+        if (uri == null || uri.isEmpty()) return "unknown";
+        try {
+            Uri parsed = Uri.parse(uri);
+            String host = parsed.getHost();
+            if (host != null && !host.isEmpty()) return host;
+            return parsed.getScheme() == null ? "local" : parsed.getScheme();
+        } catch (Throwable ignored) {
+            return "unknown";
+        }
+    }
+
+    private boolean fallbackFromRadioDvr() {
+        if (!radioPlayback || !radioTimeShift.hasFailed() || radioDirectFallbackUsed
+                || radioDirectStreamUrl == null || radioDirectStreamUrl.isEmpty()
+                || !hasActiveEngine()) {
+            return false;
+        }
+        // Time-shift is deliberately fail-open: station playback is more important than DVR.
+        radioDirectFallbackUsed = true;
+        String fallback = radioDirectStreamUrl;
+        radioTimeShift.stop();
+        radioAutoplayPending = true;
+        ended = false;
+        buffering = true;
+        MobileDiagnostics.warn("P17-RadioDVR", "fallback to direct radio stream");
+        diagnostics.onRadioDvrFallback();
+        replaceDirectSource(fallback, 0L, true);
+        play();
+        return true;
+    }
+
+    private boolean tryRadioStreamFailover(Throwable error) {
+        if (!radioPlayback || !hasActiveEngine() || radioStation == null
+                || !featureFlags.isRadio2Enabled()
+                || !featureFlags.isRadio2StreamFailoverEnabled()
+                || !radioPreferences.isStreamFailoverEnabled()) {
+            return false;
+        }
+        if (radioFailoverResolving) {
+            // The original player error is intentionally held while Radio Browser resolves
+            // candidates. Do not surface duplicate errors during the same lookup.
+            return true;
+        }
+        radioFailoverResolving = true;
+        radioPendingFailoverError = error;
+        final int generation = radioFailoverGeneration;
+        final String mediaId = radioMediaId;
+        MobileDiagnostics.warn("P19-Radio2", "stream failed; resolving alternate candidates");
+        RadioStationRepository.get(applicationContext).resolveAlternativeStreams(
+                radioStation, urls -> {
+                    if (generation != radioFailoverGeneration || !radioPlayback
+                            || mediaId == null || !mediaId.equals(radioMediaId)) {
+                        return;
+                    }
+                    radioFailoverResolving = false;
+                    String alternate = firstUntriedRadioUrl(urls);
+                    if (alternate == null) {
+                        Throwable pending = radioPendingFailoverError;
+                        radioPendingFailoverError = null;
+                        diagnostics.onRadioFailoverFailed();
+                        MobileDiagnostics.warn("P19-Radio2", "no alternate radio stream remains");
+                        if (pending != null) {
+                            diagnostics.onPlaybackError(pending);
+                            Listener current = listener;
+                            if (current != null) current.onPlaybackError(errors.playback(pending));
+                        }
+                        return;
+                    }
+                    radioAttemptedStreams.add(alternate);
+                    radioPendingFailoverError = null;
+                    radioDirectStreamUrl = alternate;
+                    radioDirectFallbackUsed = false;
+                    radioAutoplayPending = true;
+                    radioFailoverAwaitingReady = true;
+                    ended = false;
+                    buffering = true;
+                    diagnostics.onRadioFailoverAttempt(alternate);
+                    MobileDiagnostics.info("P19-Radio2",
+                            "trying alternate stream " + radioAttemptedStreams.size()
+                                    + " url=" + alternate);
+                    radioTimeShift.stop();
+                    RadioStation alternateStation = radioStation.withStreamUrl(alternate);
+                    String playbackUrl = radioTimeShift.start(alternateStation);
+                    replaceDirectSource(playbackUrl, 0L, true);
+                    play();
+                    emitSnapshot();
+                });
+        return true;
+    }
+
+    private String firstUntriedRadioUrl(List<String> values) {
+        if (values == null) return null;
+        for (String value : values) {
+            if (value == null || value.trim().isEmpty()) continue;
+            boolean tried = false;
+            for (String previous : radioAttemptedStreams) {
+                if (sameRadioUrl(previous, value)) {
+                    tried = true;
+                    break;
+                }
+            }
+            if (!tried) return value;
+        }
+        return null;
+    }
+
+    private static boolean sameRadioUrl(String left, String right) {
+        if (left == null || right == null) return false;
+        String a = left.trim();
+        String b = right.trim();
+        while (a.endsWith("/")) a = a.substring(0, a.length() - 1);
+        while (b.endsWith("/")) b = b.substring(0, b.length() - 1);
+        return a.equalsIgnoreCase(b);
+    }
+
+    private void notifyError(Throwable error) {
+        MobileDiagnostics.error("DataPlayer", "player bridge failure", error);
+        diagnostics.onPlaybackError(error);
+        Listener current = listener;
+        if (current != null) current.onPlaybackError(errors.playback(error));
+    }
+
+    private static boolean isTransientForbiddenStream(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String message = current.getMessage();
+            if (message != null && message.trim().startsWith("Response code: 403")) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            if (cause == current) break;
+            current = cause;
+        }
+        return false;
+    }
+
     private void emitSnapshot() {
+        MobilePlaybackEngine engine = activeEngine();
         long position = Math.max(0, getPositionMs());
         long duration = Math.max(0, getDurationMs());
-        long buffered = player == null ? 0 : Math.max(0, player.getBufferedPosition());
+        long buffered = engine == null ? 0 : Math.max(0, engine.getBufferedPositionMs());
+        if (radioPlayback && radioTimeShift.isActive()) {
+            position = radioTimeShift.positionForPlayer(position);
+            duration = radioTimeShift.getWindowDurationMs();
+            buffered = duration;
+        }
         List<MobileTrack> videoTracks = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getVideoFormats(), MobileTrack.Type.VIDEO);
         List<FormatItem> audioFormats = controller == null ? Collections.emptyList()
                 : controller.getAudioFormats();
-        applyPreferredAudio(audioFormats);
+        if (applyLegacyPreferredAudio) applyPreferredAudio(audioFormats);
         List<MobileTrack> audio = trackMapper.map(audioFormats, MobileTrack.Type.AUDIO);
         List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getSubtitleFormats(), MobileTrack.Type.SUBTITLE);
         String id = radioPlayback ? radioMediaId
+                : offlinePlayback ? offlineMediaId
                 : video == null ? null : LegacyMediaMapper.stableId(video);
         MobilePlaybackSnapshot snapshot = new MobilePlaybackSnapshot(id,
                 radioPlayback ? radioTitle
@@ -542,7 +1165,13 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         : video == null ? "" : LegacyMediaMapper.safe(video.getSecondTitleFull()),
                 containsMedia(), isPlaying(), buffering || (!radioPlayback && isLoading()),
                 isPlaybackEnded(),
-                position, duration, buffered, getSpeed(), videoTracks, audio, subtitles);
+                position, duration, buffered, getSpeed(), videoTracks, audio, subtitles,
+                seekBarSegments);
+        diagnostics.onSnapshot(snapshot, getVideoFormat(), getAudioFormat(), getSubtitleFormat(),
+                radioPlayback, radioTimeShift);
+        listenSaveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback,
+                headlessPlaybackAllowed);
+        tripReserveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback);
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
@@ -624,22 +1253,46 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     // PlaybackView / PlayerEngine delegation.
-    @Override public void openSabr(MediaItemFormatInfo info) { if (controller != null) controller.openSabr(info); }
-    @Override public void openDash(MediaItemFormatInfo info) { if (controller != null) controller.openDash(info); }
-    @Override public void openDash(InputStream manifest) { if (controller != null) controller.openDash(manifest); }
-    @Override public void openDashUrl(String url) { if (controller != null) controller.openDashUrl(url); }
-    @Override public void openHlsUrl(String url) { if (controller != null) controller.openHlsUrl(url); }
-    @Override public void openUrlList(List<String> urls) { if (controller != null) controller.openUrlList(urls); }
-    @Override public void openMerged(MediaItemFormatInfo info, String hls) { if (controller != null) controller.openMerged(info, hls); }
-    @Override public void openMerged(InputStream dash, String hls) { if (controller != null) controller.openMerged(dash, hls); }
-    @Override public long getPositionMs() { return controller == null ? 0 : controller.getPositionMs(); }
-    @Override public void setPositionMs(long positionMs) { if (controller != null) controller.setPositionMs(positionMs); }
-    @Override public long getDurationMs() { return controller == null ? 0 : controller.getDurationMs(); }
-    @Override public void setPlayWhenReady(boolean play) { if (controller != null) controller.setPlayWhenReady(play); }
-    @Override public boolean getPlayWhenReady() { return controller != null && controller.getPlayWhenReady(); }
-    @Override public boolean isPlaying() { return controller != null && controller.isPlaying(); }
-    private boolean isPlaybackEnded() { return ended || player != null && player.getPlaybackState() == Player.STATE_ENDED; }
-    @Override public boolean isLoading() { return controller != null && controller.isLoading(); }
+    @Override public void openSabr(MediaItemFormatInfo info) { diagnostics.onSourceKind("sabr"); if (controller != null) controller.openSabr(info); }
+    @Override public void openDash(MediaItemFormatInfo info) { diagnostics.onSource("dash", info == null ? null : info.getDashManifestUrl()); if (controller != null) controller.openDash(info); }
+    @Override public void openDash(InputStream manifest) { diagnostics.onSourceKind("dash-manifest"); if (controller != null) controller.openDash(manifest); }
+    @Override public void openDashUrl(String url) { diagnostics.onSource("dash-url", url); if (controller != null) controller.openDashUrl(url); }
+    @Override public void openHlsUrl(String url) { diagnostics.onSource("hls", url); if (controller != null) controller.openHlsUrl(url); }
+    @Override public void openUrlList(List<String> urls) { diagnostics.onSource("url-list", urls == null || urls.isEmpty() ? null : urls.get(0)); if (controller != null) controller.openUrlList(urls); }
+    @Override public void openMerged(MediaItemFormatInfo info, String hls) { diagnostics.onSource("merged", hls); if (controller != null) controller.openMerged(info, hls); }
+    @Override public void openMerged(InputStream dash, String hls) { diagnostics.onSource("merged", hls); if (controller != null) controller.openMerged(dash, hls); }
+    @Override public long getPositionMs() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine == null ? 0L : engine.getPositionMs();
+    }
+    @Override public void setPositionMs(long positionMs) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null) engine.seekTo(positionMs);
+    }
+    @Override public long getDurationMs() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine == null ? 0L : engine.getDurationMs();
+    }
+    @Override public void setPlayWhenReady(boolean play) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null) engine.setPlayWhenReady(play);
+    }
+    @Override public boolean getPlayWhenReady() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine != null && engine.getPlayWhenReady();
+    }
+    @Override public boolean isPlaying() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine != null && engine.isPlaying();
+    }
+    private boolean isPlaybackEnded() {
+        MobilePlaybackEngine engine = activeEngine();
+        return ended || engine != null && engine.getState() == MobilePlaybackEngine.State.ENDED;
+    }
+    @Override public boolean isLoading() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine != null && engine.isLoading();
+    }
     @Override public List<FormatItem> getVideoFormats() { return controller == null ? Collections.emptyList() : controller.getVideoFormats(); }
     @Override public List<FormatItem> getAudioFormats() { return controller == null ? Collections.emptyList() : controller.getAudioFormats(); }
     @Override public List<FormatItem> getSubtitleFormats() { return controller == null ? Collections.emptyList() : controller.getSubtitleFormats(); }
@@ -647,20 +1300,29 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     @Override public FormatItem getVideoFormat() { return controller == null ? null : controller.getVideoFormat(); }
     @Override public FormatItem getAudioFormat() { return controller == null ? null : controller.getAudioFormat(); }
     @Override public FormatItem getSubtitleFormat() { return controller == null ? null : controller.getSubtitleFormat(); }
-    @Override public boolean isEngineInitialized() { return player != null; }
+    @Override public boolean isEngineInitialized() { return hasActiveEngine(); }
     @Override public void restartEngine() {
+        diagnostics.onEngineRestart();
         Video current = video;
         String currentRadio = radioMediaId;
+        String currentOffline = offlineMediaId;
         long position = getPositionMs();
-        releaseEngineOnly();
+        releaseActiveEngineOnly("restart");
         if (currentRadio != null) prepare(currentRadio, 0L);
+        else if (currentOffline != null) prepare(currentOffline, position);
         else if (current != null) prepare(LegacyMediaMapper.stableId(current), position);
     }
     @Override public void reloadPlayback() {
+        diagnostics.onPlaybackReload();
         if (radioMediaId != null) {
             String current = radioMediaId;
-            releaseEngineOnly();
+            releaseActiveEngineOnly("radio reload");
             prepare(current, 0L);
+        } else if (offlineMediaId != null) {
+            String current = offlineMediaId;
+            long position = getPositionMs();
+            releaseActiveEngineOnly("offline reload");
+            prepare(current, position);
         } else if (presenter != null) {
             presenter.onEngineReleased();
             presenter.onEngineInitialized();
@@ -669,13 +1331,35 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     @Override public void blockEngine(boolean block) { engineBlocked = block; }
     @Override public boolean isEngineBlocked() { return engineBlocked; }
     @Override public boolean isInPIPMode() { Context c = hostContext.get(); return Build.VERSION.SDK_INT >= 24 && c instanceof Activity && ((Activity)c).isInPictureInPictureMode(); }
-    @Override public boolean containsMedia() { return controller != null && controller.containsMedia(); }
-    @Override public void setSpeed(float speed) { if (controller != null) controller.setSpeed(speed); }
-    @Override public float getSpeed() { float value = controller == null ? 1f : controller.getSpeed(); return value <= 0 ? 1f : value; }
-    @Override public void setPitch(float pitch) { if (controller != null) controller.setPitch(pitch); }
-    @Override public float getPitch() { return controller == null ? 1f : controller.getPitch(); }
-    @Override public void setVolume(float volume) { if (controller != null) controller.setVolume(volume); }
-    @Override public float getVolume() { return controller == null ? 1f : controller.getVolume(); }
+    @Override public boolean containsMedia() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine != null && engine.containsMedia();
+    }
+    @Override public void setSpeed(float speed) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null) engine.setSpeed(speed);
+    }
+    @Override public float getSpeed() {
+        MobilePlaybackEngine engine = activeEngine();
+        float value = engine == null ? 1f : engine.getSpeed();
+        return value <= 0f ? 1f : value;
+    }
+    @Override public void setPitch(float pitch) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null) engine.setPitch(pitch);
+    }
+    @Override public float getPitch() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine == null ? 1f : engine.getPitch();
+    }
+    @Override public void setVolume(float volume) {
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null) engine.setVolume(volume);
+    }
+    @Override public float getVolume() {
+        MobilePlaybackEngine engine = activeEngine();
+        return engine == null ? 1f : engine.getVolume();
+    }
     @Override public void setResizeMode(int mode) { resizeMode = mode; com.google.android.exoplayer2.ui.PlayerView v = surface.get(); if (v != null) v.setResizeMode(mode); }
     @Override public int getResizeMode() { return resizeMode; }
     @Override public void setZoomPercents(int percents) { }
@@ -722,7 +1406,23 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     @Override public void loadStoryboard() { }
     @Override public void setTitle(String title) { }
     @Override public void showProgressBar(boolean show) { buffering = show; emitSnapshot(); }
-    @Override public void setSeekBarSegments(List<SeekBarSegment> segments) { }
+    @Override public void setSeekBarSegments(List<SeekBarSegment> segments) {
+        if (segments == null || segments.isEmpty()) {
+            seekBarSegments = Collections.emptyList();
+        } else {
+            List<SeekBarSegment> copy = new ArrayList<>(segments.size());
+            for (SeekBarSegment source : segments) {
+                if (source == null) continue;
+                SeekBarSegment item = new SeekBarSegment();
+                item.startProgress = source.startProgress;
+                item.endProgress = source.endProgress;
+                item.color = source.color;
+                copy.add(item);
+            }
+            seekBarSegments = copy.isEmpty() ? Collections.emptyList() : copy;
+        }
+        emitSnapshot();
+    }
     @Override public void updateEndingTime() { }
     @Override public void setChatReceiver(ChatReceiver receiver) { }
     @Override public void setQualityInfo(String info) { qualityInfo = info == null ? "" : info; }
@@ -736,5 +1436,74 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (initializer != null) initializer.release();
         if (controller != null) controller.release();
         player = null; controller = null; initializer = null; trackSelector = null; initialized = false;
+    }
+
+    /** Adapter that lets transport/state code treat the bundled ExoPlayer 2 path like Media3. */
+    private final class LegacyEngineBridge implements MobilePlaybackEngine {
+        @Override public String getEngineName() { return "legacy ExoPlayer 2"; }
+
+        @Override public boolean isInitialized() { return player != null && controller != null; }
+
+        @Override public void open(String uri, long startPositionMs, boolean playWhenReady) {
+            if (controller == null) throw new IllegalStateException("Legacy engine is not initialized");
+            controller.openUrlList(Collections.singletonList(uri));
+            if (startPositionMs > 0L) controller.setPositionMs(startPositionMs);
+            controller.setPlayWhenReady(playWhenReady);
+        }
+
+        @Override public void setPlayWhenReady(boolean value) {
+            if (controller != null) controller.setPlayWhenReady(value);
+        }
+
+        @Override public boolean getPlayWhenReady() {
+            return controller != null && controller.getPlayWhenReady();
+        }
+
+        @Override public boolean isPlaying() {
+            return controller != null && controller.isPlaying();
+        }
+
+        @Override public boolean isLoading() {
+            return controller != null && controller.isLoading();
+        }
+
+        @Override public boolean containsMedia() {
+            return controller != null && controller.containsMedia();
+        }
+
+        @Override public State getState() {
+            if (player == null) return State.IDLE;
+            switch (player.getPlaybackState()) {
+                case Player.STATE_BUFFERING: return State.BUFFERING;
+                case Player.STATE_READY: return State.READY;
+                case Player.STATE_ENDED: return State.ENDED;
+                case Player.STATE_IDLE:
+                default: return State.IDLE;
+            }
+        }
+
+        @Override public long getPositionMs() {
+            return controller == null ? 0L : Math.max(0L, controller.getPositionMs());
+        }
+
+        @Override public long getDurationMs() {
+            return controller == null ? 0L : Math.max(0L, controller.getDurationMs());
+        }
+
+        @Override public long getBufferedPositionMs() {
+            return player == null ? 0L : Math.max(0L, player.getBufferedPosition());
+        }
+
+        @Override public void seekTo(long positionMs) {
+            if (controller != null) controller.setPositionMs(Math.max(0L, positionMs));
+        }
+
+        @Override public void setSpeed(float speed) { if (controller != null) controller.setSpeed(speed); }
+        @Override public float getSpeed() { return controller == null ? 1f : controller.getSpeed(); }
+        @Override public void setPitch(float pitch) { if (controller != null) controller.setPitch(pitch); }
+        @Override public float getPitch() { return controller == null ? 1f : controller.getPitch(); }
+        @Override public void setVolume(float volume) { if (controller != null) controller.setVolume(volume); }
+        @Override public float getVolume() { return controller == null ? 1f : controller.getVolume(); }
+        @Override public void release() { releaseEngineOnly(); }
     }
 }

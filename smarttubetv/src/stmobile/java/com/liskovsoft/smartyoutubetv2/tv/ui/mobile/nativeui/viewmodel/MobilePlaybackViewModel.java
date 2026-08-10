@@ -50,6 +50,7 @@ public final class MobilePlaybackViewModel extends ViewModel {
     }
 
     public void play() { repository.play(); }
+    public void pause() { repository.pause(); }
     public void playNext() { repository.playNext(); }
     public void playPrevious() { repository.playPrevious(); }
 

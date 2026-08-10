@@ -6,6 +6,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeDependencies;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileDiagnosticsStore;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileFeatureFlags;
 import com.liskovsoft.smartyoutubetv2.common.app.models.data.Video;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.PlaybackPresenter;
 
@@ -23,21 +25,34 @@ public final class SmartTubeMobileNativeProvider implements MobileNativeDependen
 
     public static SmartTubeMobileNativeProvider create(Context context) {
         if (context == null) throw new IllegalArgumentException("context == null");
-        return new SmartTubeMobileNativeProvider(context.getApplicationContext());
+        return new SmartTubeMobileNativeProvider(context.getApplicationContext(), true);
     }
 
-    private SmartTubeMobileNativeProvider(Context context) {
+    /** Stable Android Auto data path: mobile-only card enhancements are intentionally excluded. */
+    public static SmartTubeMobileNativeProvider createForAutomotive(Context context) {
+        if (context == null) throw new IllegalArgumentException("context == null");
+        return new SmartTubeMobileNativeProvider(context.getApplicationContext(), false);
+    }
+
+    private SmartTubeMobileNativeProvider(Context context, boolean enableMobileListEnhancements) {
         ServiceManager service = YouTubeServiceManager.instance();
         if (service == null) throw new IllegalStateException("YouTubeServiceManager returned null");
-        MobileDiagnostics.info("DataProvider", "Installing SmartTube mobile data adapters");
         applicationContext = context.getApplicationContext();
+        MobileDiagnosticsStore diagnostics = MobileDiagnosticsStore.get(applicationContext);
+        diagnostics.syncCaptureFlag();
+        MobileFeatureFlags featureFlags = new MobileFeatureFlags(applicationContext);
+        MobileDiagnostics.info("DataProvider", "Installing SmartTube mobile data adapters");
         index = new LegacyMediaIndex();
         errors = new LegacyErrorMapper();
-        LegacyMediaMapper mapper = new LegacyMediaMapper(index);
+        MobileMetadataEnhancer metadataEnhancer = enableMobileListEnhancements
+                ? new MobileMetadataEnhancer(applicationContext) : null;
+        LegacyMediaMapper mapper = new LegacyMediaMapper(index, metadataEnhancer);
         browse = new LegacyBrowseRepository(service.getContentService(),
-                service.getNotificationsService(), index, mapper, errors);
-        channel = new LegacyChannelRepository(service.getContentService(), index, mapper, errors);
-        search = new LegacySearchRepository(service.getContentService(), mapper, errors);
+                service.getNotificationsService(), index, mapper, errors, metadataEnhancer);
+        channel = new LegacyChannelRepository(service.getContentService(), index, mapper, errors,
+                metadataEnhancer, featureFlags, diagnostics);
+        search = new LegacySearchRepository(service.getContentService(), mapper, errors,
+                metadataEnhancer, featureFlags, diagnostics);
         settings = new LegacySettingsRepository(applicationContext, errors);
     }
 

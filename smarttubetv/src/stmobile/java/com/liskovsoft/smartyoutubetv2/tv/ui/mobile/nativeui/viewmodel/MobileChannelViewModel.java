@@ -13,6 +13,7 @@ public final class MobileChannelViewModel extends ViewModel {
     private final MobileRequestSlot slot = new MobileRequestSlot();
     private final MutableLiveData<MobileLoadState<MobileChannelPayload>> state =
             new MutableLiveData<>(MobileLoadState.<MobileChannelPayload>idle());
+    private boolean loadingMore;
 
     public MobileChannelViewModel(MobileChannelRepository repository, String channelId) {
         this.repository = repository;
@@ -22,6 +23,7 @@ public final class MobileChannelViewModel extends ViewModel {
     public LiveData<MobileLoadState<MobileChannelPayload>> getState() { return state; }
 
     public void load() {
+        loadingMore = false;
         MobileChannelPayload previous = state.getValue() == null ? null : state.getValue().getData();
         state.setValue(MobileLoadState.loading(previous, false));
         final long token = slot.begin();
@@ -33,6 +35,27 @@ public final class MobileChannelViewModel extends ViewModel {
                 if (slot.isCurrent(token)) state.postValue(MobileLoadState.error(previous, error));
             }
         });
+        slot.attach(token, request);
+    }
+
+    public void loadMore() {
+        MobileLoadState<MobileChannelPayload> current = state.getValue();
+        MobileChannelPayload previous = current == null ? null : current.getData();
+        if (loadingMore || previous == null || !previous.hasMore()) return;
+        loadingMore = true;
+        final long token = slot.begin();
+        MobileRequest request = repository.loadMoreChannel(channelId,
+                new MobileResultCallback<MobileChannelPayload>() {
+                    @Override public void onSuccess(MobileChannelPayload value) {
+                        loadingMore = false;
+                        if (slot.isCurrent(token)) state.postValue(MobileLoadState.content(value));
+                    }
+
+                    @Override public void onError(MobileError error) {
+                        loadingMore = false;
+                        if (slot.isCurrent(token)) state.postValue(MobileLoadState.error(previous, error));
+                    }
+                });
         slot.attach(token, request);
     }
 

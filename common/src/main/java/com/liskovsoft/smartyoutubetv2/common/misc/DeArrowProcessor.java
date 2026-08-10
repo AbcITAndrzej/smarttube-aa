@@ -77,10 +77,10 @@ public class DeArrowProcessor implements OnDataChange, BrowseProcessor {
         List<String> result = new ArrayList<>();
 
         for (Video video : videoGroup.getVideos()) {
-            if (video.deArrowProcessed) {
+            if (video.deArrowBrandingProcessed) {
                 continue;
             }
-            video.deArrowProcessed = true;
+            video.deArrowBrandingProcessed = true;
             result.add(video.videoId);
         }
 

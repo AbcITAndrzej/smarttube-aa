@@ -1,0 +1,8 @@
+SmartTube AA/mobile feature package 2026-08-08
+Base archive: smarttube-aa-fixed-2026-08-08.zip
+Base archive SHA-256: 864c0627b352475e9a3ad293d3d47d2d178d868bfa9e5e69e3f3892bbef05b48
+Feature patch: FEATURES_2026-08-08.patch
+Feature patch SHA-256: 452e3afc5e298ba4e1848ef74b383a40c2d830336b9a12b60aba718824cfb5ec
+Primary guide: START_HERE_2026-08-08.md
+Detailed guide: FEATURES_INTEGRATION_2026-08-08.md
+Validation: VALIDATION_2026-08-08.md

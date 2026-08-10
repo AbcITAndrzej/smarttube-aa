@@ -28,11 +28,12 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlayback
 import java.lang.ref.WeakReference;
 
 /**
- * Owns the mobile MediaSession, Audio Focus and MediaStyle notification.
+ * Owns the mobile MediaSessionCompat surface and MediaStyle notification.
  *
- * The class intentionally uses MediaSessionCompat because SmartTube currently ships ExoPlayer 2
- * and androidx.media. Moving this source set to Media3 should be done together with the player
- * engine migration instead of running two independent session stacks.
+ * <p>Stage 11 starts the transport-engine migration to Media3 for direct Radio/Offline audio, but
+ * deliberately keeps this already-stable session stack unchanged. The active playback engine owns
+ * audio focus; a Media3 MediaSession/MediaController migration is a later, separately reversible
+ * wave so the app never runs two competing public sessions.</p>
  */
 public final class MobileMediaSessionManager {
     public interface PlaybackControl {
@@ -147,9 +148,9 @@ public final class MobileMediaSessionManager {
     }
 
     /**
-     * Direct streams are opened by the existing ExoPlayer controller, whose own audio-focus
-     * manager must remain the single owner. The MediaSession still exposes metadata, transport
-     * controls and the notification, but does not request a second focus grant for the process.
+     * Direct playback engines (legacy ExoPlayer2 or Stage 11 Media3) own audio focus themselves.
+     * MediaSessionCompat still exposes metadata, transport controls and the notification, but must
+     * not request a second focus grant for the same process.
      */
     public void setPlayerHandlesAudioFocus(boolean value) {
         runOnMain(() -> {

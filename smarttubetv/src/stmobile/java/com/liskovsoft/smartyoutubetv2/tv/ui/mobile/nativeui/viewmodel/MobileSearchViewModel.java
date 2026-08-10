@@ -18,6 +18,7 @@ public final class MobileSearchViewModel extends ViewModel {
     private final MutableLiveData<List<String>> suggestions =
             new MutableLiveData<>(Collections.<String>emptyList());
     private String query;
+    private boolean loadingMore;
 
     public MobileSearchViewModel(MobileSearchRepository repository, String initialQuery) {
         this.repository = repository;
@@ -51,6 +52,7 @@ public final class MobileSearchViewModel extends ViewModel {
     public void search(String value) {
         query = value == null ? "" : value.trim();
         if (query.isEmpty()) return;
+        loadingMore = false;
         suggestionSlot.clear();
         suggestions.setValue(Collections.<String>emptyList());
         MobileSearchPayload previous = state.getValue() == null ? null : state.getValue().getData();
@@ -64,6 +66,29 @@ public final class MobileSearchViewModel extends ViewModel {
                 if (searchSlot.isCurrent(token)) state.postValue(MobileLoadState.error(previous, error));
             }
         });
+        searchSlot.attach(token, request);
+    }
+
+    public void loadMore() {
+        MobileLoadState<MobileSearchPayload> current = state.getValue();
+        MobileSearchPayload previous = current == null ? null : current.getData();
+        if (loadingMore || previous == null || !previous.hasMore() || query.isEmpty()) return;
+        loadingMore = true;
+        final long token = searchSlot.begin();
+        MobileRequest request = repository.loadMoreSearch(query,
+                new MobileResultCallback<MobileSearchPayload>() {
+                    @Override public void onSuccess(MobileSearchPayload value) {
+                        loadingMore = false;
+                        if (searchSlot.isCurrent(token)) state.postValue(MobileLoadState.content(value));
+                    }
+
+                    @Override public void onError(MobileError error) {
+                        loadingMore = false;
+                        if (searchSlot.isCurrent(token)) {
+                            state.postValue(MobileLoadState.error(previous, error));
+                        }
+                    }
+                });
         searchSlot.attach(token, request);
     }
 

@@ -94,7 +94,10 @@ public final class Video {
     public String dislikeCount;
     public String subscriberCount;
     public float volume = 1.0f;
-    public boolean deArrowProcessed;
+    /** @deprecated kept for serialized/backward compatibility; use the dedicated flags below. */
+    @Deprecated public boolean deArrowProcessed;
+    public boolean deArrowBrandingProcessed;
+    public boolean unlocalizedTitleProcessed;
     public boolean isLiveEnd;
     public boolean isShuffled;
     public String searchQuery;

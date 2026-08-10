@@ -76,6 +76,26 @@ public final class MobileFragmentNavigator implements MobileNavigator {
         showDetail(AndroidAutoSettingsFragment.newInstance());
     }
 
+    @Override public void openPlayerSettings() {
+        showDetail(PlayerSettingsFragment.newInstance());
+    }
+
+    @Override public void openDiagnostics() {
+        showDetail(DiagnosticsFragment.newInstance());
+    }
+
+    @Override public void openOfflineSettings() {
+        showDetail(OfflineSettingsFragment.newInstance());
+    }
+
+    @Override public void openOfflinePlaylists() {
+        showDetail(OfflinePlaylistsFragment.newInstance());
+    }
+
+    @Override public void openOfflineListenSaved() {
+        showDetail(OfflineListenSavedFragment.newInstance());
+    }
+
     @Override public void openRadioSettings() {
         showDetail(RadioSettingsFragment.newInstance());
     }
@@ -87,6 +107,12 @@ public final class MobileFragmentNavigator implements MobileNavigator {
 
     @Override public void openPlayback(String mediaId, long startPositionMs) {
         showDetail(MobilePlaybackFragment.newInstance(mediaId, startPositionMs));
+    }
+
+    @Override public void openPlaybackQueue(String mediaId, long startPositionMs,
+                                            List<String> playbackQueue) {
+        showDetail(MobilePlaybackFragment.newQueueInstance(
+                mediaId, startPositionMs, playbackQueue));
     }
 
     @Override public void openShortPlayback(String mediaId, long startPositionMs,

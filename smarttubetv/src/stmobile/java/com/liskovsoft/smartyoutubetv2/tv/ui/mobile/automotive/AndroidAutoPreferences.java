@@ -15,7 +15,9 @@ public final class AndroidAutoPreferences {
     public static final String PREF_FILE = "smarttube_auto_settings";
     public static final String KEY_PLAYLIST_ORDER = "playlist_order";
     public static final String KEY_HIDDEN_PLAYLISTS = "hidden_playlists";
-    public static final String KEY_EXPERIMENTAL_DRIVING_VIDEO = "experimental_driving_video";
+    public static final String KEY_EXPERIMENTAL_PARKED_VIDEO = "experimental_parked_video";
+    public static final String KEY_OFFLINE_LIBRARY = "offline_library";
+    public static final String KEY_OFFLINE_AUTO_FALLBACK = "offline_auto_fallback";
     private static final String KEY_DEVELOPER_CONFIRMED = "developer_mode_confirmed";
     private static final String KEY_UNKNOWN_SOURCES_CONFIRMED = "unknown_sources_confirmed";
     private static final String ORDER_SEPARATOR = "\u001f";
@@ -43,13 +45,35 @@ public final class AndroidAutoPreferences {
         preferences.edit().putBoolean(KEY_UNKNOWN_SOURCES_CONFIRMED, confirmed).apply();
     }
 
-    /** Off by default: normal Android Auto playback remains audio-only. */
-    public boolean isExperimentalDrivingVideoEnabled() {
-        return preferences.getBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, false);
+
+    /** Stage 9: show the local Offline library in Android Auto. Safe and enabled by default. */
+    public boolean isOfflineLibraryEnabled() {
+        return preferences.getBoolean(KEY_OFFLINE_LIBRARY, true);
     }
 
-    public void setExperimentalDrivingVideoEnabled(boolean enabled) {
-        preferences.edit().putBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, enabled).apply();
+    public void setOfflineLibraryEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_OFFLINE_LIBRARY, enabled).apply();
+    }
+
+    /**
+     * Stage 9: when the car loses connectivity, prefer a complete local audio copy of the same
+     * media item instead of failing the queue. This never downloads anything by itself.
+     */
+    public boolean isOfflineAutoFallbackEnabled() {
+        return preferences.getBoolean(KEY_OFFLINE_AUTO_FALLBACK, true);
+    }
+
+    public void setOfflineAutoFallbackEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_OFFLINE_AUTO_FALLBACK, enabled).apply();
+    }
+
+    /** Off by default and intentionally not migrated from the older driving-video experiment. */
+    public boolean isExperimentalParkedVideoEnabled() {
+        return preferences.getBoolean(KEY_EXPERIMENTAL_PARKED_VIDEO, false);
+    }
+
+    public void setExperimentalParkedVideoEnabled(boolean enabled) {
+        preferences.edit().putBoolean(KEY_EXPERIMENTAL_PARKED_VIDEO, enabled).apply();
     }
 
     public List<String> getPlaylistOrder() {
@@ -113,6 +137,10 @@ public final class AndroidAutoPreferences {
 
     public static boolean isPlaylistLayoutKey(String key) {
         return KEY_PLAYLIST_ORDER.equals(key) || KEY_HIDDEN_PLAYLISTS.equals(key);
+    }
+
+    public static boolean isOfflinePlaybackKey(String key) {
+        return KEY_OFFLINE_LIBRARY.equals(key) || KEY_OFFLINE_AUTO_FALLBACK.equals(key);
     }
 
     public static String playlistKey(MobileMediaItem item) {

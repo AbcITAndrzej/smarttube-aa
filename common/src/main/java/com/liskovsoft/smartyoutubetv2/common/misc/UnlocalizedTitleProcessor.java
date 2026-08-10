@@ -80,10 +80,10 @@ public class UnlocalizedTitleProcessor implements OnDataChange, BrowseProcessor 
         List<String> result = new ArrayList<>();
 
         for (Video video : videoGroup.getVideos()) {
-            if (video.deArrowProcessed) {
+            if (video.unlocalizedTitleProcessed) {
                 continue;
             }
-            video.deArrowProcessed = true;
+            video.unlocalizedTitleProcessed = true;
             result.add(video.videoId);
         }
 

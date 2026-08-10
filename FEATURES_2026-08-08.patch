@@ -1,0 +1,3364 @@
+diff --git a/AABROWSER_CLEAN_ROOM_NOTES.md b/AABROWSER_CLEAN_ROOM_NOTES.md
+new file mode 100644
+index 0000000..b2f94f5
+--- /dev/null
++++ b/AABROWSER_CLEAN_ROOM_NOTES.md
+@@ -0,0 +1,33 @@
++# AABrowser – notatki clean-room
++
++Źródło referencyjne: https://github.com/kododake/AABrowser
++
++## Zasada użyta w tym pakiecie
++
++Nie kopiowano plików Java/Kotlin/XML ani fragmentów implementacji AABrowser. Integracja samochodowego wideo została napisana niezależnie na bazie publicznie widocznego zachowania platformy i oficjalnej koncepcji parked apps.
++
++Powody:
++
++1. stabilna usługa Android Auto audio/radio w SmartTube ma pozostać nienaruszona,
++2. AABrowser stosuje deklaracje manifestu, których nie chcemy przenosić jako obejście ograniczeń hosta,
++3. repozytorium AABrowser jest udostępniane na GPLv3, więc bezpośrednie kopiowanie kodu do drzewa o innej licencji byłoby niepotrzebnym ryzykiem licencyjnym.
++
++## Co zrobiono zamiast tego
++
++- osobna `ExperimentalCarVideoActivity`,
++- `android:enabled="false"` domyślnie,
++- jawny opt-in w ekranie ustawień Android Auto,
++- `PackageManager` włącza/wyłącza tylko eksperymentalny komponent,
++- deklaracja `CAR_LAUNCHER`,
++- brak `appCategory="game"`, `NAVIGATION`, `APP_MAPS`, `distractionOptimized=true`,
++- stabilny `SmartTubeAutoMusicService` pozostaje osobnym komponentem i nie zależy od eksperymentu.
++
++## Linki kontrolne
++
++- AABrowser manifest: https://github.com/kododake/AABrowser/blob/main/app/src/main/AndroidManifest.xml
++- AABrowser LICENSE: https://github.com/kododake/AABrowser/blob/main/LICENSE
++- Android parked apps: https://developer.android.com/training/cars/parked/auto
++
++## Stan platformy przy przygotowaniu paczki
++
++Oficjalna dokumentacja Android Auto z 24.06.2026 opisuje `CAR_LAUNCHER` dla parked apps, ale jednocześnie zaznacza, że **obecnie jedyną wspieraną kategorią parked apps w Android Auto są gry**. Dlatego eksperymentalna aktywność wideo w tej paczce jest przygotowana architektonicznie i izolowana od stabilnego AA, lecz na produkcyjnym Android Auto może nie pojawić się w launcherze do czasu oficjalnego udostępnienia kategorii wideo. Nie obchodzimy tego przez deklarowanie aplikacji jako gry/nawigacji.
+diff --git a/FEATURES_INTEGRATION_2026-08-08.md b/FEATURES_INTEGRATION_2026-08-08.md
+new file mode 100644
+index 0000000..ed5de53
+--- /dev/null
++++ b/FEATURES_INTEGRATION_2026-08-08.md
+@@ -0,0 +1,301 @@
++# SmartTube AA / mobile – pakiet funkcji 2026-08-08
++
++Ten katalog jest pełnym drzewem źródłowym opartym na `smarttube-aa-fixed-2026-08-08` i zawiera kolejną warstwę zmian zaakceptowanych do wdrożenia:
++
++1. osobna sekcja **Ustawienia → Odtwarzacz** dla nowego mobilnego playera,
++2. preferowany język audio i napisów bez automatycznego wymuszania ścieżki,
++3. nowoczesny Material Bottom Sheet do wyboru jakości / audio / napisów,
++4. wyszukiwarka i wspólne Ulubione dla Radia,
++5. eksperymentalny time-shift Radia (telefon + Android Auto),
++6. odizolowana eksperymentalna aktywność wideo dla Android Auto / parked apps,
++7. testy jednostkowe najważniejszych nowych reguł.
++
++Poprzednie poprawki z `FIXES_2026-08-08.md` pozostają w drzewie projektu.
++
++---
++
++## 1. Ustawienia → Odtwarzacz
++
++Dodano oddzielny ekran `PlayerSettingsFragment` oraz osobny magazyn ustawień `MobilePlayerPreferences` (`smarttube_mobile_player`).
++
++Najważniejsza zasada architektoniczna: **Android Auto nie czyta `MobilePlayerPreferences`**. Stabilna usługa `SmartTubeAutoMusicService` nadal korzysta z własnej konfiguracji i własnego profilu `LegacyMobilePlaybackRepository`.
++
++Konfigurowalne elementy mobilnego playera:
++
++- automatyczne ukrywanie kontrolek,
++- pinch-to-zoom,
++- double tap ±10 s,
++- poziomy swipe ±10 s,
++- poprzedni / następny,
++- szybkie opcje audio/napisów,
++- przycisk napisów,
++- przycisk lektora/audio,
++- jakość,
++- prędkość,
++- dopasowanie obrazu,
++- PiP,
++- pełny ekran,
++- „więcej opcji”.
++
++Play/Pause, Wstecz i oś czasu są celowo zawsze dostępne, żeby użytkownik nie mógł skonfigurować nieobsługiwalnego odtwarzacza.
++
++### Pliki
++
++- `smarttubetv/src/stmobile/java/.../nativeui/player/MobilePlayerPreferences.java`
++- `smarttubetv/src/stmobile/java/.../nativeui/fragment/PlayerSettingsFragment.java`
++- `smarttubetv/src/stmobile/res/layout/mobile_player_settings_fragment.xml`
++- zmiany w `MobileSettingsFragment`, `MobileNavigator`, `MobileFragmentNavigator`, `mobile_native_fragment_settings.xml`.
++
++---
++
++## 2. Domyślny lektor i domyślne napisy
++
++Nowe ustawienia zapisują jedynie **preferencję UI**. Nie są wpisywane do klasycznych `PlayerData`, dlatego nie tworzą nowej automatycznej zmiany ścieżki przy starcie filmu.
++
++Po otwarciu listy audio/napisów:
++
++- preferowany język dostaje znacznik `★ Domyślna`,
++- aktualnie odtwarzana ścieżka dostaje `✓ Aktywna`,
++- jeśli preferowany język istnieje, lista od razu przewija się do tej pozycji,
++- dopiero kliknięcie użytkownika wykonuje `selectAudioTrack()` / `selectSubtitleTrack()`.
++
++Dla mobilnej instancji `LegacyMobilePlaybackRepository` wyłączono dodatkową legacy-logikę `applyPreferredAudio()`. Dla Android Auto pozostawiono dotychczasowe zachowanie, żeby nowa funkcja nie zmieniała stabilnej integracji AA.
++
++### Nowy picker ścieżek
++
++Surowy `AlertDialog.setSingleChoiceItems()` w głównym playerze został zastąpiony Material `BottomSheetDialog` + `RecyclerView` + karty ścieżek. Picker jest wspólny dla jakości, audio i napisów, ale znaczniki języka są używane tylko dla audio/napisów.
++
++### Pliki
++
++- `nativeui/player/PlayerLanguageCatalog.java`
++- `nativeui/player/PreferredTrackResolver.java`
++- `nativeui/player/TrackPickerBottomSheet.java`
++- `res/layout/mobile_track_picker_sheet.xml`
++- `res/layout/mobile_track_picker_row.xml`
++- `res/drawable/mobile_bottom_sheet_handle.xml`
++- zmiany w `MobilePlaybackFragment.java` i `LegacyMobilePlaybackRepository.java`.
++
++---
++
++## 3. Radio – wyszukiwanie i Ulubione
++
++Ulubione istniały już w `RadioStationRepository`; zostały zachowane jako jedno źródło prawdy dla telefonu i Android Auto. Repozytorium emituje zmianę katalogu, a AA odświeża odpowiednie węzły MediaBrowser po zmianie ulubionej stacji.
++
++Dodano wyszukiwanie lokalne po aktualnie zsynchronizowanym katalogu:
++
++- nazwie stacji,
++- kraju,
++- kodzie kraju,
++- kodeku,
++- tagach.
++
++Wyszukiwanie działa offline na zapisanym cache i nie wykonuje requestu sieciowego przy każdym znaku.
++
++**Uwaga:** katalog pozostaje celowo ograniczony do 200 globalnych, działających, najpopularniejszych stacji pobieranych przez obecny endpoint Radio Browser. Nie wysyłamy dziesiątek tysięcy rekordów jednorazowo do telefonu/MediaBrowser AA. Jeżeli w kolejnym etapie ma być pełny katalog, najlepiej dodać paginację i foldery krajów zamiast usuwania limitu.
++
++### Pliki
++
++- zmiany w `RadioStationRepository.java`,
++- zmiany w `RadioSettingsFragment.java`,
++- zmiany w `mobile_radio_settings_fragment.xml`.
++
++---
++
++## 4. Radio – Time-shift / DVR
++
++Dodano eksperymentalny, **wyłącznie radiowy** bufor kroczący. VOD nie korzysta z tego kodu.
++
++### Architektura
++
++Dla progresywnych strumieni MP3/AAC/OGG:
++
++```text
++Internetowa stacja
++      ↓
++RadioDvrProxy
++      ↓
++24 MB maks. / 1, 3 lub 5 minut
++      ↓
++localhost 127.0.0.1:<losowy_port>/radio
++      ↓
++LegacyMobilePlaybackRepository / ExoPlayer
++```
++
++`RadioDvrProxy` utrzymuje bufor w RAM w małych fragmentach. Na seek otwierany jest nowy lokalny URL zaczynający się od fragmentu najbliższego żądanej pozycji. Gdy odtwarzacz dochodzi do końca zachowanego materiału, proxy dalej „tailuje” nowe dane ze stacji.
++
++Konfiguracja w ekranie Radio:
++
++- Time-shift włącz/wyłącz,
++- 1 min,
++- 3 min (domyślnie),
++- 5 min.
++
++Dodatkowe zabezpieczenia:
++
++- limit pamięci 24 MB,
++- brak wpływu na VOD,
++- fail-open: jeżeli DVR nie zadziała, repozytorium przełącza się na bezpośredni URL stacji,
++- HLS (`m3u8` / MPEGURL) nie jest przepuszczany przez własny proxy; pozostaje natywnym live streamem ExoPlayera. Jeżeli HLS udostępnia natywne okno seek, stary player może je wykorzystać, ale własny ring-buffer go nie emuluje.
++
++### Telefon
++
++Mobilny ekran radia wykorzystuje istniejący `SeekBar` jako okno kroczące. Dodano przycisk `LIVE`, który wraca na aktualny koniec bufora.
++
++### Android Auto
++
++`SmartTubeAutoMusicService` nadal używa stabilnego MediaSession/MediaBrowser, ale dla pozycji radiowej:
++
++- `ACTION_SEEK_TO` kierowany jest bezpośrednio do radiowego DVR,
++- `seekTo(0)` oznacza początek bieżącego bufora, a nie „poprzedni utwór”,
++- po wyborze stacji nie jest wykonywany legacy `seekTo(0)`, bo stacja ma zacząć na live edge,
++- rolling duration nie jest traktowany jako koniec utworu, więc nie uruchamia Auto Next,
++- publiczna długość metadata jest kwantowana co 5 s, żeby nie przebudowywać karty AA przy każdym ticku.
++
++### Znane ograniczenia eksperymentalnego DVR
++
++1. Progresywny stream może zacząć się w środku ramki MP3/AAC. ExoPlayer zwykle potrafi ponownie zsynchronizować extractor, ale nie każda stacja zachowa się poprawnie.
++2. Niektóre serwery wymagają własnych nagłówków/tokenów lub zwracają playlistę mimo URL wyglądającego jak zwykły stream. W takim przypadku działa fail-open do bezpośredniego playbacku.
++3. Estymacja czasu wykorzystuje bitrate stacji z katalogu. Niepoprawny bitrate oznacza nieidealne wskazanie czasu, ale nie powinien uszkodzić samego audio.
++4. Bufor jest w RAM i znika po zmianie stacji, zwolnieniu playera lub zakończeniu procesu.
++
++### Pliki
++
++- `nativeui/radio/RadioPreferences.java`
++- `nativeui/radio/RadioTimeShiftController.java`
++- `nativeui/radio/RadioDvrProxy.java`
++- zmiany w `LegacyMobilePlaybackRepository.java`,
++- zmiany w `SmartTubeAutoMusicService.java`,
++- zmiany w playerze i ekranie ustawień Radia.
++
++---
++
++## 5. Android Auto – eksperymentalne wideo
++
++Wdrożenie jest **clean-room** i nie kopiuje klas/kodu AABrowser.
++
++Założenia bezpieczeństwa zaakceptowanego planu:
++
++- stabilny `SmartTubeAutoMusicService` pozostaje oddzielnym MediaBrowserService,
++- eksperymentalne wideo jest osobną `ExperimentalCarVideoActivity`,
++- aktywność jest `android:enabled="false"` w manifeście,
++- użytkownik musi jawnie włączyć ją w Ustawienia → Android Auto,
++- przełącznik tylko włącza/wyłącza komponent przez `PackageManager`, bez ubijania procesu,
++- aktywność używa kategorii `android.intent.category.CAR_LAUNCHER`,
++- **nie** deklarujemy fałszywego `appCategory="game"`, `NAVIGATION`, `APP_MAPS` ani `distractionOptimized=true`,
++- aktywność używa istniejącego mobilnego UI/playera i nie współdzieli publicznej MediaSession stabilnego AA audio.
++
++Kod sprawdza także diagnostycznie, czy aktywność jest wyświetlana na innym niż domyślny display, ale nie traktuje tego jako obejścia platformy.
++
++### Ważne ograniczenie platformowe
++
++Ta implementacja jest przygotowana na legalny/obsługiwany mechanizm parked-app, ale **nie próbuje wymuszać widoczności aplikacji w wersjach Android Auto, które nie udostępniają kategorii wideo**. To zamierzone. Jeżeli po włączeniu eksperymentu aktywność nie pojawi się w launcherze samochodu, nie oznacza to regresji stabilnego AA – host po prostu nie udostępnił tego typu parked activity.
++
++### AABrowser – dlaczego nie skopiowano implementacji 1:1
++
++Repozytorium referencyjne:
++
++- https://github.com/kododake/AABrowser
++- manifest: https://github.com/kododake/AABrowser/blob/main/app/src/main/AndroidManifest.xml
++- licencja: https://github.com/kododake/AABrowser/blob/main/LICENSE
++
++AABrowser wykorzystuje klasyfikacje/ustawienia, których nie chcemy przenosić do stabilnej aplikacji, a jego kod jest na GPLv3. Dlatego w tym pakiecie wykorzystano tylko ogólną ideę oddzielnej powierzchni samochodowej i napisano niezależny kod.
++
++Oficjalny punkt odniesienia do parked apps:
++
++- https://developer.android.com/training/cars/parked/auto
++
++### Pliki
++
++- `automotive/ExperimentalCarVideoActivity.java`
++- `automotive/ExperimentalCarVideoGate.java`
++- zmiany w `AndroidAutoPreferences.java`,
++- zmiany w `AndroidAutoSettingsFragment.java`,
++- zmiany w `MobileNativeActivity.java`,
++- zmiany w `src/stmobile/AndroidManifest.xml`,
++- zmiany w `mobile_android_auto_settings_fragment.xml`.
++
++---
++
++## 6. Testy dodane do projektu
++
++Dodano:
++
++- `PreferredTrackResolverTest` – sprawdza preferowany język, język regionalny i `system`,
++- `RadioPreferencesTest` – sprawdza domyślne 3 min oraz normalizację 1/3/5 min.
++
++Istniejące testy `testStmobile` pozostają bez zmian.
++
++---
++
++## 7. Kompilacja po Twojej stronie
++
++Projekt ma flavor `stmobile`. Najbardziej użyteczne komendy:
++
++```bash
++./gradlew :smarttubetv:testStmobileDebugUnitTest
++./gradlew :smarttubetv:assembleStmobileDebug
++```
++
++Dla release użyj istniejącej konfiguracji podpisu projektu, np. odpowiedniego zadania `assembleStmobileRelease`.
++
++W środowisku, w którym przygotowano tę paczkę, nie ma Android SDK ani dostępnej lokalnie dystrybucji Gradle 7.5; wrapper nie może pobrać jej z internetu. Z tego powodu **nie deklaruję pełnego builda jako wykonanego**. Wykonane kontrole statyczne opisuje `VALIDATION_2026-08-08.md`.
++
++---
++
++## 8. Zalecana kolejność testów manualnych
++
++### Odtwarzacz
++
++1. Ustawienia → Odtwarzacz.
++2. Wyłącz kilka elementów, otwórz film i sprawdź, czy tylko te przyciski zniknęły.
++3. Sprawdź, że Play/Pause, Wstecz i seekbar nadal istnieją.
++4. Wyłącz pinch/double tap/swipe i sprawdź każdy gest osobno.
++5. Ustaw `polski` dla lektora i napisów.
++6. Uruchom film wielojęzyczny.
++7. Otwórz audio/napisy: lista ma przewinąć się do polskiej pozycji i oznaczyć ją `★`, ale ścieżka nie może zmienić się przed kliknięciem.
++8. Sprawdź zoom + pojedynczy tap – kontrolki nadal muszą znikać.
++9. Sprawdź film 1080p/1440p/2160p i zmianę jakości – wcześniejsza poprawka layoutu seekbara nie może się cofnąć.
++
++### Radio – telefon
++
++1. Zsynchronizuj katalog.
++2. Wpisuj nazwę/kraj/tag w wyszukiwarce.
++3. Dodaj 2–3 stacje do Ulubionych i włącz filtr „tylko ulubione”.
++4. Włącz Time-shift 3 min.
++5. Wybierz zwykłą stację MP3/AAC i odczekaj 10–20 s.
++6. Cofnij seekbar o kilka sekund.
++7. Kliknij `LIVE`.
++8. Powtórz dla kilku bitrate'ów i jednej stacji, która wcześniej miała problemy ze startem.
++9. Sprawdź HLS – nie powinien ulec regresji nawet jeśli własny DVR nie jest dostępny.
++
++### Radio – Android Auto
++
++1. Uruchom radio z listy AA.
++2. Odczekaj minimum kilka sekund, aż powstanie okno DVR.
++3. Sprawdź, czy host pokazuje seekbar (zależy też od UI konkretnego AA).
++4. Cofnij pozycję.
++5. Przesuń na koniec, aby wrócić do live edge.
++6. Upewnij się, że radio nie przełącza samo kolejnej pozycji na live edge.
++7. Dodaj/usuń Ulubioną na telefonie i odśwież/otwórz folder Ulubione w AA.
++
++### Eksperymentalne AA Video
++
++1. Najpierw sprawdź stabilne audio/radio w AA z eksperymentem wyłączonym.
++2. Ustawienia → Android Auto → włącz eksperymentalny launcher wideo.
++3. Ponownie podłącz AA / DHU.
++4. Jeżeli host obsługuje CAR_LAUNCHER dla tej kategorii, otwórz eksperymentalną powierzchnię.
++5. Sprawdź browse → film → player → powrót.
++6. Wyłącz eksperyment i upewnij się, że komponent znika, a stabilny `SmartTubeAutoMusicService` działa nadal.
++
++---
++
++## 9. Kryteria, które uważałbym za blokujące publikację
++
++Nie publikowałbym builda jako stabilnego, jeśli wystąpi którekolwiek z poniższych:
++
++- zmiana ustawienia Odtwarzacza wpływa na AA,
++- wybór „Domyślny lektor/napisy” sam przełącza ścieżkę przy starcie,
++- radio po błędzie DVR nie wraca do bezpośredniego streamu,
++- live edge w AA powoduje automatyczny Next,
++- po wyłączeniu eksperymentalnego wideo komponent nadal jest widoczny,
++- eksperyment wideo powoduje zmianę/awarię istniejącej MediaSession AA.
+diff --git a/START_HERE_2026-08-08.md b/START_HERE_2026-08-08.md
+new file mode 100644
+index 0000000..cb2371a
+--- /dev/null
++++ b/START_HERE_2026-08-08.md
+@@ -0,0 +1,35 @@
++# START HERE – SmartTube AA/mobile 2026-08-08
++
++To pełne drzewo projektu oparte na paczce `smarttube-aa-fixed-2026-08-08` z wdrożonym zaakceptowanym planem nowych funkcji.
++
++## Co zostało wdrożone
++
++- **Ustawienia → Odtwarzacz** – osobne ustawienia tylko dla mobilnego playera; nie są czytane przez stabilny Android Auto.
++- **Domyślny lektor / napisy** – preferowany język jest wyróżniany i lista przewija się do niego, ale nic nie jest automatycznie przełączane przy starcie filmu.
++- **Nowy Material Bottom Sheet** dla jakości, audio i napisów.
++- **Radio** – wyszukiwarka, istniejące wspólne Ulubione oraz eksperymentalny rolling time-shift 1/3/5 min dla progresywnych strumieni.
++- **Android Auto Radio DVR** – `ACTION_SEEK_TO` obsługuje okno bufora bez naruszania logiki VOD.
++- **Eksperymentalne AA Video** – osobny, domyślnie wyłączony komponent `CAR_LAUNCHER`; nie zmienia stabilnego `SmartTubeAutoMusicService` i nie podszywa się pod grę/nawigację.
++- Zachowane są wcześniejsze poprawki z `FIXES_2026-08-08.md`.
++
++## Najpierw przeczytaj
++
++1. `FEATURES_INTEGRATION_2026-08-08.md` – szczegółowy opis architektury, funkcji i testów manualnych.
++2. `VALIDATION_2026-08-08.md` – co udało się zweryfikować automatycznie i czego nie dało się uruchomić w środowisku przygotowującym paczkę.
++3. `AABROWSER_CLEAN_ROOM_NOTES.md` – granice implementacji eksperymentalnego AA Video.
++4. `FIXES_2026-08-08.md` – opis wcześniejszych 6 poprawek projektu.
++
++## Kompilacja
++
++Dla wariantu mobilnego:
++
++```bash
++./gradlew :smarttubetv:testStmobileDebugUnitTest
++./gradlew :smarttubetv:assembleStmobileDebug
++```
++
++W tej sesji pełny build nie był możliwy, ponieważ środowisko nie ma Android SDK ani lokalnego Gradle 7.5, a wrapper nie może pobrać dystrybucji z internetu. Statyczne kontrole i test aplikacji patcha są opisane w `VALIDATION_2026-08-08.md`.
++
++## Patch
++
++W paczce znajduje się również `FEATURES_2026-08-08.patch`. Jest on przeznaczony dla dokładnie tej samej bazowej wersji projektu. Najbezpieczniejsza integracja to jednak użycie pełnego drzewa źródłowego z ZIP-a.
+diff --git a/VALIDATION_2026-08-08.md b/VALIDATION_2026-08-08.md
+new file mode 100644
+index 0000000..43b9445
+--- /dev/null
++++ b/VALIDATION_2026-08-08.md
+@@ -0,0 +1,36 @@
++# Walidacja pakietu – 2026-08-08
++
++## Wykonane automatycznie
++
++- parsowanie wszystkich 64 plików XML w `smarttubetv/src/stmobile/res`: **OK**, 0 błędów,
++- kontrola 176 odwołań zasobów w nowych/zmienionych plikach (`R.string`, `R.id`, `R.layout`, `R.drawable`, `R.array`, `R.dimen`, `R.color`, `R.style`): **0 brakujących zasobów** w statycznym skanerze,
++- `javac -source 8 -target 8 -proc:none` na zmienionych plikach: środowisko nie ma Android/AndroidX classpath, więc występują oczekiwane `package ... does not exist` / `cannot find symbol`; nie znaleziono błędów parsera typu `';' expected`, `illegal start`, `reached end of file`, `unclosed ...`,
++- `git diff --check`: **OK**, bez błędów whitespace,
++- finalny patch obejmuje 38 plików i przechodzi `git apply --check` na czystym drzewie bazowym; po aplikacji wszystkie 38 zmienionych plików jest bajtowo zgodnych z drzewem roboczym,
++- ZIP jest po utworzeniu otwierany i testowany pod kątem integralności.
++
++## Czego nie można było wykonać w tym środowisku
++
++Pełny Gradle build / Android Lint / Robolectric nie został uruchomiony, ponieważ:
++
++- brak Android SDK (`ANDROID_HOME`),
++- wrapper wymaga Gradle 7.5,
++- lokalna dystrybucja Gradle 7.5 nie jest dostępna,
++- uruchomienie `./gradlew --version` potwierdziło próbę pobrania `gradle-7.5-bin.zip`, ale środowisko nie ma dostępu sieciowego do `services.gradle.org`.
++
++Dlatego przed instalacją uruchom lokalnie:
++
++```bash
++./gradlew :smarttubetv:testStmobileDebugUnitTest
++./gradlew :smarttubetv:assembleStmobileDebug
++```
++
++oraz, jeżeli używasz CI, pełny lint/build dla `stmobile`.
++
++## Obszary wymagające szczególnego testu na urządzeniu
++
++1. `RadioDvrProxy` na różnych serwerach Icecast/Shoutcast i różnych kodekach.
++2. Zachowanie seekbara Android Auto – UI i szczegóły renderowania MediaSession zależą od hosta/wersji AA.
++3. Eksperymentalny `CAR_LAUNCHER` – obecność powierzchni zależy od wsparcia platformy/hosta; brak widoczności nie powinien naruszać stabilnego MediaBrowserService.
++4. Rotacja, PiP i zoom po zmianach ustawień mobilnego playera.
++5. Wielojęzyczne materiały, w których kod języka jest regionalny (`pl-PL`, `en-US`) albo label jest niestandardowy.
+diff --git a/smarttubetv/src/stmobile/AndroidManifest.xml b/smarttubetv/src/stmobile/AndroidManifest.xml
+index 4180ce3..ca0c56c 100644
+--- a/smarttubetv/src/stmobile/AndroidManifest.xml
++++ b/smarttubetv/src/stmobile/AndroidManifest.xml
+@@ -79,6 +79,23 @@
+             android:theme="@style/Theme.SmartTube.MobileNative"
+             tools:replace="android:launchMode,android:resizeableActivity,android:supportsPictureInPicture" />
+ 
++        <!-- P18: clean-room, opt-in parked surface. Disabled until the user enables it.
++             Deliberately no fake GAME/NAVIGATION/APP_MAPS classification is declared. -->
++        <activity
++            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoActivity"
++            android:enabled="false"
++            android:exported="true"
++            android:excludeFromRecents="true"
++            android:launchMode="singleTask"
++            android:resizeableActivity="true"
++            android:theme="@style/Theme.SmartTube.MobileNative">
++            <intent-filter>
++                <action android:name="android.intent.action.MAIN" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.CAR_LAUNCHER" />
++            </intent-filter>
++        </activity>
++
+         <service
+             android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.background.MobileBackgroundPlaybackService"
+             android:exported="false"
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/AndroidAutoPreferences.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/AndroidAutoPreferences.java
+index d5f7ff2..7d7c5f8 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/AndroidAutoPreferences.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/AndroidAutoPreferences.java
+@@ -15,7 +15,7 @@ public final class AndroidAutoPreferences {
+     public static final String PREF_FILE = "smarttube_auto_settings";
+     public static final String KEY_PLAYLIST_ORDER = "playlist_order";
+     public static final String KEY_HIDDEN_PLAYLISTS = "hidden_playlists";
+-    public static final String KEY_EXPERIMENTAL_DRIVING_VIDEO = "experimental_driving_video";
++    public static final String KEY_EXPERIMENTAL_PARKED_VIDEO = "experimental_parked_video";
+     private static final String KEY_DEVELOPER_CONFIRMED = "developer_mode_confirmed";
+     private static final String KEY_UNKNOWN_SOURCES_CONFIRMED = "unknown_sources_confirmed";
+     private static final String ORDER_SEPARATOR = "\u001f";
+@@ -43,13 +43,13 @@ public final class AndroidAutoPreferences {
+         preferences.edit().putBoolean(KEY_UNKNOWN_SOURCES_CONFIRMED, confirmed).apply();
+     }
+ 
+-    /** Off by default: normal Android Auto playback remains audio-only. */
+-    public boolean isExperimentalDrivingVideoEnabled() {
+-        return preferences.getBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, false);
++    /** Off by default and intentionally not migrated from the older driving-video experiment. */
++    public boolean isExperimentalParkedVideoEnabled() {
++        return preferences.getBoolean(KEY_EXPERIMENTAL_PARKED_VIDEO, false);
+     }
+ 
+-    public void setExperimentalDrivingVideoEnabled(boolean enabled) {
+-        preferences.edit().putBoolean(KEY_EXPERIMENTAL_DRIVING_VIDEO, enabled).apply();
++    public void setExperimentalParkedVideoEnabled(boolean enabled) {
++        preferences.edit().putBoolean(KEY_EXPERIMENTAL_PARKED_VIDEO, enabled).apply();
+     }
+ 
+     public List<String> getPlaylistOrder() {
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoActivity.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoActivity.java
+new file mode 100644
+index 0000000..28e37c3
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoActivity.java
+@@ -0,0 +1,28 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive;
++
++import android.os.Bundle;
++import android.view.WindowManager;
++import androidx.annotation.Nullable;
++import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity;
++
++/**
++ * Opt-in parked-car surface. It reuses the normal touch player/UI but is a separate component,
++ * so enabling/disabling it cannot alter SmartTubeAutoMusicService or normal AA audio playback.
++ */
++public final class ExperimentalCarVideoActivity extends MobileNativeActivity {
++    @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++        AndroidAutoPreferences preferences = new AndroidAutoPreferences(this);
++        if (!preferences.isExperimentalParkedVideoEnabled()) {
++            finish();
++            return;
++        }
++        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
++        MobileDiagnostics.info("P18-AA-Video", "experimental parked surface opened secondaryDisplay="
++                + ExperimentalCarVideoGate.isSecondaryDisplay(this));
++    }
++    @Override protected boolean shouldRequestNotificationPermission() {
++        return false;
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoGate.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoGate.java
+new file mode 100644
+index 0000000..bde56ba
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/ExperimentalCarVideoGate.java
+@@ -0,0 +1,38 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive;
++
++import android.app.Activity;
++import android.content.ComponentName;
++import android.content.Context;
++import android.content.pm.PackageManager;
++import android.os.Build;
++import android.view.Display;
++
++/** Controls the opt-in CAR_LAUNCHER component without touching the stable MediaBrowser service. */
++public final class ExperimentalCarVideoGate {
++    private ExperimentalCarVideoGate() { }
++
++    public static ComponentName component(Context context) {
++        return new ComponentName(context, ExperimentalCarVideoActivity.class);
++    }
++
++    public static void setEnabled(Context context, boolean enabled) {
++        context.getApplicationContext().getPackageManager().setComponentEnabledSetting(
++                component(context),
++                enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++                        : PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
++                PackageManager.DONT_KILL_APP);
++    }
++
++    public static boolean isComponentEnabled(Context context) {
++        int state = context.getPackageManager().getComponentEnabledSetting(component(context));
++        return state == PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
++    }
++
++    /** Diagnostic only: Android Auto parked activities normally run on a non-default display. */
++    @SuppressWarnings("deprecation")
++    public static boolean isSecondaryDisplay(Activity activity) {
++        Display display = Build.VERSION.SDK_INT >= 30
++                ? activity.getDisplay() : activity.getWindowManager().getDefaultDisplay();
++        return display != null && display.getDisplayId() != Display.DEFAULT_DISPLAY;
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
+index f3f0a20..7ee653b 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
+@@ -232,6 +232,15 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+             @Override public void onSeekTo(long pos) {
+                 long safePosition = Math.max(0L, pos);
+                 forceZeroUntilMs = 0L;
++                boolean radio = activeItem != null
++                        && RadioStationRepository.isRadioMediaId(activeItem.getId());
++                if (radio) {
++                    // In Radio DVR, position zero means the beginning of the rolling buffer, not
++                    // "previous track". Keep the VOD double-previous gesture completely separate.
++                    lastSeekToZeroCommandMs = 0L;
++                    playbackRepository.seekTo(safePosition);
++                    return;
++                }
+                 if (safePosition <= 1500L) {
+                     long now = System.currentTimeMillis();
+                     if (lastSeekToZeroCommandMs > 0L
+@@ -1262,21 +1271,24 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+ 
+         publishQueue(activeQueue);
+ 
+-        forceZeroUntilMs = System.currentTimeMillis() + FORCE_ZERO_GUARD_MS;
++        boolean radioSelection = RadioStationRepository.isRadioMediaId(item.getId());
++        forceZeroUntilMs = radioSelection ? 0L : System.currentTimeMillis() + FORCE_ZERO_GUARD_MS;
+         MobileDiagnostics.info("P13-AA-Playback",
+                 "selected browserId=" + browserId + " mediaId=" + item.getId()
+                         + " queueIndex=" + activeQueueIndex
+                         + " queueSize=" + activeQueue.size()
+                         + " auto=" + fromAutoAdvance
+                         + " resume=" + fromResume
+-                        + " start=0 forceZero=true");
++                        + " start=0 forceZero=" + !radioSelection);
+         updateMetadata(item, 0L);
+         updatePlaybackState(PlaybackStateCompat.STATE_BUFFERING, 0L, 0f);
+         savePlaybackSelection(browserId, item, 0L);
+         playbackRepository.prepare(item.getId(), 0L);
+-        playbackRepository.seekTo(0L);
++        // prepareRadio() starts at the live edge. A follow-up seekTo(0) would immediately rewind
++        // to the oldest buffered point, so only VOD gets the historic zero-position command.
++        if (!radioSelection) playbackRepository.seekTo(0L);
+         playbackRepository.play();
+-        if (RadioStationRepository.isRadioMediaId(item.getId()) && radioRepository != null) {
++        if (radioSelection && radioRepository != null) {
+             radioRepository.reportClick(
+                     RadioStationRepository.stationIdFromMediaId(item.getId()));
+         }
+@@ -2108,6 +2120,11 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+     }
+ 
+     private boolean maybeAutoAdvance(MobilePlaybackSnapshot snapshot) {
++        // Live radio DVR deliberately reports a rolling duration/position so AA can render a seek
++        // bar. Being near that live edge must never be interpreted as end-of-track.
++        if (activeItem != null && RadioStationRepository.isRadioMediaId(activeItem.getId())) {
++            return false;
++        }
+         if (snapshot == null || activeQueue == null || activeQueue.isEmpty()
+                 || activeQueueIndex < 0 || activeQueueIndex >= activeQueue.size()
+                 || !activeItemReachedReady) {
+@@ -2186,10 +2203,19 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+     private void updateMetadata(MobileMediaItem item, long durationMs) {
+         long resolvedDuration = durationMs > 0L ? durationMs : item.getDurationMs();
+         lastMetadataDurationMs = resolvedDuration;
++        // Radio DVR has a rolling duration that grows continuously until its configured window is
++        // full. Publishing brand-new metadata every ~500 ms is wasteful and can make some Android
++        // Auto hosts redraw the media card. Quantize only the public radio duration; playback state
++        // still carries the precise rolling position.
++        long publishedDuration = resolvedDuration;
++        if (RadioStationRepository.isRadioMediaId(item.getId()) && publishedDuration > 0L) {
++            final long stepMs = 5_000L;
++            publishedDuration = Math.max(stepMs, (publishedDuration / stepMs) * stepMs);
++        }
+ 
+         String metadataKey = item.getId() + "|" + item.getTitle() + "|"
+                 + item.getSubtitle() + "|" + item.getThumbnailUrl() + "|"
+-                + resolvedDuration + "|liked=" + activeLiked;
++                + publishedDuration + "|liked=" + activeLiked;
+         if (metadataKey.equals(lastPublishedMetadataKey)) {
+             return;
+         }
+@@ -2210,8 +2236,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+                                 ? RatingCompat.newThumbRating(true)
+                                 : RatingCompat.newUnratedRating(RatingCompat.RATING_THUMB_UP_DOWN));
+ 
+-        if (resolvedDuration > 0L) {
+-            metadata.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, resolvedDuration);
++        if (publishedDuration > 0L) {
++            metadata.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, publishedDuration);
+         }
+ 
+         mediaSession.setMetadata(metadata.build());
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/contract/MobileNavigator.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/contract/MobileNavigator.java
+index 4cb98fe..585eed9 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/contract/MobileNavigator.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/contract/MobileNavigator.java
+@@ -9,6 +9,7 @@ public interface MobileNavigator {
+     void openSearch(String initialQuery);
+     void openSettings();
+     void openAndroidAutoSettings();
++    void openPlayerSettings();
+     void openRadioSettings();
+     void openRadioPlayback(String stationId);
+     void openPlayback(String mediaId, long startPositionMs);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/AndroidAutoSettingsFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/AndroidAutoSettingsFragment.java
+index 35ed4ce..3395f0a 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/AndroidAutoSettingsFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/AndroidAutoSettingsFragment.java
+@@ -23,6 +23,7 @@ import com.google.android.material.button.MaterialButton;
+ import com.google.android.material.switchmaterial.SwitchMaterial;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.AndroidAutoPreferences;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoGate;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.SmartTubeAutoMusicService;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBrowseRepository;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileRequest;
+@@ -61,7 +62,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
+     private SwitchMaterial accessEnabled;
+     private SwitchMaterial developerConfirmed;
+     private SwitchMaterial unknownSourcesConfirmed;
+-    private SwitchMaterial experimentalDrivingVideo;
++    private SwitchMaterial experimentalParkedVideo;
+     private boolean bindingAccessSwitch;
+ 
+     public static AndroidAutoSettingsFragment newInstance() {
+@@ -84,7 +85,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
+         accessEnabled = view.findViewById(R.id.mobile_aa_access_enabled);
+         developerConfirmed = view.findViewById(R.id.mobile_aa_developer_confirmed);
+         unknownSourcesConfirmed = view.findViewById(R.id.mobile_aa_unknown_sources_confirmed);
+-        experimentalDrivingVideo = view.findViewById(R.id.mobile_aa_experimental_video);
++        experimentalParkedVideo = view.findViewById(R.id.mobile_aa_experimental_video);
+ 
+         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
+         toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
+@@ -155,24 +156,32 @@ public final class AndroidAutoSettingsFragment extends Fragment {
+     }
+ 
+     private void bindExperimentalVideo() {
+-        experimentalDrivingVideo.setChecked(preferences.isExperimentalDrivingVideoEnabled());
+-        experimentalDrivingVideo.setOnCheckedChangeListener((button, checked) -> {
++        // Keep manifest component state synchronized after app updates/reinstalls.
++        boolean enabled = preferences.isExperimentalParkedVideoEnabled();
++        ExperimentalCarVideoGate.setEnabled(requireContext(), enabled);
++        experimentalParkedVideo.setChecked(enabled);
++        experimentalParkedVideo.setOnCheckedChangeListener((button, checked) -> {
+             if (!checked) {
+-                preferences.setExperimentalDrivingVideoEnabled(false);
++                preferences.setExperimentalParkedVideoEnabled(false);
++                ExperimentalCarVideoGate.setEnabled(requireContext(), false);
+                 return;
+             }
+             new AlertDialog.Builder(requireContext())
+                     .setTitle(R.string.mobile_aa_video_confirm_title)
+                     .setMessage(R.string.mobile_aa_video_confirm_message)
+-                    .setPositiveButton(R.string.mobile_aa_video_confirm_enable, (dialog, which) ->
+-                            preferences.setExperimentalDrivingVideoEnabled(true))
++                    .setPositiveButton(R.string.mobile_aa_video_confirm_enable, (dialog, which) -> {
++                        preferences.setExperimentalParkedVideoEnabled(true);
++                        ExperimentalCarVideoGate.setEnabled(requireContext(), true);
++                    })
+                     .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
+-                        preferences.setExperimentalDrivingVideoEnabled(false);
+-                        experimentalDrivingVideo.setChecked(false);
++                        preferences.setExperimentalParkedVideoEnabled(false);
++                        ExperimentalCarVideoGate.setEnabled(requireContext(), false);
++                        experimentalParkedVideo.setChecked(false);
+                     })
+                     .setOnCancelListener(dialog -> {
+-                        preferences.setExperimentalDrivingVideoEnabled(false);
+-                        experimentalDrivingVideo.setChecked(false);
++                        preferences.setExperimentalParkedVideoEnabled(false);
++                        ExperimentalCarVideoGate.setEnabled(requireContext(), false);
++                        experimentalParkedVideo.setChecked(false);
+                     })
+                     .show();
+         });
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+index 79c4884..0cbe35c 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+@@ -35,6 +35,8 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileNativeVie
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileLoadState;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobilePlayerPreferences;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.TrackPickerBottomSheet;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobilePlaybackViewModel;
+ import java.util.ArrayList;
+ import java.util.Collections;
+@@ -54,6 +56,7 @@ public final class MobilePlaybackFragment extends Fragment {
+     private final Runnable hideControls = () -> setControlsVisible(false);
+     private MobilePlayerViewBinder.Binding binding;
+     private MobilePlaybackViewModel viewModel;
++    private MobilePlayerPreferences playerPreferences;
+     private MobilePlaybackSnapshot snapshot;
+     private View controls;
+     private SeekBar seekBar;
+@@ -62,6 +65,7 @@ public final class MobilePlaybackFragment extends Fragment {
+     private MaterialButton speedButton;
+     private MaterialButton audioButton;
+     private MaterialButton subtitlesButton;
++    private MaterialButton goLiveButton;
+     private ViewGroup videoSurface;
+     private boolean userSeeking;
+     private boolean radioAutoplayStarted;
+@@ -119,6 +123,7 @@ public final class MobilePlaybackFragment extends Fragment {
+         viewModel = new ViewModelProvider(this,
+                 new MobileNativeViewModelFactory(MobileNativeDependencies.get(), getArguments()))
+                 .get(MobilePlaybackViewModel.class);
++        playerPreferences = new MobilePlayerPreferences(requireContext());
+         radioMode = getArguments() != null && getArguments().getBoolean("radio_mode", false);
+         shortMode = getArguments() != null && getArguments().getBoolean(ARG_SHORT_MODE, false);
+         touchSlop = ViewConfiguration.get(requireContext()).getScaledTouchSlop();
+@@ -147,7 +152,15 @@ public final class MobilePlaybackFragment extends Fragment {
+         speedButton = view.findViewById(R.id.mobile_player_speed);
+         audioButton = view.findViewById(R.id.mobile_player_audio_toggle);
+         subtitlesButton = view.findViewById(R.id.mobile_player_subtitles_toggle);
++        goLiveButton = view.findViewById(R.id.mobile_player_go_live);
+         seekBar = view.findViewById(R.id.mobile_player_seek);
++        goLiveButton.setOnClickListener(v -> {
++            MobilePlaybackSnapshot current = snapshot;
++            if (current != null && current.getDurationMs() > 0L) {
++                viewModel.seekTo(current.getDurationMs());
++                keepControlsVisible();
++            }
++        });
+ 
+         playButton.setOnClickListener(v -> {
+             viewModel.togglePlayPause();
+@@ -163,14 +176,16 @@ public final class MobilePlaybackFragment extends Fragment {
+         });
+         view.findViewById(R.id.mobile_player_quick_options)
+                 .setOnClickListener(v -> showQuickOptions());
+-        subtitlesButton.setOnClickListener(v -> toggleSubtitles());
++        // A normal tap opens the modern picker so the preferred language is immediately visible.
++        // Long-press keeps the old fast toggle for users who still want a one-gesture shortcut.
++        subtitlesButton.setOnClickListener(v -> showTracks(MobileTrack.Type.SUBTITLE));
+         subtitlesButton.setOnLongClickListener(v -> {
+-            showTracks(MobileTrack.Type.SUBTITLE);
++            toggleSubtitles();
+             return true;
+         });
+-        audioButton.setOnClickListener(v -> toggleAlternativeAudio());
++        audioButton.setOnClickListener(v -> showTracks(MobileTrack.Type.AUDIO));
+         audioButton.setOnLongClickListener(v -> {
+-            showTracks(MobileTrack.Type.AUDIO);
++            toggleAlternativeAudio();
+             return true;
+         });
+         qualityButton.setOnClickListener(v -> showTracks(MobileTrack.Type.VIDEO));
+@@ -185,14 +200,30 @@ public final class MobilePlaybackFragment extends Fragment {
+                     else MobileFragmentSupport.navigator(this).goBack();
+                 });
+ 
+-        qualityButton.setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        view.findViewById(R.id.mobile_player_previous).setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        view.findViewById(R.id.mobile_player_next).setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        audioButton.setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        subtitlesButton.setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        view.findViewById(R.id.mobile_player_fit).setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        view.findViewById(R.id.mobile_player_pip).setVisibility(radioMode ? View.GONE : View.VISIBLE);
+-        view.findViewById(R.id.mobile_player_fullscreen).setVisibility(radioMode ? View.GONE : View.VISIBLE);
++        // Player customization is deliberately phone/tablet-only and applies to VOD/Shorts.
++        // Radio keeps its dedicated controls and Android Auto never reads MobilePlayerPreferences.
++        qualityButton.setVisibility(radioMode || !playerPreferences.isQualityVisible()
++                ? View.GONE : View.VISIBLE);
++        int previousNextVisibility = radioMode || !playerPreferences.isPreviousNextVisible()
++                ? View.GONE : View.VISIBLE;
++        view.findViewById(R.id.mobile_player_previous).setVisibility(previousNextVisibility);
++        view.findViewById(R.id.mobile_player_next).setVisibility(previousNextVisibility);
++        audioButton.setVisibility(radioMode || !playerPreferences.isAudioVisible()
++                ? View.GONE : View.VISIBLE);
++        subtitlesButton.setVisibility(radioMode || !playerPreferences.isSubtitlesVisible()
++                ? View.GONE : View.VISIBLE);
++        view.findViewById(R.id.mobile_player_quick_options).setVisibility(
++                !radioMode && !playerPreferences.isQuickOptionsVisible() ? View.GONE : View.VISIBLE);
++        speedButton.setVisibility(!radioMode && !playerPreferences.isSpeedVisible()
++                ? View.GONE : View.VISIBLE);
++        view.findViewById(R.id.mobile_player_fit).setVisibility(
++                radioMode || !playerPreferences.isFitVisible() ? View.GONE : View.VISIBLE);
++        view.findViewById(R.id.mobile_player_pip).setVisibility(
++                radioMode || !playerPreferences.isPipVisible() ? View.GONE : View.VISIBLE);
++        view.findViewById(R.id.mobile_player_fullscreen).setVisibility(
++                radioMode || !playerPreferences.isFullscreenVisible() ? View.GONE : View.VISIBLE);
++        view.findViewById(R.id.mobile_player_more).setVisibility(
++                !radioMode && !playerPreferences.isMoreVisible() ? View.GONE : View.VISIBLE);
+ 
+         seekBar.setMax(1000);
+         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+@@ -214,7 +245,7 @@ public final class MobilePlaybackFragment extends Fragment {
+         ScaleGestureDetector scaleDetector = new ScaleGestureDetector(requireContext(),
+                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                     @Override public boolean onScaleBegin(ScaleGestureDetector detector) {
+-                        if (radioMode) return false;
++                        if (radioMode || !playerPreferences.isPinchZoomEnabled()) return false;
+                         scalingVideo = true;
+                         ui.removeCallbacks(hideControls);
+                         if (videoSurface != null) {
+@@ -250,6 +281,7 @@ public final class MobilePlaybackFragment extends Fragment {
+                         return true;
+                     }
+                     @Override public boolean onDoubleTap(MotionEvent event) {
++                        if (!radioMode && !playerPreferences.isDoubleTapSeekEnabled()) return false;
+                         viewModel.seekBy(event.getX() < view.getWidth() / 2f ? -10_000L : 10_000L);
+                         setControlsVisible(true);
+                         return true;
+@@ -263,7 +295,8 @@ public final class MobilePlaybackFragment extends Fragment {
+                             setControlsVisible(false);
+                             return true;
+                         }
+-                        if (Math.abs(velocityX) > Math.abs(velocityY)
++                        if ((radioMode || playerPreferences.isSwipeSeekEnabled())
++                                && Math.abs(velocityX) > Math.abs(velocityY)
+                                 && Math.abs(velocityX) > 900f) {
+                             viewModel.seekBy(velocityX < 0 ? -10_000L : 10_000L);
+                             setControlsVisible(true);
+@@ -358,6 +391,15 @@ public final class MobilePlaybackFragment extends Fragment {
+             playButton.setContentDescription(current.isPlaying()
+                     ? getString(R.string.mobile_native_pause) : getString(R.string.mobile_native_play));
+             time.setText(format(current.getPositionMs()) + " / " + format(current.getDurationMs()));
++            if (goLiveButton != null) {
++                long behindLive = Math.max(0L, current.getDurationMs() - current.getPositionMs());
++                boolean dvrAvailable = radioMode && current.getDurationMs() >= 2_000L;
++                goLiveButton.setVisibility(dvrAvailable ? View.VISIBLE : View.GONE);
++                goLiveButton.setText(behindLive <= 2_500L
++                        ? getString(R.string.mobile_radio_go_live)
++                        : getString(R.string.mobile_radio_behind_live, format(behindLive)));
++                goLiveButton.setEnabled(behindLive > 1_000L);
++            }
+             speedButton.setText(speedLabel(current.getSpeed()));
+             qualityButton.setText(selectedLabel(current.getVideoTracks(),
+                     getString(R.string.mobile_native_quality)));
+@@ -369,7 +411,8 @@ public final class MobilePlaybackFragment extends Fragment {
+             seekBar.setSecondaryProgress(current.getDurationMs() <= 0 ? 0
+                     : (int) Math.min(1000L,
+                     current.getBufferedPositionMs() * 1000L / current.getDurationMs()));
+-            if (startedPlaying && controls.getVisibility() == View.VISIBLE) {
++            if (startedPlaying && controls.getVisibility() == View.VISIBLE
++                    && (radioMode || playerPreferences.isAutoHideControlsEnabled())) {
+                 ui.removeCallbacks(hideControls);
+                 ui.postDelayed(hideControls, CONTROLS_TIMEOUT_MS);
+             }
+@@ -409,6 +452,7 @@ public final class MobilePlaybackFragment extends Fragment {
+         speedButton = null;
+         audioButton = null;
+         subtitlesButton = null;
++        goLiveButton = null;
+         resetVideoZoom();
+         videoSurface = null;
+         super.onDestroyView();
+@@ -443,9 +487,7 @@ public final class MobilePlaybackFragment extends Fragment {
+                 ? snapshot.getVideoTracks() : type == MobileTrack.Type.AUDIO
+                 ? snapshot.getAudioTracks() : snapshot.getSubtitleTracks();
+         if (type == MobileTrack.Type.SUBTITLE && sourceTracks.size() > 1) {
+-            // YouTube exposes translated captions in an alphabetic list on some videos.
+-            // Enforce the phone-friendly order at the final UI boundary as well, because
+-            // these translated entries may appear after the initial repository snapshot.
++            // Translated captions may arrive after the first snapshot. Sort at the UI boundary too.
+             sourceTracks = new ArrayList<>(sourceTracks);
+             Collections.sort(sourceTracks,
+                     Comparator.comparingInt(MobilePlaybackFragment::subtitleUiRank));
+@@ -457,38 +499,32 @@ public final class MobilePlaybackFragment extends Fragment {
+                     Toast.LENGTH_SHORT).show();
+             return;
+         }
+-        String[] labels = new String[tracks.size()];
+-        int checked = -1;
+-        for (int index = 0; index < tracks.size(); index++) {
+-            labels[index] = tracks.get(index).getLabel();
+-            if (tracks.get(index).isSelected()) checked = index;
++        String preferredLanguage = "";
++        if (type == MobileTrack.Type.AUDIO) {
++            preferredLanguage = playerPreferences.getPreferredAudioLanguage();
++        } else if (type == MobileTrack.Type.SUBTITLE) {
++            preferredLanguage = playerPreferences.getPreferredSubtitleLanguage();
+         }
+-        int title = type == MobileTrack.Type.VIDEO ? R.string.mobile_native_quality
+-                : type == MobileTrack.Type.AUDIO ? R.string.mobile_native_audio
+-                : R.string.mobile_native_subtitles;
+-        new AlertDialog.Builder(requireContext())
+-                .setTitle(title)
+-                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+-                    String id = tracks.get(which).getId();
+-                    if (type == MobileTrack.Type.VIDEO) viewModel.selectVideoTrack(id);
+-                    else if (type == MobileTrack.Type.AUDIO) {
+-                        MobileTrack selected = selectedTrack(tracks);
+-                        if (baseAudioTrackId == null && selected != null
+-                                && !isAudioPlaceholder(selected)) {
+-                            baseAudioTrackId = selected.getId();
+-                        }
+-                        if (!id.equals(baseAudioTrackId) && !isAudioPlaceholder(tracks.get(which))) {
+-                            lastAlternativeAudioTrackId = id;
+-                        }
+-                        viewModel.selectAudioTrack(id);
+-                    } else {
+-                        if (!isSubtitleOff(tracks.get(which))) lastSubtitleTrackId = id;
+-                        viewModel.selectSubtitleTrack(id);
+-                    }
+-                    dialog.dismiss();
+-                })
+-                .setNegativeButton(android.R.string.cancel, null)
+-                .show();
++        TrackPickerBottomSheet.show(requireContext(), type, tracks, preferredLanguage, track -> {
++            String id = track.getId();
++            if (type == MobileTrack.Type.VIDEO) {
++                viewModel.selectVideoTrack(id);
++            } else if (type == MobileTrack.Type.AUDIO) {
++                MobileTrack selected = selectedTrack(tracks);
++                if (baseAudioTrackId == null && selected != null
++                        && !isAudioPlaceholder(selected)) {
++                    baseAudioTrackId = selected.getId();
++                }
++                if (!id.equals(baseAudioTrackId) && !isAudioPlaceholder(track)) {
++                    lastAlternativeAudioTrackId = id;
++                }
++                viewModel.selectAudioTrack(id);
++            } else {
++                if (!isSubtitleOff(track)) lastSubtitleTrackId = id;
++                viewModel.selectSubtitleTrack(id);
++            }
++            keepControlsVisible();
++        });
+     }
+ 
+     private void updateTrackShortcuts(MobilePlaybackSnapshot current) {
+@@ -672,7 +708,9 @@ public final class MobilePlaybackFragment extends Fragment {
+         if (controls == null) return;
+         controls.setVisibility(visible ? View.VISIBLE : View.GONE);
+         ui.removeCallbacks(hideControls);
+-        if (visible && snapshot != null && snapshot.isPlaying()) {
++        if (visible && snapshot != null && snapshot.isPlaying()
++                && (radioMode || playerPreferences == null
++                || playerPreferences.isAutoHideControlsEnabled())) {
+             ui.postDelayed(hideControls, CONTROLS_TIMEOUT_MS);
+         }
+     }
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
+index 92bc5b4..49a52b0 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
+@@ -55,6 +55,8 @@ public final class MobileSettingsFragment extends Fragment {
+         });
+         view.findViewById(R.id.mobile_android_auto_button).setOnClickListener(v ->
+                 MobileFragmentSupport.navigator(this).openAndroidAutoSettings());
++        view.findViewById(R.id.mobile_player_settings_button).setOnClickListener(v ->
++                MobileFragmentSupport.navigator(this).openPlayerSettings());
+         view.findViewById(R.id.mobile_radio_button).setOnClickListener(v ->
+                 MobileFragmentSupport.navigator(this).openRadioSettings());
+         updateController = new MobileUpdateController(requireActivity(), this::requestInstallPermission);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/PlayerSettingsFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/PlayerSettingsFragment.java
+new file mode 100644
+index 0000000..57f395c
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/PlayerSettingsFragment.java
+@@ -0,0 +1,141 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
++
++import android.app.AlertDialog;
++import android.os.Bundle;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.TextView;
++import androidx.annotation.NonNull;
++import androidx.annotation.Nullable;
++import androidx.fragment.app.Fragment;
++import com.google.android.material.appbar.MaterialToolbar;
++import com.google.android.material.button.MaterialButton;
++import com.google.android.material.switchmaterial.SwitchMaterial;
++import com.liskovsoft.smartyoutubetv2.tv.R;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileFragmentSupport;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobilePlayerPreferences;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.PlayerLanguageCatalog;
++import java.util.List;
++
++/** Phone/tablet player settings. This fragment intentionally has no Android Auto dependency. */
++public final class PlayerSettingsFragment extends Fragment {
++    private MobilePlayerPreferences preferences;
++    private MaterialButton preferredAudio;
++    private MaterialButton preferredSubtitles;
++
++    public static PlayerSettingsFragment newInstance() {
++        return new PlayerSettingsFragment();
++    }
++
++    @Nullable @Override public View onCreateView(@NonNull LayoutInflater inflater,
++                                                 @Nullable ViewGroup container,
++                                                 @Nullable Bundle state) {
++        return inflater.inflate(R.layout.mobile_player_settings_fragment, container, false);
++    }
++
++    @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
++        preferences = new MobilePlayerPreferences(requireContext());
++
++        MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
++        toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
++        toolbar.setNavigationContentDescription(R.string.mobile_native_back);
++        toolbar.setNavigationOnClickListener(v -> MobileFragmentSupport.navigator(this).goBack());
++
++        bindSwitch(view, R.id.mobile_player_pref_auto_hide,
++                preferences.isAutoHideControlsEnabled(), preferences::setAutoHideControlsEnabled);
++        bindSwitch(view, R.id.mobile_player_pref_pinch_zoom,
++                preferences.isPinchZoomEnabled(), preferences::setPinchZoomEnabled);
++        bindSwitch(view, R.id.mobile_player_pref_double_tap,
++                preferences.isDoubleTapSeekEnabled(), preferences::setDoubleTapSeekEnabled);
++        bindSwitch(view, R.id.mobile_player_pref_swipe_seek,
++                preferences.isSwipeSeekEnabled(), preferences::setSwipeSeekEnabled);
++        bindSwitch(view, R.id.mobile_player_pref_previous_next,
++                preferences.isPreviousNextVisible(), preferences::setPreviousNextVisible);
++        bindSwitch(view, R.id.mobile_player_pref_quick_options,
++                preferences.isQuickOptionsVisible(), preferences::setQuickOptionsVisible);
++        bindSwitch(view, R.id.mobile_player_pref_subtitles,
++                preferences.isSubtitlesVisible(), preferences::setSubtitlesVisible);
++        bindSwitch(view, R.id.mobile_player_pref_audio,
++                preferences.isAudioVisible(), preferences::setAudioVisible);
++        bindSwitch(view, R.id.mobile_player_pref_quality,
++                preferences.isQualityVisible(), preferences::setQualityVisible);
++        bindSwitch(view, R.id.mobile_player_pref_speed,
++                preferences.isSpeedVisible(), preferences::setSpeedVisible);
++        bindSwitch(view, R.id.mobile_player_pref_fit,
++                preferences.isFitVisible(), preferences::setFitVisible);
++        bindSwitch(view, R.id.mobile_player_pref_pip,
++                preferences.isPipVisible(), preferences::setPipVisible);
++        bindSwitch(view, R.id.mobile_player_pref_fullscreen,
++                preferences.isFullscreenVisible(), preferences::setFullscreenVisible);
++        bindSwitch(view, R.id.mobile_player_pref_more,
++                preferences.isMoreVisible(), preferences::setMoreVisible);
++
++        preferredAudio = view.findViewById(R.id.mobile_player_pref_audio_language);
++        preferredSubtitles = view.findViewById(R.id.mobile_player_pref_subtitle_language);
++        preferredAudio.setOnClickListener(v -> chooseLanguage(true));
++        preferredSubtitles.setOnClickListener(v -> chooseLanguage(false));
++        view.findViewById(R.id.mobile_player_pref_reset).setOnClickListener(v -> confirmReset());
++        updateLanguageLabels();
++    }
++
++    private void bindSwitch(View root, int id, boolean checked, BooleanSetter setter) {
++        SwitchMaterial control = root.findViewById(id);
++        control.setChecked(checked);
++        control.setOnCheckedChangeListener((buttonView, isChecked) -> setter.set(isChecked));
++    }
++
++    private void chooseLanguage(boolean audio) {
++        List<PlayerLanguageCatalog.Entry> entries = PlayerLanguageCatalog.build(requireContext());
++        String current = audio ? preferences.getPreferredAudioLanguage()
++                : preferences.getPreferredSubtitleLanguage();
++        String[] labels = new String[entries.size()];
++        int checked = 0;
++        for (int i = 0; i < entries.size(); i++) {
++            labels[i] = entries.get(i).getLabel();
++            if (entries.get(i).getCode().equalsIgnoreCase(current == null ? "" : current)) checked = i;
++        }
++        new AlertDialog.Builder(requireContext())
++                .setTitle(audio ? R.string.mobile_player_default_audio
++                        : R.string.mobile_player_default_subtitles)
++                .setSingleChoiceItems(labels, checked, (dialog, which) -> {
++                    String code = entries.get(which).getCode();
++                    if (audio) preferences.setPreferredAudioLanguage(code);
++                    else preferences.setPreferredSubtitleLanguage(code);
++                    updateLanguageLabels();
++                    dialog.dismiss();
++                })
++                .setNegativeButton(android.R.string.cancel, null)
++                .show();
++    }
++
++    private void updateLanguageLabels() {
++        if (preferredAudio != null) {
++            preferredAudio.setText(getString(R.string.mobile_player_default_audio_value,
++                    PlayerLanguageCatalog.labelFor(requireContext(),
++                            preferences.getPreferredAudioLanguage())));
++        }
++        if (preferredSubtitles != null) {
++            preferredSubtitles.setText(getString(R.string.mobile_player_default_subtitles_value,
++                    PlayerLanguageCatalog.labelFor(requireContext(),
++                            preferences.getPreferredSubtitleLanguage())));
++        }
++    }
++
++    private void confirmReset() {
++        new AlertDialog.Builder(requireContext())
++                .setTitle(R.string.mobile_player_reset_title)
++                .setMessage(R.string.mobile_player_reset_message)
++                .setNegativeButton(android.R.string.cancel, null)
++                .setPositiveButton(R.string.mobile_player_reset_confirm, (dialog, which) -> {
++                    preferences.reset();
++                    // Recreate once so every control is rebound from the default values.
++                    if (isAdded()) requireActivity().recreate();
++                })
++                .show();
++    }
++
++    private interface BooleanSetter {
++        void set(boolean value);
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/RadioSettingsFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/RadioSettingsFragment.java
+index 6c4f2fa..c09cde8 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/RadioSettingsFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/RadioSettingsFragment.java
+@@ -1,6 +1,8 @@
+ package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
+ 
+ import android.os.Bundle;
++import android.text.Editable;
++import android.text.TextWatcher;
+ import android.text.format.DateFormat;
+ import android.view.LayoutInflater;
+ import android.view.View;
+@@ -18,24 +20,34 @@ import androidx.recyclerview.widget.RecyclerView;
+ import com.google.android.material.appbar.MaterialToolbar;
+ import com.google.android.material.button.MaterialButton;
+ import com.google.android.material.switchmaterial.SwitchMaterial;
++import com.google.android.material.textfield.TextInputEditText;
+ import com.liskovsoft.smartyoutubetv2.tv.R;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.adapter.RadioStationAdapter;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileFragmentSupport;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioPreferences;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
+ import java.util.Date;
+ import java.util.List;
+ 
+-/** Experimental phone/tablet radio directory. Android Auto intentionally remains untouched. */
++/** Radio directory settings. Favorites and time-shift preferences are shared with Android Auto. */
+ public final class RadioSettingsFragment extends Fragment {
++    private static final int[] TIME_SHIFT_MINUTES = {1, 3, 5};
+     private RadioStationRepository repository;
++    private RadioPreferences radioPreferences;
+     private RadioStationAdapter adapter;
+     private ProgressBar progress;
+     private MaterialButton sync;
+     private TextView status;
+     private TextView empty;
+     private Spinner sort;
++    private Spinner timeShiftDuration;
+     private SwitchMaterial favoritesOnly;
++    private SwitchMaterial timeShiftEnabled;
++    private TextInputEditText search;
++    private final RadioStationRepository.ChangeListener catalogListener = () -> {
++        if (isAdded() && getView() != null) renderStations();
++    };
+ 
+     public static RadioSettingsFragment newInstance() { return new RadioSettingsFragment(); }
+ 
+@@ -47,12 +59,17 @@ public final class RadioSettingsFragment extends Fragment {
+ 
+     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
+         repository = RadioStationRepository.get(requireContext());
++        repository.addChangeListener(catalogListener);
++        radioPreferences = new RadioPreferences(requireContext());
+         progress = view.findViewById(R.id.mobile_radio_progress);
+         sync = view.findViewById(R.id.mobile_radio_sync);
+         status = view.findViewById(R.id.mobile_radio_status);
+         empty = view.findViewById(R.id.mobile_radio_empty);
+         sort = view.findViewById(R.id.mobile_radio_sort);
+         favoritesOnly = view.findViewById(R.id.mobile_radio_favorites_only);
++        search = view.findViewById(R.id.mobile_radio_search);
++        timeShiftEnabled = view.findViewById(R.id.mobile_radio_timeshift_enabled);
++        timeShiftDuration = view.findViewById(R.id.mobile_radio_timeshift_duration);
+ 
+         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
+         toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
+@@ -88,6 +105,35 @@ public final class RadioSettingsFragment extends Fragment {
+             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+         });
+         favoritesOnly.setOnCheckedChangeListener((button, checked) -> renderStations());
++        search.addTextChangedListener(new TextWatcher() {
++            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
++            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
++                renderStations();
++            }
++            @Override public void afterTextChanged(Editable s) { }
++        });
++
++        ArrayAdapter<CharSequence> timeShiftAdapter = ArrayAdapter.createFromResource(requireContext(),
++                R.array.mobile_radio_timeshift_options, android.R.layout.simple_spinner_item);
++        timeShiftAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
++        timeShiftDuration.setAdapter(timeShiftAdapter);
++        int currentMinutes = radioPreferences.getTimeShiftMinutes();
++        int durationIndex = currentMinutes <= 1 ? 0 : currentMinutes <= 3 ? 1 : 2;
++        timeShiftDuration.setSelection(durationIndex, false);
++        timeShiftDuration.setEnabled(radioPreferences.isTimeShiftEnabled());
++        timeShiftDuration.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
++            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View selected,
++                                                 int position, long id) {
++                int safe = Math.max(0, Math.min(position, TIME_SHIFT_MINUTES.length - 1));
++                radioPreferences.setTimeShiftMinutes(TIME_SHIFT_MINUTES[safe]);
++            }
++            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
++        });
++        timeShiftEnabled.setChecked(radioPreferences.isTimeShiftEnabled());
++        timeShiftEnabled.setOnCheckedChangeListener((button, checked) -> {
++            radioPreferences.setTimeShiftEnabled(checked);
++            timeShiftDuration.setEnabled(checked);
++        });
+         sync.setOnClickListener(v -> synchronize());
+ 
+         renderStations();
+@@ -101,13 +147,17 @@ public final class RadioSettingsFragment extends Fragment {
+     }
+ 
+     @Override public void onDestroyView() {
++        if (repository != null) repository.removeChangeListener(catalogListener);
+         adapter = null;
+         progress = null;
+         sync = null;
+         status = null;
+         empty = null;
+         sort = null;
++        timeShiftDuration = null;
+         favoritesOnly = null;
++        timeShiftEnabled = null;
++        search = null;
+         super.onDestroyView();
+     }
+ 
+@@ -143,8 +193,10 @@ public final class RadioSettingsFragment extends Fragment {
+         if (adapter == null || sort == null || favoritesOnly == null) return;
+         RadioStationRepository.SortMode[] modes = RadioStationRepository.SortMode.values();
+         int selected = Math.max(0, Math.min(sort.getSelectedItemPosition(), modes.length - 1));
++        String query = search == null || search.getText() == null
++                ? "" : search.getText().toString();
+         List<RadioStation> visible = repository.getStations(modes[selected],
+-                favoritesOnly.isChecked());
++                favoritesOnly.isChecked(), query);
+         adapter.submit(visible);
+         empty.setVisibility(visible.isEmpty() ? View.VISIBLE : View.GONE);
+         List<RadioStation> all = repository.getStations(modes[selected], false);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileFragmentNavigator.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileFragmentNavigator.java
+index 0243251..19b8916 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileFragmentNavigator.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileFragmentNavigator.java
+@@ -76,6 +76,10 @@ public final class MobileFragmentNavigator implements MobileNavigator {
+         showDetail(AndroidAutoSettingsFragment.newInstance());
+     }
+ 
++    @Override public void openPlayerSettings() {
++        showDetail(PlayerSettingsFragment.newInstance());
++    }
++
+     @Override public void openRadioSettings() {
+         showDetail(RadioSettingsFragment.newInstance());
+     }
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileNativeActivity.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileNativeActivity.java
+index 3c1cc54..7b15078 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileNativeActivity.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/host/MobileNativeActivity.java
+@@ -24,7 +24,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.views.ViewManager;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.browse.BrowseActivity;
+ 
+ /** Preview host for the Leanback-free mobile UI. */
+-public final class MobileNativeActivity extends AppCompatActivity implements MobileNavigatorOwner {
++public class MobileNativeActivity extends AppCompatActivity implements MobileNavigatorOwner {
+     public static final String ACTION_OPEN_BACKGROUND_PLAYER =
+             "app.smarttube.mobile.action.OPEN_BACKGROUND_PLAYER";
+     public static final String EXTRA_MEDIA_ID = "mobile_media_id";
+@@ -68,7 +68,7 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
+             return false;
+         });
+         getSupportFragmentManager().addOnBackStackChangedListener(navigator::syncChromeWithCurrentFragment);
+-        requestNotificationPermissionIfNeeded();
++        if (shouldRequestNotificationPermission()) requestNotificationPermissionIfNeeded();
+         boolean openedFromNotification = openPlaybackIntent(getIntent());
+         if (!openedFromNotification && savedInstanceState == null) {
+             navigator.openBrowse("home");
+@@ -104,6 +104,9 @@ public final class MobileNativeActivity extends AppCompatActivity implements Mob
+         return true;
+     }
+ 
++    /** Parked/embedded hosts can suppress a phone-only permission prompt. */
++    protected boolean shouldRequestNotificationPermission() { return true; }
++
+     private void requestNotificationPermissionIfNeeded() {
+         if (Build.VERSION.SDK_INT < 33) return;
+         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
+index 8b0958d..0359923 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
+@@ -32,7 +32,10 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobilePlayb
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobilePlaybackSnapshot;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStation;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioDvrProxy;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioPreferences;
+ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioStationRepository;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioTimeShiftController;
+ import java.io.InputStream;
+ import java.lang.ref.WeakReference;
+ import java.util.ArrayList;
+@@ -56,6 +59,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+     private final Handler main = new Handler(Looper.getMainLooper());
+     private final MobileMediaSessionManager mediaSessionManager;
+     private final boolean headlessPlaybackAllowed;
++    private final boolean applyLegacyPreferredAudio;
++    private final RadioTimeShiftController radioTimeShift;
+     private WeakReference<Context> hostContext = new WeakReference<>(null);
+     private WeakReference<com.google.android.exoplayer2.ui.PlayerView> surface = new WeakReference<>(null);
+     private Listener listener;
+@@ -71,6 +76,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+     private String radioSubtitle = "";
+     /** Keeps a newly selected direct stream playing through ExoPlayer's asynchronous reset. */
+     private boolean radioAutoplayPending;
++    private String radioDirectStreamUrl = "";
++    private boolean radioDirectFallbackUsed;
+     /** Invalidates callbacks posted by an ExoPlayer instance after a source/engine switch. */
+     private long engineGeneration;
+     private boolean initialized;
+@@ -115,6 +122,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+                     MobileDiagnostics.info("P14-Radio", "autoplay confirmed");
+                 }
+             }
++            if (ended && fallbackFromRadioDvr()) return;
+             if (ended && headlessPlaybackAllowed) {
+                 MobileDiagnostics.info("P13-AA-Playback", "engine reached STATE_ENDED");
+             }
+@@ -134,6 +142,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+                         "engine error; common recovery remains active: "
+                                 + (cause == null ? error : cause));
+             }
++            if (fallbackFromRadioDvr()) return;
+             if (isTransientForbiddenStream(error)) {
+                 // SmartTube's ErrorFixerController intentionally refreshes a forbidden
+                 // signed YouTube URL and retries it. The TV UI hides this transient 403,
+@@ -158,16 +167,28 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+     };
+ 
+     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index, LegacyErrorMapper errors) {
+-        this(context, index, errors, false);
++        // The touch player only highlights its preferred language in the picker. It must never
++        // auto-switch an audio track at startup.
++        this(context, index, errors, false, false);
+     }
+ 
+     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index,
+                                           LegacyErrorMapper errors,
+                                           boolean headlessPlaybackAllowed) {
++        // Preserve the legacy automatic language policy for the already-stable AA service.
++        this(context, index, errors, headlessPlaybackAllowed, headlessPlaybackAllowed);
++    }
++
++    public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index,
++                                          LegacyErrorMapper errors,
++                                          boolean headlessPlaybackAllowed,
++                                          boolean applyLegacyPreferredAudio) {
+         this.applicationContext = context.getApplicationContext();
+         this.index = index;
+         this.errors = errors;
+         this.headlessPlaybackAllowed = headlessPlaybackAllowed;
++        this.applyLegacyPreferredAudio = applyLegacyPreferredAudio;
++        this.radioTimeShift = new RadioDvrProxy(new RadioPreferences(applicationContext));
+         if (headlessPlaybackAllowed) {
+             // Android Auto already owns the public MediaSession. Creating SmartTubeMobileSession here
+             // gives one process two media sessions and two independent audio-focus clients that pause
+@@ -181,8 +202,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+                         @Override public void playFromSystem() { setPlayWhenReady(true); }
+                         @Override public void pauseFromSystem() { setPlayWhenReady(false); }
+                         @Override public void seekToFromSystem(long positionMs) {
+-                            setPositionMs(Math.max(0L, positionMs));
+-                            emitSnapshot();
++                            seekTo(positionMs);
+                         }
+                         @Override public void setVolumeMultiplier(float multiplier) {
+                             setVolume(Math.max(0f, Math.min(1f, multiplier)));
+@@ -281,6 +301,9 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+                 return;
+             }
+             radioPlayback = false;
++            radioTimeShift.stop();
++            radioDirectStreamUrl = "";
++            radioDirectFallbackUsed = false;
+             preferredAudioAppliedMediaId = null;
+             preferredAudioAttemptSignature = null;
+             radioMediaId = null;
+@@ -320,6 +343,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         radioPlayback = true;
+         radioMediaId = mediaId;
+         radioAutoplayPending = true;
++        radioDirectFallbackUsed = false;
++        radioDirectStreamUrl = station.getStreamUrl();
+         radioTitle = station.getName();
+         String codec = station.getCodec().isEmpty() ? "Radio" : station.getCodec();
+         radioSubtitle = station.getBitrate() > 0
+@@ -341,9 +366,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         ensureEngine();
+         controller.setVideo(radioMetadata);
+         ended = false;
++        String playbackUrl = radioTimeShift.start(station);
+         MobileDiagnostics.info("P14-Radio", "prepare id=" + stationId
+-                + " stream=" + station.getStreamUrl());
+-        controller.openUrlList(Collections.singletonList(station.getStreamUrl()));
++                + " timeshift=" + radioTimeShift.isActive() + " stream=" + station.getStreamUrl());
++        controller.openUrlList(Collections.singletonList(playbackUrl));
+         play();
+         emitSnapshot();
+     }
+@@ -409,8 +435,29 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         return true;
+     }
+ 
+-    @Override public void seekTo(long positionMs) { setPositionMs(Math.max(0, positionMs)); emitSnapshot(); }
+-    @Override public void seekBy(long deltaMs) { seekTo(Math.max(0, getPositionMs() + deltaMs)); }
++    @Override public void seekTo(long positionMs) {
++        long safe = Math.max(0L, positionMs);
++        if (radioPlayback && radioTimeShift.isActive()) {
++            if (!radioTimeShift.canSeek()) return;
++            long duration = radioTimeShift.getWindowDurationMs();
++            String url = safe >= Math.max(0L, duration - 750L)
++                    ? radioTimeShift.goLive() : radioTimeShift.seekTo(safe);
++            if (url == null || url.isEmpty()) return;
++            radioAutoplayPending = true;
++            controller.openUrlList(Collections.singletonList(url));
++            play();
++            emitSnapshot();
++            return;
++        }
++        setPositionMs(safe);
++        emitSnapshot();
++    }
++
++    @Override public void seekBy(long deltaMs) {
++        long current = radioPlayback && radioTimeShift.isActive()
++                ? radioTimeShift.positionForPlayer(getPositionMs()) : getPositionMs();
++        seekTo(Math.max(0L, current + deltaMs));
++    }
+     @Override public void setPlaybackSpeed(float speed) { setSpeed(speed); emitSnapshot(); }
+ 
+     @Override public void selectVideoTrack(String trackId) {
+@@ -438,6 +485,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+ 
+     @Override public void release() {
+         MobileDiagnostics.debug("DataPlayer", "release");
++        radioTimeShift.close();
+         engineGeneration++;
+         if (mediaSessionManager != null) mediaSessionManager.release();
+         main.removeCallbacks(ticker);
+@@ -462,6 +510,8 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         radioPlayback = false;
+         radioMediaId = null;
+         radioAutoplayPending = false;
++        radioDirectStreamUrl = "";
++        radioDirectFallbackUsed = false;
+         radioTitle = "";
+         radioSubtitle = "";
+         initialized = false;
+@@ -524,6 +574,25 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         main.post(ticker);
+     }
+ 
++    private boolean fallbackFromRadioDvr() {
++        if (!radioPlayback || !radioTimeShift.hasFailed() || radioDirectFallbackUsed
++                || radioDirectStreamUrl == null || radioDirectStreamUrl.isEmpty()
++                || controller == null) {
++            return false;
++        }
++        // Time-shift is deliberately fail-open: station playback is more important than DVR.
++        radioDirectFallbackUsed = true;
++        String fallback = radioDirectStreamUrl;
++        radioTimeShift.stop();
++        radioAutoplayPending = true;
++        ended = false;
++        buffering = true;
++        MobileDiagnostics.warn("P17-RadioDVR", "fallback to direct radio stream");
++        controller.openUrlList(Collections.singletonList(fallback));
++        play();
++        return true;
++    }
++
+     private void notifyError(Throwable error) {
+         MobileDiagnostics.error("DataPlayer", "player bridge failure", error);
+         Listener current = listener;
+@@ -548,11 +617,16 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         long position = Math.max(0, getPositionMs());
+         long duration = Math.max(0, getDurationMs());
+         long buffered = player == null ? 0 : Math.max(0, player.getBufferedPosition());
++        if (radioPlayback && radioTimeShift.isActive()) {
++            position = radioTimeShift.positionForPlayer(position);
++            duration = radioTimeShift.getWindowDurationMs();
++            buffered = duration;
++        }
+         List<MobileTrack> videoTracks = controller == null ? Collections.emptyList()
+                 : trackMapper.map(controller.getVideoFormats(), MobileTrack.Type.VIDEO);
+         List<FormatItem> audioFormats = controller == null ? Collections.emptyList()
+                 : controller.getAudioFormats();
+-        applyPreferredAudio(audioFormats);
++        if (applyLegacyPreferredAudio) applyPreferredAudio(audioFormats);
+         List<MobileTrack> audio = trackMapper.map(audioFormats, MobileTrack.Type.AUDIO);
+         List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
+                 : trackMapper.map(controller.getSubtitleFormats(), MobileTrack.Type.SUBTITLE);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/MobilePlayerPreferences.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/MobilePlayerPreferences.java
+new file mode 100644
+index 0000000..1ec775c
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/MobilePlayerPreferences.java
+@@ -0,0 +1,185 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++
++/**
++ * Preferences owned exclusively by the touch/mobile player.
++ *
++ * <p>Android Auto deliberately never reads this file. Keep car-specific settings in
++ * {@code AndroidAutoPreferences} so a phone UI customization cannot alter the stable AA service.</p>
++ */
++public final class MobilePlayerPreferences {
++    private static final String PREF_FILE = "smarttube_mobile_player";
++
++    private static final String KEY_AUTO_HIDE_CONTROLS = "auto_hide_controls";
++    private static final String KEY_PINCH_ZOOM = "pinch_zoom";
++    private static final String KEY_DOUBLE_TAP_SEEK = "double_tap_seek";
++    private static final String KEY_SWIPE_SEEK = "swipe_seek";
++    private static final String KEY_SHOW_PREVIOUS_NEXT = "show_previous_next";
++    private static final String KEY_SHOW_QUICK_OPTIONS = "show_quick_options";
++    private static final String KEY_SHOW_SUBTITLES = "show_subtitles";
++    private static final String KEY_SHOW_AUDIO = "show_audio";
++    private static final String KEY_SHOW_QUALITY = "show_quality";
++    private static final String KEY_SHOW_SPEED = "show_speed";
++    private static final String KEY_SHOW_FIT = "show_fit";
++    private static final String KEY_SHOW_PIP = "show_pip";
++    private static final String KEY_SHOW_FULLSCREEN = "show_fullscreen";
++    private static final String KEY_SHOW_MORE = "show_more";
++    private static final String KEY_PREFERRED_AUDIO_LANGUAGE = "preferred_audio_language";
++    private static final String KEY_PREFERRED_SUBTITLE_LANGUAGE = "preferred_subtitle_language";
++
++    public static final String LANGUAGE_SYSTEM = "system";
++    public static final String LANGUAGE_NONE = "";
++
++    private final SharedPreferences preferences;
++
++    public MobilePlayerPreferences(Context context) {
++        preferences = context.getApplicationContext()
++                .getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE);
++    }
++
++    public boolean isAutoHideControlsEnabled() {
++        return preferences.getBoolean(KEY_AUTO_HIDE_CONTROLS, true);
++    }
++
++    public void setAutoHideControlsEnabled(boolean enabled) {
++        setBoolean(KEY_AUTO_HIDE_CONTROLS, enabled);
++    }
++
++    public boolean isPinchZoomEnabled() {
++        return preferences.getBoolean(KEY_PINCH_ZOOM, true);
++    }
++
++    public void setPinchZoomEnabled(boolean enabled) {
++        setBoolean(KEY_PINCH_ZOOM, enabled);
++    }
++
++    public boolean isDoubleTapSeekEnabled() {
++        return preferences.getBoolean(KEY_DOUBLE_TAP_SEEK, true);
++    }
++
++    public void setDoubleTapSeekEnabled(boolean enabled) {
++        setBoolean(KEY_DOUBLE_TAP_SEEK, enabled);
++    }
++
++    public boolean isSwipeSeekEnabled() {
++        return preferences.getBoolean(KEY_SWIPE_SEEK, true);
++    }
++
++    public void setSwipeSeekEnabled(boolean enabled) {
++        setBoolean(KEY_SWIPE_SEEK, enabled);
++    }
++
++    public boolean isPreviousNextVisible() {
++        return preferences.getBoolean(KEY_SHOW_PREVIOUS_NEXT, true);
++    }
++
++    public void setPreviousNextVisible(boolean visible) {
++        setBoolean(KEY_SHOW_PREVIOUS_NEXT, visible);
++    }
++
++    public boolean isQuickOptionsVisible() {
++        return preferences.getBoolean(KEY_SHOW_QUICK_OPTIONS, true);
++    }
++
++    public void setQuickOptionsVisible(boolean visible) {
++        setBoolean(KEY_SHOW_QUICK_OPTIONS, visible);
++    }
++
++    public boolean isSubtitlesVisible() {
++        return preferences.getBoolean(KEY_SHOW_SUBTITLES, true);
++    }
++
++    public void setSubtitlesVisible(boolean visible) {
++        setBoolean(KEY_SHOW_SUBTITLES, visible);
++    }
++
++    public boolean isAudioVisible() {
++        return preferences.getBoolean(KEY_SHOW_AUDIO, true);
++    }
++
++    public void setAudioVisible(boolean visible) {
++        setBoolean(KEY_SHOW_AUDIO, visible);
++    }
++
++    public boolean isQualityVisible() {
++        return preferences.getBoolean(KEY_SHOW_QUALITY, true);
++    }
++
++    public void setQualityVisible(boolean visible) {
++        setBoolean(KEY_SHOW_QUALITY, visible);
++    }
++
++    public boolean isSpeedVisible() {
++        return preferences.getBoolean(KEY_SHOW_SPEED, true);
++    }
++
++    public void setSpeedVisible(boolean visible) {
++        setBoolean(KEY_SHOW_SPEED, visible);
++    }
++
++    public boolean isFitVisible() {
++        return preferences.getBoolean(KEY_SHOW_FIT, true);
++    }
++
++    public void setFitVisible(boolean visible) {
++        setBoolean(KEY_SHOW_FIT, visible);
++    }
++
++    public boolean isPipVisible() {
++        return preferences.getBoolean(KEY_SHOW_PIP, true);
++    }
++
++    public void setPipVisible(boolean visible) {
++        setBoolean(KEY_SHOW_PIP, visible);
++    }
++
++    public boolean isFullscreenVisible() {
++        return preferences.getBoolean(KEY_SHOW_FULLSCREEN, true);
++    }
++
++    public void setFullscreenVisible(boolean visible) {
++        setBoolean(KEY_SHOW_FULLSCREEN, visible);
++    }
++
++    public boolean isMoreVisible() {
++        return preferences.getBoolean(KEY_SHOW_MORE, true);
++    }
++
++    public void setMoreVisible(boolean visible) {
++        setBoolean(KEY_SHOW_MORE, visible);
++    }
++
++    public String getPreferredAudioLanguage() {
++        return preferences.getString(KEY_PREFERRED_AUDIO_LANGUAGE, LANGUAGE_SYSTEM);
++    }
++
++    public void setPreferredAudioLanguage(String languageCode) {
++        preferences.edit().putString(KEY_PREFERRED_AUDIO_LANGUAGE,
++                sanitizeLanguage(languageCode)).apply();
++    }
++
++    public String getPreferredSubtitleLanguage() {
++        return preferences.getString(KEY_PREFERRED_SUBTITLE_LANGUAGE, LANGUAGE_SYSTEM);
++    }
++
++    public void setPreferredSubtitleLanguage(String languageCode) {
++        preferences.edit().putString(KEY_PREFERRED_SUBTITLE_LANGUAGE,
++                sanitizeLanguage(languageCode)).apply();
++    }
++
++    public void reset() {
++        preferences.edit().clear().apply();
++    }
++
++    private void setBoolean(String key, boolean value) {
++        preferences.edit().putBoolean(key, value).apply();
++    }
++
++    private static String sanitizeLanguage(String value) {
++        if (value == null) return LANGUAGE_SYSTEM;
++        String trimmed = value.trim();
++        return trimmed.isEmpty() ? LANGUAGE_NONE : trimmed;
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PlayerLanguageCatalog.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PlayerLanguageCatalog.java
+new file mode 100644
+index 0000000..5768cae
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PlayerLanguageCatalog.java
+@@ -0,0 +1,69 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player;
++
++import android.content.Context;
++import com.liskovsoft.smartyoutubetv2.tv.R;
++import java.text.Collator;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.LinkedHashMap;
++import java.util.List;
++import java.util.Locale;
++import java.util.Map;
++
++/** Locale-backed language list used by the player settings screen. */
++public final class PlayerLanguageCatalog {
++    public static final class Entry {
++        private final String code;
++        private final String label;
++
++        Entry(String code, String label) {
++            this.code = code;
++            this.label = label;
++        }
++
++        public String getCode() { return code; }
++        public String getLabel() { return label; }
++    }
++
++    private PlayerLanguageCatalog() { }
++
++    public static List<Entry> build(Context context) {
++        Map<String, String> unique = new LinkedHashMap<>();
++        Locale displayLocale = Locale.getDefault();
++        for (Locale locale : Locale.getAvailableLocales()) {
++            String code = locale.getLanguage();
++            if (code == null || code.trim().isEmpty() || unique.containsKey(code)) continue;
++            String label = locale.getDisplayLanguage(displayLocale);
++            if (label == null || label.trim().isEmpty()) continue;
++            unique.put(code, capitalize(label));
++        }
++
++        List<Entry> result = new ArrayList<>();
++        result.add(new Entry(MobilePlayerPreferences.LANGUAGE_SYSTEM,
++                context.getString(R.string.mobile_player_language_system)));
++        result.add(new Entry(MobilePlayerPreferences.LANGUAGE_NONE,
++                context.getString(R.string.mobile_player_language_none)));
++
++        List<Entry> languages = new ArrayList<>();
++        for (Map.Entry<String, String> item : unique.entrySet()) {
++            languages.add(new Entry(item.getKey(), item.getValue()));
++        }
++        Collator collator = Collator.getInstance(displayLocale);
++        Collections.sort(languages, (left, right) -> collator.compare(left.getLabel(), right.getLabel()));
++        result.addAll(languages);
++        return result;
++    }
++
++    public static String labelFor(Context context, String code) {
++        String normalized = code == null ? MobilePlayerPreferences.LANGUAGE_SYSTEM : code.trim();
++        for (Entry entry : build(context)) {
++            if (entry.getCode().equalsIgnoreCase(normalized)) return entry.getLabel();
++        }
++        return normalized.isEmpty() ? context.getString(R.string.mobile_player_language_none) : normalized;
++    }
++
++    private static String capitalize(String value) {
++        if (value == null || value.isEmpty()) return "";
++        return value.substring(0, 1).toUpperCase(Locale.getDefault()) + value.substring(1);
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolver.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolver.java
+new file mode 100644
+index 0000000..f725829
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolver.java
+@@ -0,0 +1,51 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player;
++
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
++import java.util.List;
++import java.util.Locale;
++
++/** Finds the row to emphasize/scroll to without changing the active ExoPlayer track. */
++public final class PreferredTrackResolver {
++    private PreferredTrackResolver() { }
++
++    public static int findPreferred(List<MobileTrack> tracks, String preference) {
++        if (tracks == null || tracks.isEmpty()) return -1;
++        String wanted = normalize(preference);
++        if (MobilePlayerPreferences.LANGUAGE_SYSTEM.equals(wanted)) {
++            wanted = normalize(Locale.getDefault().getLanguage());
++        }
++        if (wanted.isEmpty()) return -1;
++
++        for (int i = 0; i < tracks.size(); i++) {
++            MobileTrack track = tracks.get(i);
++            if (track == null) continue;
++            if (matches(track.getLanguage(), wanted) || matchesLabel(track.getLabel(), wanted)) {
++                return i;
++            }
++        }
++        return -1;
++    }
++
++    private static boolean matches(String value, String wanted) {
++        String language = normalize(value);
++        return language.equals(wanted)
++                || language.startsWith(wanted + "-")
++                || language.startsWith(wanted + "_")
++                || language.startsWith(wanted + ".");
++    }
++
++    private static boolean matchesLabel(String label, String wanted) {
++        String normalized = normalize(label);
++        if (normalized.isEmpty()) return false;
++        if ("pl".equals(wanted)) return normalized.contains("polski") || normalized.contains("polish");
++        if ("en".equals(wanted)) return normalized.contains("english") || normalized.contains("angielski");
++        if ("de".equals(wanted)) return normalized.contains("deutsch") || normalized.contains("german");
++        if ("es".equals(wanted)) return normalized.contains("español") || normalized.contains("spanish");
++        if ("fr".equals(wanted)) return normalized.contains("français") || normalized.contains("french");
++        return false;
++    }
++
++    private static String normalize(String value) {
++        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/TrackPickerBottomSheet.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/TrackPickerBottomSheet.java
+new file mode 100644
+index 0000000..2def832
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/TrackPickerBottomSheet.java
+@@ -0,0 +1,129 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player;
++
++import android.content.Context;
++import android.view.LayoutInflater;
++import android.view.View;
++import android.view.ViewGroup;
++import android.widget.TextView;
++import androidx.annotation.NonNull;
++import androidx.recyclerview.widget.LinearLayoutManager;
++import androidx.recyclerview.widget.RecyclerView;
++import com.google.android.material.bottomsheet.BottomSheetDialog;
++import com.google.android.material.card.MaterialCardView;
++import com.liskovsoft.smartyoutubetv2.tv.R;
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
++import java.util.ArrayList;
++import java.util.List;
++
++/** Material bottom sheet shared by audio, captions and quality track selection. */
++public final class TrackPickerBottomSheet {
++    public interface Listener {
++        void onTrackSelected(MobileTrack track);
++    }
++
++    private TrackPickerBottomSheet() { }
++
++    public static void show(Context context, MobileTrack.Type type, List<MobileTrack> source,
++                            String preferredLanguage, Listener listener) {
++        List<MobileTrack> tracks = source == null ? new ArrayList<>() : new ArrayList<>(source);
++        if (tracks.isEmpty()) return;
++
++        BottomSheetDialog dialog = new BottomSheetDialog(context);
++        View content = LayoutInflater.from(context).inflate(R.layout.mobile_track_picker_sheet, null, false);
++        TextView title = content.findViewById(R.id.mobile_track_picker_title);
++        TextView hint = content.findViewById(R.id.mobile_track_picker_hint);
++        RecyclerView list = content.findViewById(R.id.mobile_track_picker_list);
++
++        int titleRes = type == MobileTrack.Type.VIDEO ? R.string.mobile_native_quality
++                : type == MobileTrack.Type.AUDIO ? R.string.mobile_native_audio
++                : R.string.mobile_native_subtitles;
++        title.setText(titleRes);
++        boolean languagePicker = type == MobileTrack.Type.AUDIO || type == MobileTrack.Type.SUBTITLE;
++        hint.setVisibility(languagePicker ? View.VISIBLE : View.GONE);
++
++        int preferredIndex = languagePicker
++                ? PreferredTrackResolver.findPreferred(tracks, preferredLanguage) : -1;
++        int selectedIndex = -1;
++        for (int i = 0; i < tracks.size(); i++) {
++            if (tracks.get(i).isSelected()) {
++                selectedIndex = i;
++                break;
++            }
++        }
++
++        LinearLayoutManager manager = new LinearLayoutManager(context);
++        list.setLayoutManager(manager);
++        list.setAdapter(new Adapter(tracks, preferredIndex, selectedIndex, track -> {
++            if (listener != null) listener.onTrackSelected(track);
++            dialog.dismiss();
++        }));
++        dialog.setContentView(content);
++        dialog.setOnShowListener(ignored -> {
++            int target = preferredIndex >= 0 ? preferredIndex : selectedIndex;
++            if (target >= 0) list.post(() -> manager.scrollToPositionWithOffset(target, 12));
++        });
++        dialog.show();
++    }
++
++    private interface RowListener {
++        void onClick(MobileTrack track);
++    }
++
++    private static final class Adapter extends RecyclerView.Adapter<Adapter.Holder> {
++        private final List<MobileTrack> tracks;
++        private final int preferredIndex;
++        private final int selectedIndex;
++        private final RowListener listener;
++
++        Adapter(List<MobileTrack> tracks, int preferredIndex, int selectedIndex,
++                RowListener listener) {
++            this.tracks = tracks;
++            this.preferredIndex = preferredIndex;
++            this.selectedIndex = selectedIndex;
++            this.listener = listener;
++        }
++
++        @NonNull @Override public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
++            View view = LayoutInflater.from(parent.getContext())
++                    .inflate(R.layout.mobile_track_picker_row, parent, false);
++            return new Holder(view);
++        }
++
++        @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
++            MobileTrack track = tracks.get(position);
++            boolean selected = position == selectedIndex || track.isSelected();
++            boolean preferred = position == preferredIndex;
++            holder.title.setText(track.getLabel());
++            holder.language.setText(track.getLanguage().isEmpty()
++                    ? holder.itemView.getContext().getString(R.string.mobile_track_language_unknown)
++                    : track.getLanguage().toUpperCase(java.util.Locale.ROOT));
++            holder.badge.setVisibility(selected || preferred ? View.VISIBLE : View.GONE);
++            if (selected && preferred) {
++                holder.badge.setText(R.string.mobile_track_badge_selected_default);
++            } else if (selected) {
++                holder.badge.setText(R.string.mobile_track_badge_selected);
++            } else if (preferred) {
++                holder.badge.setText(R.string.mobile_track_badge_default);
++            }
++            holder.card.setChecked(selected);
++            holder.itemView.setOnClickListener(v -> listener.onClick(track));
++        }
++
++        @Override public int getItemCount() { return tracks.size(); }
++
++        static final class Holder extends RecyclerView.ViewHolder {
++            final MaterialCardView card;
++            final TextView title;
++            final TextView language;
++            final TextView badge;
++
++            Holder(View itemView) {
++                super(itemView);
++                card = itemView.findViewById(R.id.mobile_track_row_card);
++                title = itemView.findViewById(R.id.mobile_track_row_title);
++                language = itemView.findViewById(R.id.mobile_track_row_language);
++                badge = itemView.findViewById(R.id.mobile_track_row_badge);
++            }
++        }
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioDvrProxy.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioDvrProxy.java
+new file mode 100644
+index 0000000..9ebe5d1
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioDvrProxy.java
+@@ -0,0 +1,414 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio;
++
++import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
++import java.io.BufferedInputStream;
++import java.io.BufferedOutputStream;
++import java.io.BufferedReader;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.InputStreamReader;
++import java.io.OutputStream;
++import java.net.HttpURLConnection;
++import java.net.InetAddress;
++import java.net.ServerSocket;
++import java.net.Socket;
++import java.net.URL;
++import java.nio.charset.StandardCharsets;
++import java.util.ArrayDeque;
++import java.util.Deque;
++import java.util.Locale;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.atomic.AtomicLong;
++
++/**
++ * Small localhost proxy that turns progressive radio streams into a rolling seek window.
++ *
++ * <p>It intentionally does not touch VOD. HLS playlists are passed through unchanged because
++ * segment-aware DVR needs a different implementation; progressive MP3/AAC/OGG streams are cached
++ * in a bounded in-memory ring and replayed from the requested point.</p>
++ */
++public final class RadioDvrProxy implements RadioTimeShiftController {
++    private static final String TAG = "P17-RadioDVR";
++    private static final int CHUNK_BYTES = 16 * 1024;
++    private static final long MAX_BUFFER_BYTES = 24L * 1024L * 1024L;
++    private static final int CONNECT_TIMEOUT_MS = 10_000;
++    private static final int READ_TIMEOUT_MS = 30_000;
++    private static final long MIN_SEEK_WINDOW_MS = 2_000L;
++    private static final String USER_AGENT = "SmartTube-AA RadioDVR/1.0";
++
++    private final RadioPreferences preferences;
++    private final Object lock = new Object();
++    private final Deque<Chunk> chunks = new ArrayDeque<>();
++    private final ExecutorService workers = Executors.newCachedThreadPool(runnable -> {
++        Thread thread = new Thread(runnable, "SmartTube-RadioDVR");
++        thread.setDaemon(true);
++        return thread;
++    });
++    private final AtomicLong requestNonce = new AtomicLong();
++
++    private volatile boolean active;
++    private volatile boolean failed;
++    private volatile long generation;
++    private volatile String directStreamUrl = "";
++    private volatile String contentType = "audio/mpeg";
++    private volatile ServerSocket server;
++    private volatile HttpURLConnection upstreamConnection;
++    private long nextSequence;
++    private long nextLogicalMs;
++    private long bufferedBytes;
++    /** Absolute logical time represented by ExoPlayer position 0 for the currently opened source. */
++    private volatile long playbackAnchorLogicalMs = -1L;
++    private volatile int stationBitrateKbps = 128;
++
++    public RadioDvrProxy(RadioPreferences preferences) {
++        this.preferences = preferences;
++    }
++
++    @Override public String start(RadioStation station) {
++        stop();
++        if (station == null) return "";
++        directStreamUrl = station.getStreamUrl() == null ? "" : station.getStreamUrl().trim();
++        stationBitrateKbps = station.getBitrate() > 0 ? station.getBitrate() : 128;
++        if (!preferences.isTimeShiftEnabled() || directStreamUrl.isEmpty()
++                || looksLikeHls(directStreamUrl)) {
++            MobileDiagnostics.info(TAG, "direct mode timeshift=" + preferences.isTimeShiftEnabled()
++                    + " hls=" + looksLikeHls(directStreamUrl));
++            return directStreamUrl;
++        }
++
++        long session = ++generation;
++        failed = false;
++        active = true;
++        playbackAnchorLogicalMs = -1L;
++        synchronized (lock) {
++            chunks.clear();
++            nextSequence = 0L;
++            nextLogicalMs = 0L;
++            bufferedBytes = 0L;
++        }
++        try {
++            ServerSocket localServer = new ServerSocket(0, 8,
++                    InetAddress.getByName("127.0.0.1"));
++            server = localServer;
++            workers.execute(() -> acceptClients(session, localServer));
++            workers.execute(() -> pumpUpstream(session, station));
++            String url = localUrl("live");
++            MobileDiagnostics.info(TAG, "session start port=" + localServer.getLocalPort()
++                    + " bitrate=" + stationBitrateKbps + "kbps window="
++                    + preferences.getTimeShiftMinutes() + "min");
++            return url;
++        } catch (Throwable error) {
++            MobileDiagnostics.warn(TAG, "localhost proxy unavailable: " + error.getMessage());
++            failed = true;
++            active = false;
++            closeServer();
++            return directStreamUrl;
++        }
++    }
++
++    @Override public boolean isActive() {
++        return active;
++    }
++
++    @Override public boolean canSeek() {
++        return active && !failed && getWindowDurationMs() >= MIN_SEEK_WINDOW_MS;
++    }
++
++    @Override public boolean hasFailed() {
++        return failed;
++    }
++
++    @Override public long getWindowDurationMs() {
++        synchronized (lock) {
++            if (chunks.isEmpty()) return 0L;
++            return Math.max(0L, chunks.peekLast().endMs - chunks.peekFirst().startMs);
++        }
++    }
++
++    @Override public long positionForPlayer(long playerPositionMs) {
++        synchronized (lock) {
++            if (chunks.isEmpty()) return 0L;
++            long oldest = chunks.peekFirst().startMs;
++            long newest = chunks.peekLast().endMs;
++            long anchor = playbackAnchorLogicalMs;
++            if (anchor < 0L) return Math.max(0L, newest - oldest); // Initial /live request.
++            long absolute = anchor + Math.max(0L, playerPositionMs);
++            return clamp(absolute - oldest, 0L, Math.max(0L, newest - oldest));
++        }
++    }
++
++    @Override public String seekTo(long virtualPositionMs) {
++        synchronized (lock) {
++            if (chunks.isEmpty()) return getDirectStreamUrl();
++            long oldest = chunks.peekFirst().startMs;
++            long newest = chunks.peekLast().endMs;
++            long target = oldest + clamp(virtualPositionMs, 0L, Math.max(0L, newest - oldest));
++            Chunk chunk = findChunkForTimeLocked(target);
++            playbackAnchorLogicalMs = chunk == null ? target : chunk.startMs;
++            return localUrl(Long.toString(playbackAnchorLogicalMs));
++        }
++    }
++
++    @Override public String goLive() {
++        synchronized (lock) {
++            playbackAnchorLogicalMs = chunks.isEmpty() ? -1L : chunks.peekLast().startMs;
++        }
++        return localUrl("live");
++    }
++
++    @Override public String getDirectStreamUrl() {
++        return directStreamUrl;
++    }
++
++    @Override public void stop() {
++        active = false;
++        ++generation;
++        HttpURLConnection connection = upstreamConnection;
++        upstreamConnection = null;
++        if (connection != null) connection.disconnect();
++        closeServer();
++        synchronized (lock) {
++            lock.notifyAll();
++            chunks.clear();
++            bufferedBytes = 0L;
++            nextLogicalMs = 0L;
++            nextSequence = 0L;
++        }
++        playbackAnchorLogicalMs = -1L;
++        failed = false;
++    }
++
++    @Override public void close() {
++        stop();
++        workers.shutdownNow();
++    }
++
++    private void pumpUpstream(long session, RadioStation station) {
++        HttpURLConnection connection = null;
++        try {
++            connection = (HttpURLConnection) new URL(directStreamUrl).openConnection();
++            upstreamConnection = connection;
++            connection.setInstanceFollowRedirects(true);
++            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
++            connection.setReadTimeout(READ_TIMEOUT_MS);
++            connection.setRequestProperty("User-Agent", USER_AGENT);
++            connection.setRequestProperty("Accept", "audio/*,*/*;q=0.8");
++            // Some Icecast servers otherwise insert metadata bytes into the audio payload.
++            connection.setRequestProperty("Icy-MetaData", "0");
++            int response = connection.getResponseCode();
++            if (response < 200 || response >= 300) {
++                throw new IOException("upstream HTTP " + response);
++            }
++            String mime = connection.getContentType();
++            if (mime != null && !mime.trim().isEmpty()) contentType = mime.split(";", 2)[0].trim();
++            if (looksLikeHls(contentType) || looksLikeHls(connection.getURL().toString())) {
++                throw new UnsupportedOperationException("HLS stream uses native live playback");
++            }
++            try (InputStream input = new BufferedInputStream(connection.getInputStream(), CHUNK_BYTES * 2)) {
++                byte[] buffer = new byte[CHUNK_BYTES];
++                while (active && generation == session) {
++                    int count = input.read(buffer);
++                    if (count < 0) throw new IOException("upstream ended");
++                    if (count == 0) continue;
++                    byte[] payload = new byte[count];
++                    System.arraycopy(buffer, 0, payload, 0, count);
++                    appendChunk(payload);
++                }
++            }
++        } catch (Throwable error) {
++            if (active && generation == session) {
++                failed = true;
++                MobileDiagnostics.warn(TAG, "upstream failed: " + error.getMessage());
++                synchronized (lock) { lock.notifyAll(); }
++            }
++        } finally {
++            if (connection != null) connection.disconnect();
++            if (upstreamConnection == connection) upstreamConnection = null;
++        }
++    }
++
++    private void appendChunk(byte[] payload) {
++        long durationMs = Math.max(1L, payload.length * 8L / Math.max(1, stationBitrateKbps));
++        synchronized (lock) {
++            long start = nextLogicalMs;
++            long end = start + durationMs;
++            chunks.addLast(new Chunk(nextSequence++, start, end, payload));
++            nextLogicalMs = end;
++            bufferedBytes += payload.length;
++            long wantedWindow = preferences.getTimeShiftWindowMs();
++            while (chunks.size() > 1) {
++                Chunk first = chunks.peekFirst();
++                Chunk last = chunks.peekLast();
++                boolean overDuration = last.endMs - first.startMs > wantedWindow;
++                boolean overBytes = bufferedBytes > MAX_BUFFER_BYTES;
++                if (!overDuration && !overBytes) break;
++                Chunk removed = chunks.removeFirst();
++                bufferedBytes -= removed.data.length;
++            }
++            lock.notifyAll();
++        }
++    }
++
++    private void acceptClients(long session, ServerSocket localServer) {
++        while (active && generation == session && !localServer.isClosed()) {
++            try {
++                Socket socket = localServer.accept();
++                workers.execute(() -> serveClient(session, socket));
++            } catch (IOException error) {
++                if (active && generation == session) {
++                    MobileDiagnostics.warn(TAG, "accept failed: " + error.getMessage());
++                }
++                return;
++            }
++        }
++    }
++
++    private void serveClient(long session, Socket socket) {
++        try (Socket client = socket;
++             BufferedReader reader = new BufferedReader(new InputStreamReader(
++                     client.getInputStream(), StandardCharsets.US_ASCII));
++             OutputStream output = new BufferedOutputStream(client.getOutputStream(), CHUNK_BYTES * 2)) {
++            client.setTcpNoDelay(true);
++            String requestLine = reader.readLine();
++            if (requestLine == null || !requestLine.startsWith("GET ")) return;
++            String target = parseFromValue(requestLine);
++            String line;
++            while ((line = reader.readLine()) != null && !line.isEmpty()) { /* consume headers */ }
++
++            Chunk start = waitForStartChunk(session, target);
++            if (start == null) {
++                writeStatus(output, failed ? 503 : 404, failed ? "DVR unavailable" : "No audio");
++                return;
++            }
++            // The requested chunk can be evicted between seekTo() and this connection. Anchor
++            // the exposed virtual position to the chunk that is actually served, not to the stale
++            // requested timestamp. This keeps the phone and Android Auto seek bars consistent.
++            playbackAnchorLogicalMs = start.startMs;
++            output.write(("HTTP/1.1 200 OK\r\n"
++                    + "Content-Type: " + safeContentType() + "\r\n"
++                    + "Cache-Control: no-store\r\n"
++                    + "Connection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
++            output.flush();
++
++            long sequence = start.sequence;
++            while (active && generation == session) {
++                Chunk next = waitForSequence(session, sequence);
++                if (next == null) break;
++                output.write(next.data);
++                output.flush();
++                sequence = next.sequence + 1L;
++            }
++        } catch (Throwable ignored) {
++            // ExoPlayer routinely closes the old HTTP connection when a user seeks.
++        }
++    }
++
++    private Chunk waitForStartChunk(long session, String from) throws InterruptedException {
++        long deadline = System.currentTimeMillis() + 15_000L;
++        synchronized (lock) {
++            while (active && generation == session && chunks.isEmpty() && !failed
++                    && System.currentTimeMillis() < deadline) {
++                lock.wait(250L);
++            }
++            if (chunks.isEmpty()) return null;
++            if ("live".equals(from)) return chunks.peekLast();
++            try {
++                long absolute = Long.parseLong(from);
++                Chunk found = findChunkForTimeLocked(absolute);
++                return found == null ? chunks.peekFirst() : found;
++            } catch (NumberFormatException ignored) {
++                return chunks.peekLast();
++            }
++        }
++    }
++
++    private Chunk waitForSequence(long session, long sequence) throws InterruptedException {
++        synchronized (lock) {
++            while (active && generation == session) {
++                if (!chunks.isEmpty()) {
++                    Chunk first = chunks.peekFirst();
++                    if (sequence < first.sequence) sequence = first.sequence; // Reader fell behind eviction.
++                    for (Chunk chunk : chunks) {
++                        if (chunk.sequence >= sequence) return chunk;
++                    }
++                }
++                if (failed) return null;
++                lock.wait(250L);
++            }
++            return null;
++        }
++    }
++
++    private Chunk findChunkForTimeLocked(long absoluteMs) {
++        Chunk fallback = chunks.peekLast();
++        for (Chunk chunk : chunks) {
++            if (absoluteMs < chunk.endMs) return chunk;
++        }
++        return fallback;
++    }
++
++    private String localUrl(String from) {
++        ServerSocket localServer = server;
++        if (localServer == null || localServer.isClosed()) return directStreamUrl;
++        return "http://127.0.0.1:" + localServer.getLocalPort()
++                + "/radio?from=" + from + "&n=" + requestNonce.incrementAndGet();
++    }
++
++    private static String parseFromValue(String requestLine) {
++        int start = requestLine.indexOf("from=");
++        if (start < 0) return "live";
++        start += 5;
++        int end = requestLine.indexOf('&', start);
++        if (end < 0) end = requestLine.indexOf(' ', start);
++        if (end < 0) end = requestLine.length();
++        return requestLine.substring(start, end).trim();
++    }
++
++    private String safeContentType() {
++        String mime = contentType == null ? "" : contentType.trim();
++        return mime.isEmpty() ? "audio/mpeg" : mime;
++    }
++
++    private static void writeStatus(OutputStream output, int code, String message) throws IOException {
++        byte[] body = message.getBytes(StandardCharsets.UTF_8);
++        String header = "HTTP/1.1 " + code + " " + message + "\r\n"
++                + "Content-Type: text/plain; charset=utf-8\r\n"
++                + "Content-Length: " + body.length + "\r\nConnection: close\r\n\r\n";
++        output.write(header.getBytes(StandardCharsets.US_ASCII));
++        output.write(body);
++        output.flush();
++    }
++
++    private void closeServer() {
++        ServerSocket localServer = server;
++        server = null;
++        if (localServer != null) {
++            try { localServer.close(); } catch (IOException ignored) { }
++        }
++    }
++
++    private static boolean looksLikeHls(String value) {
++        if (value == null) return false;
++        String normalized = value.toLowerCase(Locale.ROOT);
++        return normalized.contains("mpegurl") || normalized.contains("m3u8");
++    }
++
++    private static long clamp(long value, long min, long max) {
++        return Math.max(min, Math.min(max, value));
++    }
++
++    private static final class Chunk {
++        final long sequence;
++        final long startMs;
++        final long endMs;
++        final byte[] data;
++
++        Chunk(long sequence, long startMs, long endMs, byte[] data) {
++            this.sequence = sequence;
++            this.startMs = startMs;
++            this.endMs = endMs;
++            this.data = data;
++        }
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferences.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferences.java
+new file mode 100644
+index 0000000..441eb50
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferences.java
+@@ -0,0 +1,46 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio;
++
++import android.content.Context;
++import android.content.SharedPreferences;
++
++/** Radio-only settings shared by phone playback and Android Auto. */
++public final class RadioPreferences {
++    private static final String PREF_FILE = "smarttube_mobile_radio";
++    private static final String KEY_TIME_SHIFT_ENABLED = "timeshift_enabled";
++    private static final String KEY_TIME_SHIFT_MINUTES = "timeshift_minutes";
++    private static final int DEFAULT_TIME_SHIFT_MINUTES = 3;
++
++    private final SharedPreferences preferences;
++
++    public RadioPreferences(Context context) {
++        preferences = context.getApplicationContext()
++                .getSharedPreferences(PREF_FILE, Context.MODE_PRIVATE);
++    }
++
++    public boolean isTimeShiftEnabled() {
++        return preferences.getBoolean(KEY_TIME_SHIFT_ENABLED, true);
++    }
++
++    public void setTimeShiftEnabled(boolean enabled) {
++        preferences.edit().putBoolean(KEY_TIME_SHIFT_ENABLED, enabled).apply();
++    }
++
++    public int getTimeShiftMinutes() {
++        return sanitizeMinutes(preferences.getInt(KEY_TIME_SHIFT_MINUTES,
++                DEFAULT_TIME_SHIFT_MINUTES));
++    }
++
++    public void setTimeShiftMinutes(int minutes) {
++        preferences.edit().putInt(KEY_TIME_SHIFT_MINUTES, sanitizeMinutes(minutes)).apply();
++    }
++
++    public long getTimeShiftWindowMs() {
++        return getTimeShiftMinutes() * 60_000L;
++    }
++
++    private static int sanitizeMinutes(int value) {
++        if (value <= 1) return 1;
++        if (value <= 3) return 3;
++        return 5;
++    }
++}
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
+index 5a46823..1424164 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
+@@ -100,11 +100,24 @@ public final class RadioStationRepository {
+     public long getLastSyncTimeMs() { return preferences.getLong(KEY_LAST_SYNC, 0L); }
+ 
+     public List<RadioStation> getStations(SortMode mode, boolean favoritesOnly) {
++        return getStations(mode, favoritesOnly, "");
++    }
++
++    /** Local search keeps typing instant and works even when the Radio Browser API is offline. */
++    public List<RadioStation> getStations(SortMode mode, boolean favoritesOnly, String query) {
++        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+         List<RadioStation> result = new ArrayList<>();
+         synchronized (lock) {
+             for (RadioStation station : stations) {
+                 boolean favorite = favorites.contains(station.getId());
+-                if (!favoritesOnly || favorite) result.add(station.withFavorite(favorite));
++                if (favoritesOnly && !favorite) continue;
++                if (!needle.isEmpty()) {
++                    String searchable = (station.getName() + " " + station.getCountry() + " "
++                            + station.getCountryCode() + " " + station.getCodec() + " "
++                            + station.getTags()).toLowerCase(Locale.ROOT);
++                    if (!searchable.contains(needle)) continue;
++                }
++                result.add(station.withFavorite(favorite));
+             }
+         }
+         sort(result, mode == null ? SortMode.POPULARITY : mode);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioTimeShiftController.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioTimeShiftController.java
+new file mode 100644
+index 0000000..b6a7621
+--- /dev/null
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioTimeShiftController.java
+@@ -0,0 +1,17 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio;
++
++/** Rolling live-radio DVR used by both the phone radio player and Android Auto. */
++public interface RadioTimeShiftController {
++    /** Starts a new radio session and returns the URL ExoPlayer should open. */
++    String start(RadioStation station);
++    boolean isActive();
++    boolean canSeek();
++    boolean hasFailed();
++    long getWindowDurationMs();
++    long positionForPlayer(long playerPositionMs);
++    String seekTo(long virtualPositionMs);
++    String goLive();
++    String getDirectStreamUrl();
++    void stop();
++    void close();
++}
+diff --git a/smarttubetv/src/stmobile/res/drawable/mobile_bottom_sheet_handle.xml b/smarttubetv/src/stmobile/res/drawable/mobile_bottom_sheet_handle.xml
+new file mode 100644
+index 0000000..dab7444
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/drawable/mobile_bottom_sheet_handle.xml
+@@ -0,0 +1,5 @@
++<?xml version="1.0" encoding="utf-8"?>
++<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
++    <solid android:color="@color/mobile_outline" />
++    <corners android:radius="2dp" />
++</shape>
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_android_auto_settings_fragment.xml b/smarttubetv/src/stmobile/res/layout/mobile_android_auto_settings_fragment.xml
+index d1d611f..f6aa67d 100644
+--- a/smarttubetv/src/stmobile/res/layout/mobile_android_auto_settings_fragment.xml
++++ b/smarttubetv/src/stmobile/res/layout/mobile_android_auto_settings_fragment.xml
+@@ -264,7 +264,6 @@
+             <com.google.android.material.card.MaterialCardView
+                 android:layout_width="match_parent"
+                 android:layout_height="wrap_content"
+-                android:alpha="0.65"
+                 app:cardBackgroundColor="?attr/colorSurface"
+                 app:cardCornerRadius="16dp"
+                 app:cardElevation="0dp"
+@@ -295,7 +294,7 @@
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
+                         android:layout_marginTop="10dp"
+-                        android:text="@string/mobile_aa_coming_soon" />
++                        android:text="@string/mobile_aa_radio_ready" />
+                 </LinearLayout>
+             </com.google.android.material.card.MaterialCardView>
+         </LinearLayout>
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
+index d02522f..febd7ae 100644
+--- a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
++++ b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
+@@ -198,6 +198,15 @@
+                     android:minWidth="104dp"
+                     android:singleLine="true" />
+ 
++                <com.google.android.material.button.MaterialButton
++                    android:id="@+id/mobile_player_go_live"
++                    style="@style/Widget.SmartTube.Mobile.PlayerButton"
++                    android:layout_width="wrap_content"
++                    android:layout_height="48dp"
++                    android:layout_marginEnd="8dp"
++                    android:text="@string/mobile_radio_go_live"
++                    android:visibility="gone" />
++
+                 <HorizontalScrollView
+                     android:layout_width="0dp"
+                     android:layout_height="48dp"
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml
+index 55beda0..489bbf0 100644
+--- a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml
++++ b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml
+@@ -47,6 +47,22 @@
+         app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
+         app:layout_constraintWidth_max="@dimen/mobile_settings_max_width" />
+ 
++
++    <com.google.android.material.button.MaterialButton
++        android:id="@+id/mobile_player_settings_button"
++        style="@style/Widget.SmartTube.Mobile.Button"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_marginStart="12dp"
++        android:layout_marginTop="8dp"
++        android:layout_marginEnd="12dp"
++        android:minHeight="48dp"
++        android:text="@string/mobile_player_settings_entry"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/mobile_android_auto_button"
++        app:layout_constraintWidth_max="@dimen/mobile_settings_max_width" />
++
+     <com.google.android.material.button.MaterialButton
+         android:id="@+id/mobile_classic_button"
+         style="@style/Widget.SmartTube.Mobile.Button"
+@@ -89,7 +105,7 @@
+         android:text="@string/mobile_radio_settings_entry"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+-        app:layout_constraintTop_toBottomOf="@id/mobile_android_auto_button"
++        app:layout_constraintTop_toBottomOf="@id/mobile_player_settings_button"
+         app:layout_constraintWidth_max="@dimen/mobile_settings_max_width" />
+ 
+     <LinearLayout
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_player_settings_fragment.xml b/smarttubetv/src/stmobile/res/layout/mobile_player_settings_fragment.xml
+new file mode 100644
+index 0000000..658a41c
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/layout/mobile_player_settings_fragment.xml
+@@ -0,0 +1,260 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.constraintlayout.widget.ConstraintLayout
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:background="?attr/colorSurface">
++
++    <com.google.android.material.appbar.MaterialToolbar
++        android:id="@+id/mobile_toolbar"
++        style="@style/Widget.SmartTube.Mobile.Toolbar"
++        android:layout_width="0dp"
++        android:layout_height="@dimen/mobile_top_bar_height"
++        android:minHeight="48dp"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toTopOf="parent"
++        app:title="@string/mobile_player_settings_title" />
++
++    <androidx.core.widget.NestedScrollView
++        android:layout_width="0dp"
++        android:layout_height="0dp"
++        android:clipToPadding="false"
++        android:fillViewport="true"
++        android:paddingStart="@dimen/mobile_screen_horizontal_padding"
++        android:paddingTop="8dp"
++        android:paddingEnd="@dimen/mobile_screen_horizontal_padding"
++        android:paddingBottom="24dp"
++        app:layout_constraintBottom_toBottomOf="parent"
++        app:layout_constraintEnd_toEndOf="parent"
++        app:layout_constraintStart_toStartOf="parent"
++        app:layout_constraintTop_toBottomOf="@id/mobile_toolbar"
++        app:layout_constraintWidth_max="@dimen/mobile_settings_max_width">
++
++        <LinearLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:orientation="vertical">
++
++            <TextView
++                style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:padding="8dp"
++                android:text="@string/mobile_player_settings_summary" />
++
++            <com.google.android.material.card.MaterialCardView
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="6dp"
++                android:layout_marginBottom="12dp"
++                app:cardBackgroundColor="?attr/colorSurface"
++                app:cardCornerRadius="16dp"
++                app:cardElevation="0dp"
++                app:strokeColor="@color/mobile_outline"
++                app:strokeWidth="1dp">
++
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical"
++                    android:padding="16dp">
++
++                    <TextView
++                        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/mobile_player_language_section" />
++
++                    <TextView
++                        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="6dp"
++                        android:text="@string/mobile_player_language_summary" />
++
++                    <com.google.android.material.button.MaterialButton
++                        android:id="@+id/mobile_player_pref_audio_language"
++                        style="@style/Widget.SmartTube.Mobile.Button"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="12dp"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_default_audio" />
++
++                    <com.google.android.material.button.MaterialButton
++                        android:id="@+id/mobile_player_pref_subtitle_language"
++                        style="@style/Widget.SmartTube.Mobile.Button"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="8dp"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_default_subtitles" />
++                </LinearLayout>
++            </com.google.android.material.card.MaterialCardView>
++
++            <com.google.android.material.card.MaterialCardView
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginBottom="12dp"
++                app:cardBackgroundColor="?attr/colorSurface"
++                app:cardCornerRadius="16dp"
++                app:cardElevation="0dp"
++                app:strokeColor="@color/mobile_outline"
++                app:strokeWidth="1dp">
++
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical"
++                    android:padding="16dp">
++
++                    <TextView
++                        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/mobile_player_gestures_section" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_auto_hide"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_auto_hide" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_pinch_zoom"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_pinch_zoom" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_double_tap"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_double_tap_seek" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_swipe_seek"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_swipe_seek" />
++                </LinearLayout>
++            </com.google.android.material.card.MaterialCardView>
++
++            <com.google.android.material.card.MaterialCardView
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginBottom="12dp"
++                app:cardBackgroundColor="?attr/colorSurface"
++                app:cardCornerRadius="16dp"
++                app:cardElevation="0dp"
++                app:strokeColor="@color/mobile_outline"
++                app:strokeWidth="1dp">
++
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical"
++                    android:padding="16dp">
++
++                    <TextView
++                        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/mobile_player_controls_section" />
++
++                    <TextView
++                        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="4dp"
++                        android:layout_marginBottom="4dp"
++                        android:text="@string/mobile_player_controls_summary" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_previous_next"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_previous_next" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_quick_options"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_quick_options" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_subtitles"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_subtitles" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_audio"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_audio" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_quality"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_quality" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_speed"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_speed" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_fit"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_fit" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_pip"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_pip" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_fullscreen"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_fullscreen" />
++
++                    <com.google.android.material.switchmaterial.SwitchMaterial
++                        android:id="@+id/mobile_player_pref_more"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:minHeight="48dp"
++                        android:text="@string/mobile_player_show_more" />
++                </LinearLayout>
++            </com.google.android.material.card.MaterialCardView>
++
++            <com.google.android.material.button.MaterialButton
++                android:id="@+id/mobile_player_pref_reset"
++                style="@style/Widget.SmartTube.Mobile.Button"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:minHeight="48dp"
++                android:text="@string/mobile_player_reset" />
++        </LinearLayout>
++    </androidx.core.widget.NestedScrollView>
++</androidx.constraintlayout.widget.ConstraintLayout>
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_radio_settings_fragment.xml b/smarttubetv/src/stmobile/res/layout/mobile_radio_settings_fragment.xml
+index 5785af5..260596b 100644
+--- a/smarttubetv/src/stmobile/res/layout/mobile_radio_settings_fragment.xml
++++ b/smarttubetv/src/stmobile/res/layout/mobile_radio_settings_fragment.xml
+@@ -70,6 +70,26 @@
+                     android:visibility="gone" />
+             </LinearLayout>
+ 
++            <com.google.android.material.textfield.TextInputLayout
++                android:id="@+id/mobile_radio_search_layout"
++                style="@style/Widget.SmartTube.Mobile.SearchInput"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="12dp"
++                android:hint="@string/mobile_radio_search_hint"
++                app:boxBackgroundMode="outline"
++                app:endIconMode="clear_text">
++
++                <com.google.android.material.textfield.TextInputEditText
++                    android:id="@+id/mobile_radio_search"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:imeOptions="actionSearch"
++                    android:inputType="text"
++                    android:maxLines="1"
++                    android:minHeight="48dp" />
++            </com.google.android.material.textfield.TextInputLayout>
++
+             <TextView
+                 style="@style/TextAppearance.SmartTube.Mobile.TitleMedium"
+                 android:layout_width="match_parent"
+@@ -90,6 +110,26 @@
+                 android:minHeight="48dp"
+                 android:text="@string/mobile_radio_favorites_only" />
+ 
++            <com.google.android.material.switchmaterial.SwitchMaterial
++                android:id="@+id/mobile_radio_timeshift_enabled"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="4dp"
++                android:minHeight="48dp"
++                android:text="@string/mobile_radio_timeshift_enabled" />
++
++            <TextView
++                style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:text="@string/mobile_radio_timeshift_summary" />
++
++            <Spinner
++                android:id="@+id/mobile_radio_timeshift_duration"
++                android:layout_width="match_parent"
++                android:layout_height="48dp"
++                android:contentDescription="@string/mobile_radio_timeshift_duration" />
++
+             <TextView
+                 android:id="@+id/mobile_radio_status"
+                 style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_track_picker_row.xml b/smarttubetv/src/stmobile/res/layout/mobile_track_picker_row.xml
+new file mode 100644
+index 0000000..15d5495
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/layout/mobile_track_picker_row.xml
+@@ -0,0 +1,67 @@
++<?xml version="1.0" encoding="utf-8"?>
++<com.google.android.material.card.MaterialCardView
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:id="@+id/mobile_track_row_card"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:layout_marginTop="4dp"
++    android:layout_marginBottom="4dp"
++    android:clickable="true"
++    android:focusable="true"
++    android:foreground="?attr/selectableItemBackground"
++    app:cardBackgroundColor="?attr/colorSurface"
++    app:cardCornerRadius="14dp"
++    app:checkable="true"
++    app:cardElevation="0dp"
++    app:checkedIcon="@null"
++    app:strokeColor="@color/mobile_outline"
++    app:strokeWidth="1dp">
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:gravity="center_vertical"
++        android:minHeight="64dp"
++        android:orientation="horizontal"
++        android:paddingStart="14dp"
++        android:paddingTop="10dp"
++        android:paddingEnd="14dp"
++        android:paddingBottom="10dp">
++
++        <LinearLayout
++            android:layout_width="0dp"
++            android:layout_height="wrap_content"
++            android:layout_weight="1"
++            android:orientation="vertical">
++
++            <TextView
++                android:id="@+id/mobile_track_row_title"
++                style="@style/TextAppearance.SmartTube.Mobile.TitleMedium"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:ellipsize="end"
++                android:maxLines="2" />
++
++            <TextView
++                android:id="@+id/mobile_track_row_language"
++                style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_marginTop="2dp" />
++        </LinearLayout>
++
++        <TextView
++            android:id="@+id/mobile_track_row_badge"
++            style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginStart="12dp"
++            android:background="@color/mobile_surface_variant"
++            android:paddingStart="10dp"
++            android:paddingTop="6dp"
++            android:paddingEnd="10dp"
++            android:paddingBottom="6dp"
++            android:visibility="gone" />
++    </LinearLayout>
++</com.google.android.material.card.MaterialCardView>
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_track_picker_sheet.xml b/smarttubetv/src/stmobile/res/layout/mobile_track_picker_sheet.xml
+new file mode 100644
+index 0000000..55f61e8
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/layout/mobile_track_picker_sheet.xml
+@@ -0,0 +1,45 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:background="?attr/colorSurface"
++    android:orientation="vertical"
++    android:paddingStart="16dp"
++    android:paddingTop="10dp"
++    android:paddingEnd="16dp"
++    android:paddingBottom="20dp">
++
++    <View
++        android:layout_width="42dp"
++        android:layout_height="4dp"
++        android:layout_gravity="center_horizontal"
++        android:layout_marginBottom="14dp"
++        android:background="@drawable/mobile_bottom_sheet_handle" />
++
++    <TextView
++        android:id="@+id/mobile_track_picker_title"
++        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:paddingStart="4dp"
++        android:paddingEnd="4dp" />
++
++    <TextView
++        android:id="@+id/mobile_track_picker_hint"
++        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="4dp"
++        android:paddingStart="4dp"
++        android:paddingEnd="4dp"
++        android:text="@string/mobile_track_picker_hint" />
++
++    <androidx.recyclerview.widget.RecyclerView
++        android:id="@+id/mobile_track_picker_list"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="10dp"
++        android:clipToPadding="false"
++        android:paddingBottom="8dp" />
++</LinearLayout>
+diff --git a/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml b/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
+index f0bfdd4..98a33bb 100644
+--- a/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
++++ b/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
+@@ -32,11 +32,11 @@
+     <string name="mobile_aa_disable_message">SmartTube zniknie z Android Auto po kolejnym odświeżeniu. Odtwarzanie w telefonie i dane YouTube pozostaną bez zmian.</string>
+     <string name="mobile_aa_disable_confirm">Wyłącz</string>
+     <string name="mobile_aa_video_section">Eksperymentalne wideo w samochodzie</string>
+-    <string name="mobile_aa_video_summary">Na postoju działa zwykły odtwarzacz wideo telefonu. W trakcie jazdy SmartTube domyślnie pozostaje w trybie samego dźwięku. Opcjonalny tryb pasażera jest eksperymentalny.</string>
+-    <string name="mobile_aa_video_switch">Wyświetlaj wideo w trakcie jazdy (pasażer)</string>
+-    <string name="mobile_aa_video_platform_note">Opcja nie omija zabezpieczeń Android Auto. Ekran samochodu nadal kontroluje Android Auto; obraz może być pokazany wyłącznie na dozwolonym ekranie telefonu.</string>
+-    <string name="mobile_aa_video_confirm_title">Włączyć eksperymentalny tryb pasażera?</string>
+-    <string name="mobile_aa_video_confirm_message">Używaj tej funkcji wyłącznie dla pasażera. Kierowca nie może oglądać ani obsługiwać filmu w czasie jazdy. Android Auto nadal może zablokować obraz.</string>
++    <string name="mobile_aa_video_summary">Opcjonalna powierzchnia wideo na postoju jest całkowicie oddzielona od stabilnej usługi audio Android Auto. Zwykłe odtwarzanie muzyki i radia w AA nie jest modyfikowane.</string>
++    <string name="mobile_aa_video_switch">Włącz eksperymentalny launcher wideo na postoju</string>
++    <string name="mobile_aa_video_platform_note">Nie używamy podszywania się pod grę ani nawigację. To Android Auto decyduje, czy CAR_LAUNCHER jest dostępny na danej platformie. Aktywność jest domyślnie wyłączona.</string>
++    <string name="mobile_aa_video_confirm_title">Włączyć eksperymentalne wideo na postoju?</string>
++    <string name="mobile_aa_video_confirm_message">Opcja udostępnia oddzielną aktywność CAR_LAUNCHER i używa zwykłego mobilnego odtwarzacza, gdy Android Auto dopuszcza aplikacje postojowe. Nie zmienia stabilnej usługi multimedialnej AA i nie omija ograniczeń podczas jazdy.</string>
+     <string name="mobile_aa_video_confirm_enable">Włącz eksperymentalnie</string>
+     <string name="mobile_aa_playlists_section">Układ playlist Android Auto</string>
+     <string name="mobile_aa_playlists_summary">Zmień kolejność lub ukryj playlisty tylko na ekranie SmartTube w Android Auto. Konto YouTube nie zostanie zmodyfikowane.</string>
+@@ -49,8 +49,9 @@
+     <string name="mobile_aa_playlist_down">Przenieś niżej</string>
+     <string name="mobile_aa_playlist_position">%1$d. %2$s</string>
+     <string name="mobile_aa_radio_section">Radio</string>
+-    <string name="mobile_aa_radio_summary">Stacje z całego świata z katalogu Radio Browser są dostępne w aplikacji mobilnej i Android Auto. Ulubione są współdzielone z lokalnym katalogiem radia.</string>
++    <string name="mobile_aa_radio_summary">Stacje z całego świata, wspólne Ulubione oraz przewijanie radia wstecz są dostępne w aplikacji mobilnej i Android Auto. Strumienie progresywne korzystają z bufora DVR, gdy funkcja jest włączona.</string>
+     <string name="mobile_aa_coming_soon">Do zrobienia później</string>
++    <string name="mobile_aa_radio_ready">Gotowe • ulubione + przewijanie wstecz</string>
+     <string name="mobile_native_shorts">Shorts</string>
+     <string name="mobile_native_subscriptions">Subskrypcje</string>
+     <string name="mobile_native_notifications">Powiadomienia</string>
+@@ -87,6 +88,12 @@
+     <string name="mobile_radio_summary">Eksperymentalny katalog działających stacji z całego świata z Radio Browser. Synchronizacja i ulubione są zapisywane tylko na tym urządzeniu.</string>
+     <string name="mobile_radio_sync">Synchronizuj stacje</string>
+     <string name="mobile_radio_syncing">Synchronizacja z Radio Browser…</string>
++    <string name="mobile_radio_search_hint">Szukaj stacji, kraju, kodeka lub tagu</string>
++    <string name="mobile_radio_timeshift_enabled">Time-shift: przewijanie radia na żywo wstecz</string>
++    <string name="mobile_radio_timeshift_summary">Przechowuje niewielki bufor kroczący w pamięci dla progresywnych strumieni radiowych. Stacje HLS wracają do zwykłego odtwarzania na żywo.</string>
++    <string name="mobile_radio_timeshift_duration">Długość bufora przewijania radia</string>
++    <string name="mobile_radio_go_live">NA ŻYWO</string>
++    <string name="mobile_radio_behind_live">−%1$s • NA ŻYWO</string>
+     <string name="mobile_radio_sort_label">Sortowanie stacji</string>
+     <string name="mobile_radio_favorites_only">Pokaż tylko ulubione</string>
+     <string name="mobile_radio_empty">Brak stacji do wyświetlenia. Wykonaj synchronizację albo wyłącz filtr ulubionych.</string>
+@@ -104,6 +111,48 @@
+         <item>Nazwa</item>
+         <item>Przepływność</item>
+     </string-array>
++    <string-array name="mobile_radio_timeshift_options">
++        <item>1 minuta</item>
++        <item>3 minuty</item>
++        <item>5 minut</item>
++    </string-array>
++    <string name="mobile_player_settings_entry">Odtwarzacz</string>
++    <string name="mobile_player_settings_title">Odtwarzacz</string>
++    <string name="mobile_player_settings_summary">Personalizuj wyłącznie nowy odtwarzacz telefonu/tabletu. Te opcje nigdy nie zmieniają działania Android Auto.</string>
++    <string name="mobile_player_language_section">Preferowane języki</string>
++    <string name="mobile_player_language_summary">Preferowany język jest tylko wyróżniany i przewijany do widoku po otwarciu listy dźwięku lub napisów. Nie jest automatycznie wymuszany przy starcie filmu.</string>
++    <string name="mobile_player_default_audio">Domyślny lektor / dźwięk</string>
++    <string name="mobile_player_default_subtitles">Domyślne napisy</string>
++    <string name="mobile_player_default_audio_value">Domyślny lektor / dźwięk: %1$s</string>
++    <string name="mobile_player_default_subtitles_value">Domyślne napisy: %1$s</string>
++    <string name="mobile_player_language_system">Język systemowy</string>
++    <string name="mobile_player_language_none">Bez preferencji</string>
++    <string name="mobile_player_gestures_section">Gesty i zachowanie</string>
++    <string name="mobile_player_auto_hide">Automatycznie ukrywaj sterowanie podczas odtwarzania</string>
++    <string name="mobile_player_pinch_zoom">Powiększanie filmu gestem szczypania</string>
++    <string name="mobile_player_double_tap_seek">Podwójne stuknięcie przewija o ±10 sekund</string>
++    <string name="mobile_player_swipe_seek">Poziome przesunięcie przewija o ±10 sekund</string>
++    <string name="mobile_player_controls_section">Widoczne elementy sterowania</string>
++    <string name="mobile_player_controls_summary">Play/pauza, Wstecz i oś czasu pozostają zawsze dostępne, aby nie dało się przypadkiem unieruchomić odtwarzacza.</string>
++    <string name="mobile_player_show_previous_next">Przyciski poprzedni / następny</string>
++    <string name="mobile_player_show_quick_options">Szybkie opcje dźwięku i napisów</string>
++    <string name="mobile_player_show_subtitles">Przycisk napisów</string>
++    <string name="mobile_player_show_audio">Przycisk lektora / dźwięku</string>
++    <string name="mobile_player_show_quality">Przycisk jakości</string>
++    <string name="mobile_player_show_speed">Przycisk szybkości odtwarzania</string>
++    <string name="mobile_player_show_fit">Przycisk dopasowania obrazu</string>
++    <string name="mobile_player_show_pip">Przycisk obraz-w-obrazie</string>
++    <string name="mobile_player_show_fullscreen">Przycisk pełnego ekranu</string>
++    <string name="mobile_player_show_more">Przycisk więcej opcji</string>
++    <string name="mobile_player_reset">Przywróć ustawienia odtwarzacza</string>
++    <string name="mobile_player_reset_title">Przywrócić ustawienia odtwarzacza?</string>
++    <string name="mobile_player_reset_message">Wszystkie przełączniki mobilnego odtwarzacza i preferowane języki wrócą do wartości domyślnych. Ustawienia Android Auto pozostaną bez zmian.</string>
++    <string name="mobile_player_reset_confirm">Przywróć</string>
++    <string name="mobile_track_picker_hint">★ = preferowany język z ustawień. Wybór nie następuje automatycznie.</string>
++    <string name="mobile_track_badge_default">★ Domyślna</string>
++    <string name="mobile_track_badge_selected">✓ Aktywna</string>
++    <string name="mobile_track_badge_selected_default">✓ Aktywna • ★ Domyślna</string>
++    <string name="mobile_track_language_unknown">Brak kodu języka</string>
+     <string name="mobile_native_back">Wstecz</string>
+     <string name="mobile_native_retry">Spróbuj ponownie</string>
+     <string name="mobile_native_play">Odtwórz</string>
+diff --git a/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml b/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
+index 750fc52..72ce610 100644
+--- a/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
++++ b/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
+@@ -32,11 +32,11 @@
+     <string name="mobile_aa_disable_message">SmartTube will disappear from Android Auto after the next refresh. Phone playback and YouTube data will not be changed.</string>
+     <string name="mobile_aa_disable_confirm">Disable</string>
+     <string name="mobile_aa_video_section">Experimental car video</string>
+-    <string name="mobile_aa_video_summary">Parked mode uses the normal phone video player. While driving, SmartTube remains audio-only by default. The optional passenger mode is experimental.</string>
+-    <string name="mobile_aa_video_switch">Display video while driving (passenger)</string>
+-    <string name="mobile_aa_video_platform_note">The option never bypasses Android Auto safety restrictions. The car display remains controlled by Android Auto; video may only be presented on an allowed phone surface.</string>
+-    <string name="mobile_aa_video_confirm_title">Enable experimental passenger mode?</string>
+-    <string name="mobile_aa_video_confirm_message">Use this only for a passenger. The driver must not watch or operate video while the vehicle is moving. Android Auto can still block the image.</string>
++    <string name="mobile_aa_video_summary">Optional parked-car surface built separately from the stable Android Auto audio service. Normal AA music and radio playback are not modified.</string>
++    <string name="mobile_aa_video_switch">Enable experimental parked video launcher</string>
++    <string name="mobile_aa_video_platform_note">No game/navigation spoofing is used. Android Auto decides whether CAR_LAUNCHER video is available on the connected platform. The activity is disabled by default.</string>
++    <string name="mobile_aa_video_confirm_title">Enable experimental parked video?</string>
++    <string name="mobile_aa_video_confirm_message">This exposes a separate CAR_LAUNCHER activity and reuses the normal mobile player when Android Auto allows parked apps. It does not change the stable AA media service and does not bypass driving restrictions.</string>
+     <string name="mobile_aa_video_confirm_enable">Enable experimentally</string>
+     <string name="mobile_aa_playlists_section">Android Auto playlist layout</string>
+     <string name="mobile_aa_playlists_summary">Change the order or hide playlists only on the SmartTube Android Auto screen. Your YouTube account is never modified.</string>
+@@ -49,8 +49,9 @@
+     <string name="mobile_aa_playlist_down">Move down</string>
+     <string name="mobile_aa_playlist_position">%1$d. %2$s</string>
+     <string name="mobile_aa_radio_section">Radio</string>
+-    <string name="mobile_aa_radio_summary">Worldwide Radio Browser stations are available in the mobile app and Android Auto. Favorites are shared from the local radio catalog.</string>
++    <string name="mobile_aa_radio_summary">Worldwide Radio Browser stations, shared favorites and radio-only rewind are available in the mobile app and Android Auto. Progressive streams use the rolling DVR buffer when enabled.</string>
+     <string name="mobile_aa_coming_soon">Coming later</string>
++    <string name="mobile_aa_radio_ready">Ready • favorites + time-shift</string>
+     <string name="mobile_native_shorts">Shorts</string>
+     <string name="mobile_native_subscriptions">Subscriptions</string>
+     <string name="mobile_native_notifications">Notifications</string>
+@@ -87,6 +88,12 @@
+     <string name="mobile_radio_summary">Experimental worldwide directory of working stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
+     <string name="mobile_radio_sync">Synchronize stations</string>
+     <string name="mobile_radio_syncing">Synchronizing Radio Browser…</string>
++    <string name="mobile_radio_search_hint">Search station, country, codec or tag</string>
++    <string name="mobile_radio_timeshift_enabled">Time-shift: allow rewinding live radio</string>
++    <string name="mobile_radio_timeshift_summary">Keeps a small rolling in-memory buffer for progressive radio streams. HLS stations fall back to normal live playback.</string>
++    <string name="mobile_radio_timeshift_duration">Radio rewind buffer</string>
++    <string name="mobile_radio_go_live">LIVE</string>
++    <string name="mobile_radio_behind_live">−%1$s • LIVE</string>
+     <string name="mobile_radio_sort_label">Sort stations</string>
+     <string name="mobile_radio_favorites_only">Show favorites only</string>
+     <string name="mobile_radio_empty">No stations to display. Synchronize the directory or disable the favorites-only filter.</string>
+@@ -104,6 +111,11 @@
+         <item>Name</item>
+         <item>Bitrate</item>
+     </string-array>
++    <string-array name="mobile_radio_timeshift_options">
++        <item>1 minute</item>
++        <item>3 minutes</item>
++        <item>5 minutes</item>
++    </string-array>
+     <string name="mobile_native_back">Back</string>
+     <string name="mobile_native_retry">Retry</string>
+     <string name="mobile_native_play">Play</string>
+@@ -141,4 +153,44 @@
+     <string name="mobile_background_forward">Forward 10 seconds</string>
+     <string name="mobile_background_stop">Stop playback</string>
+     <string name="aa_app_name">SmartTube Music</string>
++
++    <!-- Mobile player personalization (phone/tablet only; Android Auto does not read these prefs). -->
++    <string name="mobile_player_settings_entry">Player</string>
++    <string name="mobile_player_settings_title">Player</string>
++    <string name="mobile_player_settings_summary">Customize only the new phone/tablet player. These options never change Android Auto playback.</string>
++    <string name="mobile_player_language_section">Preferred languages</string>
++    <string name="mobile_player_language_summary">A preferred language is only highlighted and scrolled into view when you open the audio or subtitle list. It is not forced automatically at playback start.</string>
++    <string name="mobile_player_default_audio">Default dubbing / audio</string>
++    <string name="mobile_player_default_subtitles">Default subtitles</string>
++    <string name="mobile_player_default_audio_value">Default dubbing / audio: %1$s</string>
++    <string name="mobile_player_default_subtitles_value">Default subtitles: %1$s</string>
++    <string name="mobile_player_language_system">System language</string>
++    <string name="mobile_player_language_none">No preference</string>
++    <string name="mobile_player_gestures_section">Gestures and behavior</string>
++    <string name="mobile_player_auto_hide">Automatically hide controls while playing</string>
++    <string name="mobile_player_pinch_zoom">Pinch to zoom video</string>
++    <string name="mobile_player_double_tap_seek">Double tap to seek ±10 seconds</string>
++    <string name="mobile_player_swipe_seek">Horizontal swipe to seek ±10 seconds</string>
++    <string name="mobile_player_controls_section">Visible controls</string>
++    <string name="mobile_player_controls_summary">Play/pause, Back and the timeline remain available so the player cannot become unusable.</string>
++    <string name="mobile_player_show_previous_next">Previous / next buttons</string>
++    <string name="mobile_player_show_quick_options">Audio and subtitles quick options</string>
++    <string name="mobile_player_show_subtitles">Subtitles button</string>
++    <string name="mobile_player_show_audio">Dubbing / audio button</string>
++    <string name="mobile_player_show_quality">Quality button</string>
++    <string name="mobile_player_show_speed">Playback speed button</string>
++    <string name="mobile_player_show_fit">Video fit button</string>
++    <string name="mobile_player_show_pip">Picture-in-picture button</string>
++    <string name="mobile_player_show_fullscreen">Fullscreen button</string>
++    <string name="mobile_player_show_more">More-options button</string>
++    <string name="mobile_player_reset">Reset player settings</string>
++    <string name="mobile_player_reset_title">Reset player settings?</string>
++    <string name="mobile_player_reset_message">All mobile-player switches and preferred-language choices will return to their defaults. Android Auto settings are not affected.</string>
++    <string name="mobile_player_reset_confirm">Reset</string>
++    <string name="mobile_track_picker_hint">★ Preferred language • ✓ Currently active</string>
++    <string name="mobile_track_badge_default">★ Default</string>
++    <string name="mobile_track_badge_selected">✓ Active</string>
++    <string name="mobile_track_badge_selected_default">✓ Active  ★ Default</string>
++    <string name="mobile_track_language_unknown">Automatic / unspecified</string>
++
+ </resources>
+diff --git a/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolverTest.java b/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolverTest.java
+new file mode 100644
+index 0000000..4f4fda3
+--- /dev/null
++++ b/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/PreferredTrackResolverTest.java
+@@ -0,0 +1,39 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player;
++
++import static org.junit.Assert.assertEquals;
++
++import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.MobileTrack;
++import java.util.Arrays;
++import java.util.List;
++import java.util.Locale;
++import org.junit.Test;
++
++public class PreferredTrackResolverTest {
++    private static List<MobileTrack> tracks() {
++        return Arrays.asList(
++                new MobileTrack("en", MobileTrack.Type.AUDIO, "English", "en", true),
++                new MobileTrack("pl", MobileTrack.Type.AUDIO, "Polski", "pl-PL", false),
++                new MobileTrack("de", MobileTrack.Type.AUDIO, "Deutsch", "de", false));
++    }
++
++    @Test public void exactOrRegionalLanguageIsHighlightedWithoutChangingSelection() {
++        assertEquals(1, PreferredTrackResolver.findPreferred(tracks(), "pl"));
++        // The resolver only returns a UI row; it never alters MobileTrack.isSelected().
++        assertEquals(true, tracks().get(0).isSelected());
++    }
++
++    @Test public void emptyPreferenceDoesNotInventASelection() {
++        assertEquals(-1, PreferredTrackResolver.findPreferred(tracks(), ""));
++    }
++
++    @Test public void systemPreferenceUsesCurrentLocale() {
++        Locale before = Locale.getDefault();
++        try {
++            Locale.setDefault(new Locale("de", "DE"));
++            assertEquals(2, PreferredTrackResolver.findPreferred(
++                    tracks(), MobilePlayerPreferences.LANGUAGE_SYSTEM));
++        } finally {
++            Locale.setDefault(before);
++        }
++    }
++}
+diff --git a/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferencesTest.java b/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferencesTest.java
+new file mode 100644
+index 0000000..904d717
+--- /dev/null
++++ b/smarttubetv/src/testStmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioPreferencesTest.java
+@@ -0,0 +1,40 @@
++package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio;
++
++import static org.junit.Assert.assertEquals;
++import static org.junit.Assert.assertFalse;
++import static org.junit.Assert.assertTrue;
++
++import android.content.Context;
++import org.robolectric.RuntimeEnvironment;
++import org.junit.Before;
++import org.junit.Test;
++import org.junit.runner.RunWith;
++import org.robolectric.RobolectricTestRunner;
++
++@RunWith(RobolectricTestRunner.class)
++public class RadioPreferencesTest {
++    private Context context;
++
++    @Before public void setUp() {
++        context = RuntimeEnvironment.getApplication();
++        context.getSharedPreferences("smarttube_mobile_radio", Context.MODE_PRIVATE)
++                .edit().clear().commit();
++    }
++
++    @Test public void timeShiftDefaultsToThreeMinutesAndEnabled() {
++        RadioPreferences preferences = new RadioPreferences(context);
++        assertTrue(preferences.isTimeShiftEnabled());
++        assertEquals(3, preferences.getTimeShiftMinutes());
++        assertEquals(180_000L, preferences.getTimeShiftWindowMs());
++    }
++
++    @Test public void supportedDurationsAreNormalized() {
++        RadioPreferences preferences = new RadioPreferences(context);
++        preferences.setTimeShiftMinutes(2);
++        assertEquals(3, preferences.getTimeShiftMinutes());
++        preferences.setTimeShiftMinutes(9);
++        assertEquals(5, preferences.getTimeShiftMinutes());
++        preferences.setTimeShiftEnabled(false);
++        assertFalse(preferences.isTimeShiftEnabled());
++    }
++}

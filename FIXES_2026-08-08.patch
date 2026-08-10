@@ -1,0 +1,421 @@
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
+index 1d1286f..f3f0a20 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/automotive/SmartTubeAutoMusicService.java
+@@ -571,8 +571,11 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
+                     + (favoritesOnly ? "favorite:" : "all:") + index++ + ":" + station.getId();
+             String codec = station.getCodec() == null || station.getCodec().trim().isEmpty()
+                     ? "Radio" : station.getCodec();
+-            String subtitle = station.getBitrate() > 0
++            String streamMeta = station.getBitrate() > 0
+                     ? codec + " • " + station.getBitrate() + " kb/s" : codec;
++            String country = station.getCountry().isEmpty()
++                    ? station.getCountryCode() : station.getCountry();
++            String subtitle = country.isEmpty() ? streamMeta : country + " • " + streamMeta;
+             MobileMediaItem item = new MobileMediaItem(mediaId, MobileMediaItem.Kind.LIVE,
+                     station.getName(), subtitle, station.getFaviconUrl(), "NA ŻYWO",
+                     0L, 0L, true);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/adapter/RadioStationAdapter.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/adapter/RadioStationAdapter.java
+index ce6ca6b..5e56b9f 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/adapter/RadioStationAdapter.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/adapter/RadioStationAdapter.java
+@@ -76,8 +76,11 @@ public final class RadioStationAdapter extends RecyclerView.Adapter<RadioStation
+                     ? "STREAM" : station.getCodec().toUpperCase(Locale.US);
+             String bitrate = station.getBitrate() > 0
+                     ? Integer.toString(station.getBitrate()) : "?";
+-            meta.setText(itemView.getContext().getString(R.string.mobile_radio_station_meta,
+-                    codec, bitrate, station.getClickCount()));
++            String stationMeta = itemView.getContext().getString(R.string.mobile_radio_station_meta,
++                    codec, bitrate, station.getClickCount());
++            String country = station.getCountry().isEmpty()
++                    ? station.getCountryCode() : station.getCountry();
++            meta.setText(country.isEmpty() ? stationMeta : country + " • " + stationMeta);
+             String compactTags = compactTags(station.getTags());
+             tags.setText(compactTags);
+             tags.setVisibility(compactTags.isEmpty() ? View.GONE : View.VISIBLE);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+index 9e25d7b..79c4884 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+@@ -14,6 +14,7 @@ import android.view.LayoutInflater;
+ import android.view.MotionEvent;
+ import android.view.ScaleGestureDetector;
+ import android.view.View;
++import android.view.ViewConfiguration;
+ import android.view.ViewGroup;
+ import android.widget.ProgressBar;
+ import android.widget.SeekBar;
+@@ -73,10 +74,14 @@ public final class MobilePlaybackFragment extends Fragment {
+     private float videoScale = 1f;
+     private boolean scalingVideo;
+     private boolean panningVideo;
+-    private float panLastX;
+-    private float panLastY;
++    private boolean panMoved;
++    private float panDownX;
++    private float panDownY;
++    private float panStartTranslationX;
++    private float panStartTranslationY;
+     private float videoTranslationX;
+     private float videoTranslationY;
++    private int touchSlop;
+     private int resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT;
+     private String activeMediaId;
+ 
+@@ -116,6 +121,7 @@ public final class MobilePlaybackFragment extends Fragment {
+                 .get(MobilePlaybackViewModel.class);
+         radioMode = getArguments() != null && getArguments().getBoolean("radio_mode", false);
+         shortMode = getArguments() != null && getArguments().getBoolean(ARG_SHORT_MODE, false);
++        touchSlop = ViewConfiguration.get(requireContext()).getScaledTouchSlop();
+         ViewGroup surface = view.findViewById(R.id.mobile_player_surface);
+         videoSurface = surface;
+         if (radioMode) {
+@@ -274,24 +280,38 @@ public final class MobilePlaybackFragment extends Fragment {
+             if (videoScale > 1.02f) {
+                 if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                     panningVideo = true;
+-                    panLastX = event.getX();
+-                    panLastY = event.getY();
++                    panMoved = false;
++                    panDownX = event.getX();
++                    panDownY = event.getY();
++                    panStartTranslationX = videoTranslationX;
++                    panStartTranslationY = videoTranslationY;
+                     ui.removeCallbacks(hideControls);
+-                    return true;
++                    // A zoomed video still has to receive a normal tap. Previously every
++                    // ACTION_DOWN was consumed as a pan, so taps could never hide controls.
++                    return detector.onTouchEvent(event);
+                 }
+                 if (event.getActionMasked() == MotionEvent.ACTION_MOVE && panningVideo) {
+-                    videoTranslationX += event.getX() - panLastX;
+-                    videoTranslationY += event.getY() - panLastY;
+-                    panLastX = event.getX();
+-                    panLastY = event.getY();
+-                    clampVideoTranslation();
+-                    return true;
++                    float dx = event.getX() - panDownX;
++                    float dy = event.getY() - panDownY;
++                    if (!panMoved && Math.hypot(dx, dy) > touchSlop) panMoved = true;
++                    if (panMoved) {
++                        videoTranslationX = panStartTranslationX + dx;
++                        videoTranslationY = panStartTranslationY + dy;
++                        clampVideoTranslation();
++                        return true;
++                    }
++                    return detector.onTouchEvent(event);
+                 }
+                 if (event.getActionMasked() == MotionEvent.ACTION_UP
+                         || event.getActionMasked() == MotionEvent.ACTION_CANCEL) {
++                    boolean moved = panMoved;
+                     panningVideo = false;
+-                    keepControlsVisible();
+-                    return true;
++                    panMoved = false;
++                    if (moved) {
++                        keepControlsVisible();
++                        return true;
++                    }
++                    return detector.onTouchEvent(event);
+                 }
+             }
+             if (shortMode) {
+@@ -666,6 +686,7 @@ public final class MobilePlaybackFragment extends Fragment {
+         videoTranslationX = 0f;
+         videoTranslationY = 0f;
+         panningVideo = false;
++        panMoved = false;
+         if (videoSurface != null) {
+             videoSurface.setScaleX(1f);
+             videoSurface.setScaleY(1f);
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyBrowseRepository.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyBrowseRepository.java
+index ccba2fd..deda5fe 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyBrowseRepository.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyBrowseRepository.java
+@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
+ import java.util.List;
+ import java.util.Set;
+ import java.util.concurrent.ConcurrentHashMap;
++import java.util.concurrent.atomic.AtomicBoolean;
+ 
+ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+     private static final long BROWSE_CACHE_TTL_MS = 10 * 60 * 1000L;
+@@ -106,6 +107,7 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+         browseCache.remove(page.id());
+         browseCacheTimes.remove(page.id());
+         browseContinuations.remove(page.id());
++        emptyReloadCounts.remove(page.id());
+     }
+ 
+     @Override public MobileRequest loadMoreBrowse(
+@@ -129,9 +131,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+         MobileDiagnostics.debug("DataBrowse", "continue page=" + page.id()
+                 + " group=" + groupIndex);
+         try {
++            AtomicBoolean emitted = new AtomicBoolean(false);
+             Disposable disposable = content.continueGroupObserve(source)
+                     .subscribeOn(Schedulers.io())
+                     .subscribe(nextPage -> {
++                        emitted.set(true);
+                         if (nextPage == null) {
+                             continuation.markFinished(groupIndex);
+                             MobileBrowsePayload done = withHasMore(current,
+@@ -149,7 +153,33 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+                     }, error -> {
+                         MobileDiagnostics.error("DataBrowse",
+                                 "continue failed page=" + page.id(), error);
++                        if (page == LegacyBrowsePage.SHORTS) {
++                            // Short continuations are more volatile than ordinary browse
++                            // pages. A duplicate/expired token is reported by the media
++                            // service as an error (often "fromNullable result is null").
++                            // Re-fetch the Shorts root and merge only new IDs instead of
++                            // terminating infinite scrolling on the first dead token.
++                            continuation.markFinished(groupIndex);
++                            reloadShorts(page, current, callback);
++                            return;
++                        }
+                         callback.onError(errors.map(error));
++                    }, () -> {
++                        // Defensive path for ContentService implementations that complete
++                        // without emitting a continuation. Recover Shorts by refreshing the
++                        // root feed; ordinary pages simply mark the group as finished.
++                        if (emitted.get()) return;
++                        continuation.markFinished(groupIndex);
++                        if (page == LegacyBrowsePage.SHORTS) {
++                            MobileDiagnostics.debug("DataBrowse",
++                                    "shorts continuation empty; reload feed");
++                            reloadShorts(page, current, callback);
++                        } else {
++                            MobileBrowsePayload done = withHasMore(current,
++                                    continuation.hasMore());
++                            cacheBrowse(page, done);
++                            callback.onSuccess(done);
++                        }
+                     });
+             return new RxMobileRequest(disposable);
+         } catch (Throwable error) {
+@@ -419,10 +449,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+ 
+     private Observable<List<MediaGroup>> rows(LegacyBrowsePage page) {
+         switch (page) {
+-            // The legacy Trending endpoint may never emit on current YouTube accounts.
+-            // Use the reliable personalized Home feed and cache the result so category
+-            // switches don't rebuild the screen around a visible network wait.
+-            case TRENDING: return content.getHomeObserve();
++            // Keep this page independent from Home. Mapping Trending to Home made the
++            // "New recommendations" chip display byte-for-byte the same feed as "All".
++            // Some accounts currently return an empty/failed legacy Trending response;
++            // fall back to one personalized recommendation shelf rather than Home itself.
++            case TRENDING: return trendingRows();
+             case LIVE: return content.getLiveObserve();
+             case MUSIC: return content.getMusicObserve();
+             case GAMING: return content.getGamingObserve();
+@@ -434,6 +465,16 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
+         }
+     }
+ 
++    private Observable<List<MediaGroup>> trendingRows() {
++        Observable<List<MediaGroup>> fallback = content.getRecommendedObserve()
++                .filter(group -> group != null)
++                .map(Collections::singletonList);
++        return content.getTrendingObserve()
++                .filter(groups -> groups != null && !groups.isEmpty())
++                .switchIfEmpty(fallback)
++                .onErrorResumeNext(fallback);
++    }
++
+     private static boolean hasNextPage(MediaGroup group) {
+         if (group == null) return false;
+         String key = group.getNextPageKey();
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
+index 2f994a3..8b0958d 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
+@@ -134,6 +134,15 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+                         "engine error; common recovery remains active: "
+                                 + (cause == null ? error : cause));
+             }
++            if (isTransientForbiddenStream(error)) {
++                // SmartTube's ErrorFixerController intentionally refreshes a forbidden
++                // signed YouTube URL and retries it. The TV UI hides this transient 403,
++                // but the mobile bridge used to surface the same recoverable error as a
++                // toast before the retry succeeded a moment later.
++                MobileDiagnostics.debug("DataPlayer",
++                        "suppress transient 403; common recovery pipeline will retry");
++                return;
++            }
+             Listener current = listener;
+             if (current != null) current.onPlaybackError(errors.playback(error));
+         }
+@@ -521,6 +530,20 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
+         if (current != null) current.onPlaybackError(errors.playback(error));
+     }
+ 
++    private static boolean isTransientForbiddenStream(Throwable error) {
++        Throwable current = error;
++        while (current != null) {
++            String message = current.getMessage();
++            if (message != null && message.trim().startsWith("Response code: 403")) {
++                return true;
++            }
++            Throwable cause = current.getCause();
++            if (cause == current) break;
++            current = cause;
++        }
++        return false;
++    }
++
+     private void emitSnapshot() {
+         long position = Math.max(0, getPositionMs());
+         long duration = Math.max(0, getDurationMs());
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStation.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStation.java
+index 4b21aff..a90ddee 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStation.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStation.java
+@@ -9,6 +9,8 @@ public final class RadioStation {
+     private final String name;
+     private final String streamUrl;
+     private final String faviconUrl;
++    private final String country;
++    private final String countryCode;
+     private final String codec;
+     private final String tags;
+     private final int bitrate;
+@@ -16,12 +18,15 @@ public final class RadioStation {
+     private final boolean favorite;
+ 
+     public RadioStation(String id, String name, String streamUrl, String faviconUrl,
+-                        String codec, String tags, int bitrate, int clickCount,
++                        String country, String countryCode, String codec, String tags,
++                        int bitrate, int clickCount,
+                         boolean favorite) {
+         this.id = clean(id);
+         this.name = clean(name);
+         this.streamUrl = clean(streamUrl);
+         this.faviconUrl = clean(faviconUrl);
++        this.country = clean(country);
++        this.countryCode = clean(countryCode);
+         this.codec = clean(codec);
+         this.tags = clean(tags);
+         this.bitrate = Math.max(0, bitrate);
+@@ -33,6 +38,8 @@ public final class RadioStation {
+     public String getName() { return name; }
+     public String getStreamUrl() { return streamUrl; }
+     public String getFaviconUrl() { return faviconUrl; }
++    public String getCountry() { return country; }
++    public String getCountryCode() { return countryCode; }
+     public String getCodec() { return codec; }
+     public String getTags() { return tags; }
+     public int getBitrate() { return bitrate; }
+@@ -40,7 +47,7 @@ public final class RadioStation {
+     public boolean isFavorite() { return favorite; }
+ 
+     public RadioStation withFavorite(boolean value) {
+-        return new RadioStation(id, name, streamUrl, faviconUrl, codec, tags,
++        return new RadioStation(id, name, streamUrl, faviconUrl, country, countryCode, codec, tags,
+                 bitrate, clickCount, value);
+     }
+ 
+@@ -50,6 +57,8 @@ public final class RadioStation {
+                 .put("name", name)
+                 .put("url_resolved", streamUrl)
+                 .put("favicon", faviconUrl)
++                .put("country", country)
++                .put("countrycode", countryCode)
+                 .put("codec", codec)
+                 .put("tags", tags)
+                 .put("bitrate", bitrate)
+@@ -64,6 +73,7 @@ public final class RadioStation {
+         if (stream.isEmpty()) stream = clean(value.optString("url"));
+         if (id.isEmpty() || name.isEmpty() || !isSupportedStream(stream)) return null;
+         return new RadioStation(id, name, stream, value.optString("favicon"),
++                value.optString("country"), value.optString("countrycode"),
+                 value.optString("codec"), value.optString("tags"),
+                 value.optInt("bitrate", 0), value.optInt("clickcount", 0), false);
+     }
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
+index 4e33cb9..5a46823 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/radio/RadioStationRepository.java
+@@ -48,8 +48,10 @@ public final class RadioStationRepository {
+     private static final String KEY_FAVORITES = "favorite_station_ids";
+     private static final String KEY_LAST_SYNC = "last_sync_ms";
+     private static final String API_ROOT = "https://de1.api.radio-browser.info";
+-    private static final String STATIONS_PATH = "/json/stations/search?countrycode=PL"
+-            + "&hidebroken=true&order=clickcount&reverse=true&limit=200";
++    // Global catalog: keep the existing bounded payload so phone and Android Auto surfaces
++    // don't suddenly receive tens of thousands of MediaBrowser items in one transaction.
++    private static final String STATIONS_PATH = "/json/stations/search?hidebroken=true"
++            + "&order=clickcount&reverse=true&limit=200";
+     private static final String USER_AGENT = "SmartTube-AA/32.04 "
+             + "(experimental Radio Browser client; github.com/AbcITAndrzej/smarttube-aa)";
+     private static volatile RadioStationRepository instance;
+diff --git a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
+index 4e34f83..d02522f 100644
+--- a/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
++++ b/smarttubetv/src/stmobile/res/layout/mobile_native_fragment_playback.xml
+@@ -191,13 +191,17 @@
+                 <TextView
+                     android:id="@+id/mobile_player_time"
+                     style="@style/TextAppearance.SmartTube.Mobile.PlayerTime"
+-                    android:layout_width="0dp"
++                    android:layout_width="wrap_content"
+                     android:layout_height="wrap_content"
+-                    android:layout_weight="1" />
++                    android:layout_marginEnd="12dp"
++                    android:maxLines="1"
++                    android:minWidth="104dp"
++                    android:singleLine="true" />
+ 
+                 <HorizontalScrollView
+-                    android:layout_width="wrap_content"
++                    android:layout_width="0dp"
+                     android:layout_height="48dp"
++                    android:layout_weight="1"
+                     android:fillViewport="true"
+                     android:scrollbars="none">
+ 
+diff --git a/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml b/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
+index f85f6e4..f0bfdd4 100644
+--- a/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
++++ b/smarttubetv/src/stmobile/res/values-pl/mobile_native_strings.xml
+@@ -49,7 +49,7 @@
+     <string name="mobile_aa_playlist_down">Przenieś niżej</string>
+     <string name="mobile_aa_playlist_position">%1$d. %2$s</string>
+     <string name="mobile_aa_radio_section">Radio</string>
+-    <string name="mobile_aa_radio_summary">Miejsce przygotowane pod przyszłą integrację z katalogiem Radio Browser. Połączenie sieciowe i odtwarzanie radia nie są jeszcze zaimplementowane.</string>
++    <string name="mobile_aa_radio_summary">Stacje z całego świata z katalogu Radio Browser są dostępne w aplikacji mobilnej i Android Auto. Ulubione są współdzielone z lokalnym katalogiem radia.</string>
+     <string name="mobile_aa_coming_soon">Do zrobienia później</string>
+     <string name="mobile_native_shorts">Shorts</string>
+     <string name="mobile_native_subscriptions">Subskrypcje</string>
+@@ -84,7 +84,7 @@
+     <string name="mobile_update_permission_open">Otwórz ustawienia</string>
+     <string name="mobile_radio_settings_entry">Radio (eksperymentalne)</string>
+     <string name="mobile_radio_title">Radio</string>
+-    <string name="mobile_radio_summary">Eksperymentalny katalog działających polskich stacji z Radio Browser. Synchronizacja i ulubione są zapisywane tylko na tym urządzeniu.</string>
++    <string name="mobile_radio_summary">Eksperymentalny katalog działających stacji z całego świata z Radio Browser. Synchronizacja i ulubione są zapisywane tylko na tym urządzeniu.</string>
+     <string name="mobile_radio_sync">Synchronizuj stacje</string>
+     <string name="mobile_radio_syncing">Synchronizacja z Radio Browser…</string>
+     <string name="mobile_radio_sort_label">Sortowanie stacji</string>
+diff --git a/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml b/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
+index 347d979..750fc52 100644
+--- a/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
++++ b/smarttubetv/src/stmobile/res/values/mobile_native_strings.xml
+@@ -49,7 +49,7 @@
+     <string name="mobile_aa_playlist_down">Move down</string>
+     <string name="mobile_aa_playlist_position">%1$d. %2$s</string>
+     <string name="mobile_aa_radio_section">Radio</string>
+-    <string name="mobile_aa_radio_summary">Reserved for a future integration with the Radio Browser directory. No network connection or radio playback is implemented yet.</string>
++    <string name="mobile_aa_radio_summary">Worldwide Radio Browser stations are available in the mobile app and Android Auto. Favorites are shared from the local radio catalog.</string>
+     <string name="mobile_aa_coming_soon">Coming later</string>
+     <string name="mobile_native_shorts">Shorts</string>
+     <string name="mobile_native_subscriptions">Subscriptions</string>
+@@ -84,7 +84,7 @@
+     <string name="mobile_update_permission_open">Open settings</string>
+     <string name="mobile_radio_settings_entry">Radio (experimental)</string>
+     <string name="mobile_radio_title">Radio</string>
+-    <string name="mobile_radio_summary">Experimental directory of working Polish stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
++    <string name="mobile_radio_summary">Experimental worldwide directory of working stations from Radio Browser. Synchronization and favorites are stored only on this device.</string>
+     <string name="mobile_radio_sync">Synchronize stations</string>
+     <string name="mobile_radio_syncing">Synchronizing Radio Browser…</string>
+     <string name="mobile_radio_sort_label">Sort stations</string>

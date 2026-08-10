@@ -23,6 +23,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.AndroidAutoPreferences;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoGate;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.SmartTubeAutoMusicService;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileBrowseRepository;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.contract.MobileRequest;
@@ -61,7 +62,9 @@ public final class AndroidAutoSettingsFragment extends Fragment {
     private SwitchMaterial accessEnabled;
     private SwitchMaterial developerConfirmed;
     private SwitchMaterial unknownSourcesConfirmed;
-    private SwitchMaterial experimentalDrivingVideo;
+    private SwitchMaterial experimentalParkedVideo;
+    private SwitchMaterial offlineLibrary;
+    private SwitchMaterial offlineAutoFallback;
     private boolean bindingAccessSwitch;
 
     public static AndroidAutoSettingsFragment newInstance() {
@@ -84,7 +87,9 @@ public final class AndroidAutoSettingsFragment extends Fragment {
         accessEnabled = view.findViewById(R.id.mobile_aa_access_enabled);
         developerConfirmed = view.findViewById(R.id.mobile_aa_developer_confirmed);
         unknownSourcesConfirmed = view.findViewById(R.id.mobile_aa_unknown_sources_confirmed);
-        experimentalDrivingVideo = view.findViewById(R.id.mobile_aa_experimental_video);
+        experimentalParkedVideo = view.findViewById(R.id.mobile_aa_experimental_video);
+        offlineLibrary = view.findViewById(R.id.mobile_aa_offline_library);
+        offlineAutoFallback = view.findViewById(R.id.mobile_aa_offline_auto_fallback);
 
         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
         toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
@@ -92,6 +97,7 @@ public final class AndroidAutoSettingsFragment extends Fragment {
         toolbar.setNavigationOnClickListener(v -> MobileFragmentSupport.navigator(this).goBack());
 
         bindAccessControls(view);
+        bindOfflinePlayback();
         bindExperimentalVideo();
         view.findViewById(R.id.mobile_aa_playlist_refresh).setOnClickListener(v -> loadPlaylists(true));
         view.findViewById(R.id.mobile_aa_playlist_reset).setOnClickListener(v -> resetPlaylistLayout());
@@ -154,25 +160,46 @@ public final class AndroidAutoSettingsFragment extends Fragment {
         updateAccessStatus();
     }
 
+    private void bindOfflinePlayback() {
+        offlineLibrary.setChecked(preferences.isOfflineLibraryEnabled());
+        offlineAutoFallback.setChecked(preferences.isOfflineAutoFallbackEnabled());
+        offlineAutoFallback.setEnabled(offlineLibrary.isChecked());
+
+        offlineLibrary.setOnCheckedChangeListener((button, checked) -> {
+            preferences.setOfflineLibraryEnabled(checked);
+            offlineAutoFallback.setEnabled(checked);
+        });
+        offlineAutoFallback.setOnCheckedChangeListener((button, checked) ->
+                preferences.setOfflineAutoFallbackEnabled(checked));
+    }
+
     private void bindExperimentalVideo() {
-        experimentalDrivingVideo.setChecked(preferences.isExperimentalDrivingVideoEnabled());
-        experimentalDrivingVideo.setOnCheckedChangeListener((button, checked) -> {
+        // Keep manifest component state synchronized after app updates/reinstalls.
+        boolean enabled = preferences.isExperimentalParkedVideoEnabled();
+        ExperimentalCarVideoGate.setEnabled(requireContext(), enabled);
+        experimentalParkedVideo.setChecked(enabled);
+        experimentalParkedVideo.setOnCheckedChangeListener((button, checked) -> {
             if (!checked) {
-                preferences.setExperimentalDrivingVideoEnabled(false);
+                preferences.setExperimentalParkedVideoEnabled(false);
+                ExperimentalCarVideoGate.setEnabled(requireContext(), false);
                 return;
             }
             new AlertDialog.Builder(requireContext())
                     .setTitle(R.string.mobile_aa_video_confirm_title)
                     .setMessage(R.string.mobile_aa_video_confirm_message)
-                    .setPositiveButton(R.string.mobile_aa_video_confirm_enable, (dialog, which) ->
-                            preferences.setExperimentalDrivingVideoEnabled(true))
+                    .setPositiveButton(R.string.mobile_aa_video_confirm_enable, (dialog, which) -> {
+                        preferences.setExperimentalParkedVideoEnabled(true);
+                        ExperimentalCarVideoGate.setEnabled(requireContext(), true);
+                    })
                     .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
-                        preferences.setExperimentalDrivingVideoEnabled(false);
-                        experimentalDrivingVideo.setChecked(false);
+                        preferences.setExperimentalParkedVideoEnabled(false);
+                        ExperimentalCarVideoGate.setEnabled(requireContext(), false);
+                        experimentalParkedVideo.setChecked(false);
                     })
                     .setOnCancelListener(dialog -> {
-                        preferences.setExperimentalDrivingVideoEnabled(false);
-                        experimentalDrivingVideo.setChecked(false);
+                        preferences.setExperimentalParkedVideoEnabled(false);
+                        ExperimentalCarVideoGate.setEnabled(requireContext(), false);
+                        experimentalParkedVideo.setChecked(false);
                     })
                     .show();
         });

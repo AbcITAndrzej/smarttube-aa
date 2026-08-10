@@ -1,0 +1,42 @@
+apply from: gradle.ext.sharedModulesConstants
+apply plugin: 'com.android.test'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.liskovsoft.smarttube.mobilebenchmark'
+    compileSdkVersion project.properties.compileSdkVersion
+    buildToolsVersion project.properties.buildToolsVersion
+
+    defaultConfig {
+        minSdkVersion 23
+        targetSdkVersion project.properties.compileSdkVersion
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    targetProjectPath = ':smarttubetv'
+
+    // Mirror only the app flavor we benchmark. This avoids ambiguity with TV/beta/stable flavors.
+    flavorDimensions 'default'
+    productFlavors {
+        stmobile {
+            dimension 'default'
+            matchingFallbacks = ['ststable']
+        }
+    }
+
+    buildTypes {
+        benchmark {
+            debuggable true
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['benchmark', 'release']
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.test.ext:junit:1.1.5'
+    implementation 'androidx.test:runner:1.5.2'
+    implementation 'androidx.test:rules:1.5.0'
+    implementation 'androidx.test.uiautomator:uiautomator:2.2.0'
+    implementation 'androidx.benchmark:benchmark-macro-junit4:1.2.4'
+}

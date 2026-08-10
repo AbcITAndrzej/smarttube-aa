@@ -35,6 +35,7 @@ import com.liskovsoft.youtubeapi.track.TrackingService;
 import com.liskovsoft.youtubeapi.videoinfo.V2.VideoInfoService;
 import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfo;
 import io.reactivex.Observable;
+import io.reactivex.schedulers.Schedulers;
 
 import java.util.List;
 import java.util.Set;
@@ -502,15 +503,21 @@ public class YouTubeMediaItemService implements MediaItemService {
 
     @Override
     public Observable<DeArrowData> getDeArrowDataObserve(List<String> videoIds) {
-        return RxHelper.create(emitter -> {
-            for (String videoId : videoIds) {
-                DeArrowData result = getDeArrowData(videoId);
-                if (result != null) {
-                    emitter.onNext(result);
-                }
-            }
-            emitter.onComplete();
-        });
+        if (videoIds == null || videoIds.isEmpty()) {
+            return Observable.empty();
+        }
+
+        // DeArrow used to perform one blocking request after another. Keep the amount of
+        // parallel work deliberately small so a large Home/Search page is enriched quickly
+        // without creating an API request burst. Individual failures do not cancel the rest
+        // of the page; the original YouTube metadata remains a valid fallback.
+        return Observable.fromIterable(videoIds)
+                .filter(videoId -> videoId != null && !videoId.trim().isEmpty())
+                .distinct()
+                .flatMap(videoId -> getDeArrowDataObserve(videoId)
+                                .subscribeOn(Schedulers.io())
+                                .onErrorResumeNext(Observable.empty()),
+                        false, 4);
     }
 
     private DeArrowData getDeArrowData(String videoId) {

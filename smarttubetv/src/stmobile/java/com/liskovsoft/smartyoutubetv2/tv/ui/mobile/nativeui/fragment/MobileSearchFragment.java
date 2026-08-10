@@ -66,8 +66,9 @@ public final class MobileSearchFragment extends Fragment {
                             item.getId(), item.getProgressMs(),
                             resultAdapterRef[0].getPlayableIds(MobileMediaItem.Kind.SHORT));
                 } else {
-                    MobileFragmentSupport.navigator(this).openPlayback(
-                            item.getId(), item.getProgressMs());
+                    MobileFragmentSupport.navigator(this).openPlaybackQueue(
+                            item.getId(), item.getProgressMs(),
+                            resultAdapterRef[0].getRegularPlayableIds());
                 }
             }
         });
@@ -87,6 +88,17 @@ public final class MobileSearchFragment extends Fragment {
         }
         results.setHasFixedSize(true);
         results.setAdapter(resultAdapter);
+        results.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy <= 0) return;
+                RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
+                int last = manager instanceof GridLayoutManager
+                        ? ((GridLayoutManager) manager).findLastVisibleItemPosition()
+                        : manager instanceof LinearLayoutManager
+                        ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
+                if (last >= resultAdapter.getItemCount() - 6) vm.loadMore();
+            }
+        });
         query.setText(vm.getQuery());
         query.setSelection(query.length());
         query.addTextChangedListener(new TextWatcher() {
@@ -119,7 +131,14 @@ public final class MobileSearchFragment extends Fragment {
             error.setVisibility(value.getStatus() == MobileLoadState.Status.ERROR ? View.VISIBLE : View.GONE);
             retry.setVisibility(value.getStatus() == MobileLoadState.Status.ERROR ? View.VISIBLE : View.GONE);
             if (value.getError() != null) error.setText(value.getError().getMessage());
-            if (value.getData() != null) resultAdapter.submitSections(value.getData().getSections());
+            if (value.getData() != null) {
+                resultAdapter.submitSections(value.getData().getSections());
+                if (value.getData().hasMore()) {
+                    results.post(() -> {
+                        if (isAdded() && !results.canScrollVertically(1)) vm.loadMore();
+                    });
+                }
+            }
         });
         if (!vm.getQuery().isEmpty() && (vm.getState().getValue() == null
                 || vm.getState().getValue().getStatus() == MobileLoadState.Status.IDLE)) {

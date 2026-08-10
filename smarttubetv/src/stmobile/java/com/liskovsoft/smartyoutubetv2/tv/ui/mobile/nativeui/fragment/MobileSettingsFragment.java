@@ -55,8 +55,14 @@ public final class MobileSettingsFragment extends Fragment {
         });
         view.findViewById(R.id.mobile_android_auto_button).setOnClickListener(v ->
                 MobileFragmentSupport.navigator(this).openAndroidAutoSettings());
+        view.findViewById(R.id.mobile_player_settings_button).setOnClickListener(v ->
+                MobileFragmentSupport.navigator(this).openPlayerSettings());
         view.findViewById(R.id.mobile_radio_button).setOnClickListener(v ->
                 MobileFragmentSupport.navigator(this).openRadioSettings());
+        view.findViewById(R.id.mobile_offline_button).setOnClickListener(v ->
+                MobileFragmentSupport.navigator(this).openOfflineSettings());
+        view.findViewById(R.id.mobile_diagnostics_button).setOnClickListener(v ->
+                MobileFragmentSupport.navigator(this).openDiagnostics());
         updateController = new MobileUpdateController(requireActivity(), this::requestInstallPermission);
         view.findViewById(R.id.mobile_update_button).setOnClickListener(v -> updateController.check());
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));

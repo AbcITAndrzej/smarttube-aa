@@ -29,6 +29,11 @@ def keystoreProperties = new Properties()
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
+// Stage 12: keep production behavior unchanged by default, but allow an explicit
+// release/benchmark R8 trial with: -Pstage12EnableR8=true
+// This project contains substantial reflection/legacy code, so enabling R8 is a testable opt-in,
+// not a silent release behavior change.
+def stage12EnableR8 = (project.findProperty("stage12EnableR8") ?: "false").toString().toBoolean()
 
 // The first letter of the flavor name must be in uppercase
 if (new File("${projectDir}/google-services.json").exists() && (getGradle().getStartParameter().getTaskRequests().toString().contains("Stbeta") ||
@@ -57,7 +62,7 @@ android {
         applicationId "app.smarttube"
         minSdkVersion project.properties.minSdkVersion
         targetSdkVersion project.properties.targetSdkVersion
-        versionCode 2400
+        versionCode 2401
         versionName "32.04"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "long", "TIMESTAMP", System.currentTimeMillis() + "L"
@@ -101,9 +106,9 @@ android {
     
     buildTypes {
         release {
-            // Enable minification
-            // shrinkResources true
-            // minifyEnabled true
+            // Stage 12: opt-in only. Default remains identical to Stage 11.
+            shrinkResources stage12EnableR8
+            minifyEnabled stage12EnableR8
 
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 
@@ -111,11 +116,26 @@ android {
                 signingConfig signingConfigs.release
             }
         }
+        // Non-debuggable local release twin used only by Macrobenchmark/BaselineProfileRule.
+        benchmark {
+            initWith release
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
         // Use same key for release and debug for testing
         debug {
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             }
+        }
+        // Explicit opt-in test package for projected parked-video experiments. It installs next
+        // to the stable mobile/AA package, so manifest classification changes can never affect
+        // SmartTubeAutoMusicService used by the public build.
+        carvideo {
+            initWith debug
+            applicationIdSuffix ".carvideo"
+            versionNameSuffix "-carvideo"
+            matchingFallbacks = ['debug']
         }
     }
 
@@ -176,7 +196,7 @@ android {
             applicationId "app.smarttube.mobile"
             minSdkVersion 21
             targetSdkVersion project.properties.compileSdkVersion
-            versionNameSuffix "-mobile-p13-aa1.16"
+            versionNameSuffix "-mobile-p13-aa1.17"
             matchingFallbacks = ['ststable']
         }
     }
@@ -194,6 +214,14 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:' + appCompatXVersion
     // Material mobile presentation layer (Part 6)
     stmobileImplementation 'com.google.android.material:material:1.9.0'
+    // Stage 06+: offline download services use OkHttp types directly.
+    stmobileImplementation 'com.squareup.okhttp3:okhttp:' + okhttpVersion
+    // Stage 11: first reversible Media3 wave. Pin 1.4.1 conservatively while this project
+    // remains on compileSdk 34/minSdk 21; newer Media3 lines raise toolchain/minSdk requirements.
+    stmobileImplementation 'androidx.media3:media3-exoplayer:1.4.1'
+    stmobileImplementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+    // Stage 12 / AGP 7.4: required for local Baseline Profile installation/capture.
+    stmobileImplementation 'androidx.profileinstaller:profileinstaller:1.3.1'
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.5.1'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.5.1'
     implementation 'androidx.lifecycle:lifecycle-runtime:2.5.1'

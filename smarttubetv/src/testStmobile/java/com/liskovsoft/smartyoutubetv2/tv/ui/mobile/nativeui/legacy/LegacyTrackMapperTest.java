@@ -31,6 +31,7 @@ public class LegacyTrackMapperTest {
         when(format.getType()).thenReturn(FormatItem.TYPE_VIDEO);
         when(format.getFormatId()).thenReturn("video-1080");
         when(format.getTitle()).thenReturn("");
+        when(format.getWidth()).thenReturn(1920);
         when(format.getHeight()).thenReturn(1080);
         when(format.getFrameRate()).thenReturn(60f);
 
@@ -39,6 +40,9 @@ public class LegacyTrackMapperTest {
 
         assertEquals("1080p60", track.getLabel());
         assertEquals(MobileTrack.Type.VIDEO, track.getType());
+        assertEquals(1920, track.getWidth());
+        assertEquals(1080, track.getHeight());
+        assertEquals(16f / 9f, track.getAspectRatio(), 0.001f);
     }
 
     @Test public void putsPolishOriginalAndAutomaticSubtitlesFirst() {

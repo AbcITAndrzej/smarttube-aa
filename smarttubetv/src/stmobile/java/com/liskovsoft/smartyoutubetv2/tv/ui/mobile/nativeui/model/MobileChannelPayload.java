@@ -13,10 +13,18 @@ public final class MobileChannelPayload {
     private final String subscriberText;
     private final boolean subscribed;
     private final List<MobileSection> sections;
+    private final boolean hasMore;
 
     public MobileChannelPayload(String channelId, String title, String description,
                                 String avatarUrl, String bannerUrl, String subscriberText,
                                 boolean subscribed, List<MobileSection> sections) {
+        this(channelId, title, description, avatarUrl, bannerUrl, subscriberText,
+                subscribed, sections, false);
+    }
+
+    public MobileChannelPayload(String channelId, String title, String description,
+                                String avatarUrl, String bannerUrl, String subscriberText,
+                                boolean subscribed, List<MobileSection> sections, boolean hasMore) {
         this.channelId = channelId;
         this.title = title == null ? "" : title;
         this.description = description == null ? "" : description;
@@ -26,6 +34,7 @@ public final class MobileChannelPayload {
         this.subscribed = subscribed;
         this.sections = Collections.unmodifiableList(new ArrayList<>(
                 sections == null ? Collections.<MobileSection>emptyList() : sections));
+        this.hasMore = hasMore;
     }
 
     public String getChannelId() { return channelId; }
@@ -36,4 +45,5 @@ public final class MobileChannelPayload {
     public String getSubscriberText() { return subscriberText; }
     public boolean isSubscribed() { return subscribed; }
     public List<MobileSection> getSections() { return sections; }
+    public boolean hasMore() { return hasMore; }
 }
