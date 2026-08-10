@@ -1,8 +1,18 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/v32.04-mobile-p13-aa1.14/SmartTube-AA-32.04-mobile-p13-aa1.14-arm64-v8a.apk"
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk"
   },
-  "32.04-mobile-p13-aa1.14": {
-    "versionCode": 2399
+  "32.04-mobile-p13-aa1.18": {
+    "versionCode": 2402,
+    "changelog": [
+      "Android Auto: playlisty, radio i stabilne wznawianie audio",
+      "Tryb Offline: automatyczny zapis, playlisty i zapas na podróż",
+      "Usprawnienia mobilnego interfejsu, odtwarzacza i diagnostyki"
+    ],
+    "changelog_pl": [
+      "Android Auto: playlisty, radio i stabilne wznawianie audio",
+      "Tryb Offline: automatyczny zapis, playlisty i zapas na podróż",
+      "Usprawnienia mobilnego interfejsu, odtwarzacza i diagnostyki"
+    ]
   }
 }
