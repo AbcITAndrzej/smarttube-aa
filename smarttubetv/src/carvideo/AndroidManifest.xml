@@ -9,14 +9,18 @@
     -->
     <application
         android:appCategory="game"
-        tools:replace="android:appCategory">
+        android:label="@string/carvideo_app_name"
+        tools:replace="android:appCategory,android:label">
 
         <meta-data
             android:name="distractionOptimized"
             android:value="true" />
 
         <activity
-            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoActivity">
+            android:name="com.liskovsoft.smartyoutubetv2.tv.ui.mobile.automotive.ExperimentalCarVideoActivity"
+            android:enabled="true"
+            android:label="@string/carvideo_app_name"
+            tools:replace="android:enabled,android:label">
             <meta-data
                 android:name="distractionOptimized"
                 android:value="true" />

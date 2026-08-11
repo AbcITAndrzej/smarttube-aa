@@ -15,7 +15,10 @@ set "RELEASES_DIR=%PROJECT_DIR%\releases"
 set "CONFIG_DIR=%RELEASES_DIR%\helper-config"
 set "CONFIG_FILE=%CONFIG_DIR%\config.txt"
 set "APK_STORE=%RELEASES_DIR%\apk-cache"
+set "MUSIC_APK_STORE=%APK_STORE%\music"
+set "VIDEO_APK_STORE=%APK_STORE%\video"
 set "BUILD_APK_DIR=%SOURCE_DIR%\smarttubetv\build\outputs\apk\stmobile\debug"
+set "BUILD_VIDEO_APK_DIR=%SOURCE_DIR%\smarttubetv\build\outputs\apk\stmobile\carvideo"
 set "REPO=%DEFAULT_REPO%"
 
 if exist "%CONFIG_FILE%" (
@@ -53,9 +56,9 @@ echo  5 - Zaloguj/sprawdz GitHub CLI
 echo  6 - Utworz PUBLICZNE repo GitHub i wykonaj pierwszy push
 echo  7 - Synchronizuj + commit + push
 echo  8 - Pull --ff-only z GitHub
-echo  9 - Zbuduj APK lokalnie
-echo 10 - Utworz lokalna paczke release
-echo 11 - Opublikuj GitHub Release z APK i ZIP zrodel
+echo  9 - Zbuduj Music + Video EXP lokalnie
+echo 10 - Utworz lokalna paczke release obu aplikacji
+echo 11 - Opublikuj GitHub Release: Music + Video EXP + zrodla
 echo 12 - Pelna lokalna kopia Git: bundle + snapshot + patche
 echo 13 - Pokaz/pobierz najnowszy GitHub Release
 echo 14 - Otworz repo lub katalog publiczny
@@ -93,9 +96,14 @@ echo [OK] REPO=%REPO%
 echo [OK] BRANCH=%BRANCH%
 echo [OK] APP_VERSION=!APP_VERSION! ^(versionCode !APP_VERSION_CODE!^)
 if exist "%BUILD_APK_DIR%" (
-  echo [OK] Katalog wynikow APK istnieje.
+  echo [OK] Katalog wynikow Music istnieje.
 ) else (
-  echo [INFO] Katalog APK powstanie po buildzie.
+  echo [INFO] Katalog Music APK powstanie po buildzie.
+)
+if exist "%BUILD_VIDEO_APK_DIR%" (
+  echo [OK] Katalog wynikow Video EXP istnieje.
+) else (
+  echo [INFO] Katalog Video EXP APK powstanie po buildzie.
 )
 exit /b 0
 
@@ -164,6 +172,16 @@ if defined LATEST_UNIVERSAL_APK (
   echo APK universal: !LATEST_UNIVERSAL_APK!
 ) else (
   echo [INFO] Brak gotowego APK universal. Uzyj opcji 9.
+)
+if defined LATEST_VIDEO_APK (
+  echo Video arm64   : !LATEST_VIDEO_APK!
+) else (
+  echo [INFO] Brak Video EXP arm64. Uzyj opcji 9.
+)
+if defined LATEST_VIDEO_UNIVERSAL_APK (
+  echo Video universal: !LATEST_VIDEO_UNIVERSAL_APK!
+) else (
+  echo [INFO] Brak Video EXP universal. Uzyj opcji 9.
 )
 exit /b 0
 
@@ -370,10 +388,16 @@ set "JAVA_HOME=!JAVA11_HOME!"
 set "PATH=!JAVA_HOME!\bin;!PATH!"
 set "GRADLE_CACHE=%LOCALAPPDATA%\SmartTubeGithubHelper\gradle-project-cache"
 if not exist "!GRADLE_CACHE!" mkdir "!GRADLE_CACHE!"
-echo Buduje Stmobile Debug arm64/universal...
+echo Buduje Music arm64/universal...
 pushd "%SOURCE_DIR%"
 call gradlew.bat :smarttubetv:assembleStmobileDebug --console=plain --no-daemon --max-workers=1 --no-parallel --project-cache-dir "!GRADLE_CACHE!"
 set "BUILD_CODE=!errorlevel!"
+if "!BUILD_CODE!"=="0" (
+  echo.
+  echo Buduje Video EXP arm64/universal...
+  call gradlew.bat :smarttubetv:assembleStmobileCarvideo --console=plain --no-daemon --max-workers=1 --no-parallel --project-cache-dir "!GRADLE_CACHE!"
+  set "BUILD_CODE=!errorlevel!"
+)
 popd
 if not "!BUILD_CODE!"=="0" exit /b !BUILD_CODE!
 call :FIND_LATEST_APK
@@ -385,11 +409,24 @@ if not defined LATEST_UNIVERSAL_APK (
   echo [BLAD] Build zakonczony, ale nie znaleziono universal APK.
   exit /b 1
 )
-if not exist "%APK_STORE%" mkdir "%APK_STORE%"
-copy /y "!LATEST_APK!" "%APK_STORE%\" >nul
-copy /y "!LATEST_UNIVERSAL_APK!" "%APK_STORE%\" >nul
-echo [OK] APK arm64    : !LATEST_APK!
-echo [OK] APK universal: !LATEST_UNIVERSAL_APK!
+if not defined LATEST_VIDEO_APK (
+  echo [BLAD] Build zakonczony, ale nie znaleziono Video EXP arm64 APK.
+  exit /b 1
+)
+if not defined LATEST_VIDEO_UNIVERSAL_APK (
+  echo [BLAD] Build zakonczony, ale nie znaleziono Video EXP universal APK.
+  exit /b 1
+)
+if not exist "%MUSIC_APK_STORE%" mkdir "%MUSIC_APK_STORE%"
+if not exist "%VIDEO_APK_STORE%" mkdir "%VIDEO_APK_STORE%"
+copy /y "!LATEST_APK!" "%MUSIC_APK_STORE%\" >nul
+copy /y "!LATEST_UNIVERSAL_APK!" "%MUSIC_APK_STORE%\" >nul
+copy /y "!LATEST_VIDEO_APK!" "%VIDEO_APK_STORE%\" >nul
+copy /y "!LATEST_VIDEO_UNIVERSAL_APK!" "%VIDEO_APK_STORE%\" >nul
+echo [OK] Music arm64     : !LATEST_APK!
+echo [OK] Music universal : !LATEST_UNIVERSAL_APK!
+echo [OK] Video arm64     : !LATEST_VIDEO_APK!
+echo [OK] Video universal : !LATEST_VIDEO_UNIVERSAL_APK!
 exit /b 0
 
 :LOCAL_PACKAGE
@@ -421,10 +458,22 @@ if not defined LATEST_UNIVERSAL_APK (
   echo [BLAD] Brak universal APK. Najpierw uzyj opcji 9.
   exit /b 1
 )
+if not defined LATEST_VIDEO_APK (
+  echo [BLAD] Brak Video EXP arm64 APK. Najpierw uzyj opcji 9.
+  exit /b 1
+)
+if not defined LATEST_VIDEO_UNIVERSAL_APK (
+  echo [BLAD] Brak Video EXP universal APK. Najpierw uzyj opcji 9.
+  exit /b 1
+)
 for %%F in ("!LATEST_APK!") do set "ARM64_SOURCE_NAME=%%~nxF"
 for %%F in ("!LATEST_UNIVERSAL_APK!") do set "UNIVERSAL_SOURCE_NAME=%%~nxF"
+for %%F in ("!LATEST_VIDEO_APK!") do set "VIDEO_ARM64_SOURCE_NAME=%%~nxF"
+for %%F in ("!LATEST_VIDEO_UNIVERSAL_APK!") do set "VIDEO_UNIVERSAL_SOURCE_NAME=%%~nxF"
 set "EXPECTED_ARM64_NAME=SmartTube_mobile_!APP_VERSION!_arm64-v8a.apk"
 set "EXPECTED_UNIVERSAL_NAME=SmartTube_mobile_!APP_VERSION!_universal.apk"
+set "EXPECTED_VIDEO_ARM64_NAME=SmartTube_mobile_!APP_VERSION!-carvideo_arm64-v8a.apk"
+set "EXPECTED_VIDEO_UNIVERSAL_NAME=SmartTube_mobile_!APP_VERSION!-carvideo_universal.apk"
 if /I not "!ARM64_SOURCE_NAME!"=="!EXPECTED_ARM64_NAME!" (
   echo [BLAD] APK arm64 pochodzi z innej wersji: !ARM64_SOURCE_NAME!
   echo Oczekiwano: !EXPECTED_ARM64_NAME!
@@ -435,12 +484,29 @@ if /I not "!UNIVERSAL_SOURCE_NAME!"=="!EXPECTED_UNIVERSAL_NAME!" (
   echo Oczekiwano: !EXPECTED_UNIVERSAL_NAME!
   exit /b 1
 )
+if /I not "!VIDEO_ARM64_SOURCE_NAME!"=="!EXPECTED_VIDEO_ARM64_NAME!" (
+  echo [BLAD] Video arm64 pochodzi z innej wersji: !VIDEO_ARM64_SOURCE_NAME!
+  echo Oczekiwano: !EXPECTED_VIDEO_ARM64_NAME!
+  exit /b 1
+)
+if /I not "!VIDEO_UNIVERSAL_SOURCE_NAME!"=="!EXPECTED_VIDEO_UNIVERSAL_NAME!" (
+  echo [BLAD] Video universal pochodzi z innej wersji: !VIDEO_UNIVERSAL_SOURCE_NAME!
+  echo Oczekiwano: !EXPECTED_VIDEO_UNIVERSAL_NAME!
+  exit /b 1
+)
+set "MUSIC_ARM64_ASSET=SmartTube-AA-Music_!APP_VERSION!_arm64-v8a.apk"
+set "MUSIC_UNIVERSAL_ASSET=SmartTube-AA-Music_!APP_VERSION!_universal.apk"
+set "VIDEO_ARM64_ASSET=SmartTube-AA-Video-EXP_!APP_VERSION!_arm64-v8a.apk"
+set "VIDEO_UNIVERSAL_ASSET=SmartTube-AA-Video-EXP_!APP_VERSION!_universal.apk"
 for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"`) do set "STAMP=%%T"
 set "PACKAGE_DIR=%RELEASES_DIR%\SmartTube-AA-!APP_VERSION!-!STAMP!"
 if not exist "!PACKAGE_DIR!" mkdir "!PACKAGE_DIR!"
-copy /y "!LATEST_APK!" "!PACKAGE_DIR!\!EXPECTED_ARM64_NAME!" >nul
-copy /y "!LATEST_UNIVERSAL_APK!" "!PACKAGE_DIR!\!EXPECTED_UNIVERSAL_NAME!" >nul
+copy /y "!LATEST_APK!" "!PACKAGE_DIR!\!MUSIC_ARM64_ASSET!" >nul
+copy /y "!LATEST_UNIVERSAL_APK!" "!PACKAGE_DIR!\!MUSIC_UNIVERSAL_ASSET!" >nul
+copy /y "!LATEST_VIDEO_APK!" "!PACKAGE_DIR!\!VIDEO_ARM64_ASSET!" >nul
+copy /y "!LATEST_VIDEO_UNIVERSAL_APK!" "!PACKAGE_DIR!\!VIDEO_UNIVERSAL_ASSET!" >nul
 copy /y "!LATEST_UNIVERSAL_APK!" "!PACKAGE_DIR!\SmartTube-AA-latest.apk" >nul
+copy /y "!LATEST_VIDEO_UNIVERSAL_APK!" "!PACKAGE_DIR!\SmartTube-AA-Video-EXP-latest.apk" >nul
 git -C "%PUBLIC_DIR%" archive --format=zip --output="!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-source.zip" HEAD
 if errorlevel 1 exit /b 1
 copy /y "%~f0" "!PACKAGE_DIR!\%HELPER_NAME%" >nul
@@ -449,13 +515,23 @@ if errorlevel 1 exit /b 1
 (
   echo SmartTube AA !APP_VERSION!
   echo.
-  echo APK arm64: !EXPECTED_ARM64_NAME!
-  echo APK universal: !EXPECTED_UNIVERSAL_NAME!
-  echo Latest alias: SmartTube-AA-latest.apk
+  echo MUSIC - stable Android Auto audio application
+  echo Music arm64: !MUSIC_ARM64_ASSET!
+  echo Music universal: !MUSIC_UNIVERSAL_ASSET!
+  echo Music latest alias: SmartTube-AA-latest.apk
+  echo Package: app.smarttube.mobile
+  echo.
+  echo VIDEO EXP - separate experimental parked-video installation
+  echo Video arm64: !VIDEO_ARM64_ASSET!
+  echo Video universal: !VIDEO_UNIVERSAL_ASSET!
+  echo Video latest alias: SmartTube-AA-Video-EXP-latest.apk
+  echo Package: app.smarttube.mobile.carvideo
+  echo This is not the driving-safe Music interface. Use only while parked and where allowed.
+  echo.
   echo OTA manifest: update.json ^(versionCode !APP_VERSION_CODE!^)
   echo Source: SmartTube-AA-!APP_VERSION!-source.zip
-  echo Build type: stmobile debug/test build
-  echo Package: app.smarttube.mobile
+  echo Build types: stmobile debug + stmobile carvideo
+  echo Video EXP updates are manual in this release; update.json remains Music-only.
   echo.
   echo This project is based on SmartTube. Keep the original LICENSE and attribution.
 ) > "!PACKAGE_DIR!\RELEASE-NOTES.txt"
@@ -505,11 +581,15 @@ if errorlevel 1 goto COMMAND_FAILED
 call :ENSURE_RELEASE_TAG
 if errorlevel 1 goto COMMAND_FAILED
 gh release create "!TAG_NAME!" ^
-  "!PACKAGE_DIR!\!EXPECTED_ARM64_NAME!" ^
-  "!PACKAGE_DIR!\!EXPECTED_UNIVERSAL_NAME!" ^
+  "!PACKAGE_DIR!\!MUSIC_ARM64_ASSET!" ^
+  "!PACKAGE_DIR!\!MUSIC_UNIVERSAL_ASSET!" ^
+  "!PACKAGE_DIR!\!VIDEO_ARM64_ASSET!" ^
+  "!PACKAGE_DIR!\!VIDEO_UNIVERSAL_ASSET!" ^
   "!PACKAGE_DIR!\SmartTube-AA-latest.apk" ^
+  "!PACKAGE_DIR!\SmartTube-AA-Video-EXP-latest.apk" ^
   "!PACKAGE_DIR!\update.json" ^
   "!PACKAGE_DIR!\SmartTube-AA-!APP_VERSION!-source.zip" ^
+  "!PACKAGE_DIR!\%HELPER_NAME%" ^
   "!PACKAGE_DIR!\SHA256SUMS.txt" ^
   -R "%REPO%" --title "SmartTube AA !APP_VERSION!" ^
   --notes-file "!PACKAGE_DIR!\RELEASE-NOTES.txt" --latest
@@ -564,6 +644,9 @@ if not errorlevel 1 (
 )
 call :FIND_LATEST_APK
 if defined LATEST_APK copy /y "!LATEST_APK!" "!BACKUP_DIR!\" >nul
+if defined LATEST_UNIVERSAL_APK copy /y "!LATEST_UNIVERSAL_APK!" "!BACKUP_DIR!\" >nul
+if defined LATEST_VIDEO_APK copy /y "!LATEST_VIDEO_APK!" "!BACKUP_DIR!\" >nul
+if defined LATEST_VIDEO_UNIVERSAL_APK copy /y "!LATEST_VIDEO_UNIVERSAL_APK!" "!BACKUP_DIR!\" >nul
 echo.
 echo [OK] Kopia zapisana w:
 echo !BACKUP_DIR!
@@ -744,10 +827,16 @@ exit /b 0
 :FIND_LATEST_APK
 set "LATEST_APK="
 set "LATEST_UNIVERSAL_APK="
+set "LATEST_VIDEO_APK="
+set "LATEST_VIDEO_UNIVERSAL_APK="
 for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_APK_DIR%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_APK set "LATEST_APK=%BUILD_APK_DIR%\%%F"
-if not defined LATEST_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%APK_STORE%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_APK set "LATEST_APK=%APK_STORE%\%%F"
+if not defined LATEST_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%MUSIC_APK_STORE%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_APK set "LATEST_APK=%MUSIC_APK_STORE%\%%F"
 for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_APK_DIR%\*universal.apk" 2^>nul') do if not defined LATEST_UNIVERSAL_APK set "LATEST_UNIVERSAL_APK=%BUILD_APK_DIR%\%%F"
-if not defined LATEST_UNIVERSAL_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%APK_STORE%\*universal.apk" 2^>nul') do if not defined LATEST_UNIVERSAL_APK set "LATEST_UNIVERSAL_APK=%APK_STORE%\%%F"
+if not defined LATEST_UNIVERSAL_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%MUSIC_APK_STORE%\*universal.apk" 2^>nul') do if not defined LATEST_UNIVERSAL_APK set "LATEST_UNIVERSAL_APK=%MUSIC_APK_STORE%\%%F"
+for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_VIDEO_APK_DIR%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_VIDEO_APK set "LATEST_VIDEO_APK=%BUILD_VIDEO_APK_DIR%\%%F"
+if not defined LATEST_VIDEO_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%VIDEO_APK_STORE%\*arm64-v8a.apk" 2^>nul') do if not defined LATEST_VIDEO_APK set "LATEST_VIDEO_APK=%VIDEO_APK_STORE%\%%F"
+for /f "delims=" %%F in ('dir /b /a-d /o-d "%BUILD_VIDEO_APK_DIR%\*universal.apk" 2^>nul') do if not defined LATEST_VIDEO_UNIVERSAL_APK set "LATEST_VIDEO_UNIVERSAL_APK=%BUILD_VIDEO_APK_DIR%\%%F"
+if not defined LATEST_VIDEO_UNIVERSAL_APK for /f "delims=" %%F in ('dir /b /a-d /o-d "%VIDEO_APK_STORE%\*universal.apk" 2^>nul') do if not defined LATEST_VIDEO_UNIVERSAL_APK set "LATEST_VIDEO_UNIVERSAL_APK=%VIDEO_APK_STORE%\%%F"
 exit /b 0
 
 :COMMAND_FAILED

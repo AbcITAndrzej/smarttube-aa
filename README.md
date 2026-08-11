@@ -6,9 +6,21 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 ## Pobieranie
 
-**[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
+Projekt publikuje dwie osobno instalowane aplikacje z jednego kodu zrodlowego:
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.22`
+- **SmartTube AA Music** (`app.smarttube.mobile`) - stabilny interfejs muzyki, playlist,
+  radia i offline w Android Auto.
+- **SmartTube AA Video EXP** (`app.smarttube.mobile.carvideo`) - osobna, eksperymentalna
+  aplikacja obrazu na postoju. Nie zastepuje wersji Music i nie korzysta z natywnego
+  interfejsu audio Android Auto.
+
+Obie aplikacje moga byc zainstalowane jednoczesnie. Szczegoly zawiera
+[opis wariantow Music i Video](docs/MUSIC-AND-VIDEO.md).
+
+- **[Pobierz SmartTube AA Music](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
+- **[Pobierz SmartTube AA Video EXP](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-Video-EXP-latest.apk)**
+
+Aktualne wydanie: `32.04-mobile-p13-aa1.23`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -34,7 +46,14 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.22
+## Co zmienia aa1.23
+
+- publikuje z jednego kodu dwie osobno instalowane aplikacje: stabilną Music oraz Video EXP,
+- nadaje Video EXP własną nazwę i pakiet `app.smarttube.mobile.carvideo`, dzięki czemu może działać obok Music,
+- rozbudowuje przenośny helper o wspólne budowanie, pakowanie i publikowanie obu wariantów,
+- pozostawia automatyczne aktualizacje w aplikacji wyłącznie dla stabilnej wersji Music.
+
+## Zmiany z aa1.22
 
 - ustawia dwukolumnowy układ kafelków na stałe także w pionie, bez zmiany po powrocie z playera,
 - przyspiesza kolejne strony Shorts dzięki trzem porcjom pobieranym z wyprzedzeniem,
