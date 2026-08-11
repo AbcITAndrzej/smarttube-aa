@@ -368,7 +368,9 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
                         scalingVideo = false;
                         if (videoScale < 1.02f) resetVideoZoom();
                         persistRememberedZoom();
-                        keepControlsVisible();
+                        // Finishing a pinch is not a request to operate the player. Hide the
+                        // overlay even while paused; an ordinary tap can reveal it again.
+                        setControlsVisible(false);
                     }
                 });
         GestureDetector detector = new GestureDetector(requireContext(),
@@ -446,7 +448,8 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
                     panningVideo = false;
                     panMoved = false;
                     if (moved) {
-                        keepControlsVisible();
+                        // Panning a zoomed frame should behave like zooming, not like a tap.
+                        setControlsVisible(false);
                         return true;
                     }
                     return detector.onTouchEvent(event);

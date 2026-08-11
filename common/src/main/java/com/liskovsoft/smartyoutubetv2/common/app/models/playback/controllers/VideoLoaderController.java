@@ -37,6 +37,8 @@ public class VideoLoaderController extends BasePlayerController {
     private ErrorFixerController mErrorFixerController;
     private long mSleepTimerStartMs;
     private Disposable mFormatInfoAction;
+    /** Rejects a late format response after rapid next/previous changes. */
+    private long mFormatRequestGeneration;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
     };
@@ -284,15 +286,34 @@ public class VideoLoaderController extends BasePlayerController {
         //getPlayer().showProgressBar(true);
         Utils.post(mShowProgressBar);
         disposeActions();
+        final long requestGeneration = ++mFormatRequestGeneration;
+        final Video requestedVideo = video;
 
         ServiceManager service = YouTubeServiceManager.instance();
         MediaItemService mediaItemManager = service.getMediaItemService();
         mFormatInfoAction = mediaItemManager.getFormatInfoObserve(video.videoId)
-                .subscribe(this::processFormatInfo,
+                .subscribe(formatInfo -> {
+                               if (isCurrentFormatRequest(requestGeneration, requestedVideo)) {
+                                   processFormatInfo(formatInfo);
+                               } else {
+                                   Log.d(TAG, "Ignoring stale format response...");
+                               }
+                           },
                            error -> {
+                               if (!isCurrentFormatRequest(requestGeneration, requestedVideo)) {
+                                   Log.d(TAG, "Ignoring stale format error...");
+                                   return;
+                               }
                                getPlayer().showProgressBar(false);
                                mErrorFixerController.runFormatErrorAction(error);
                            });
+    }
+
+    private boolean isCurrentFormatRequest(long generation, Video requestedVideo) {
+        Video current = getVideo();
+        return generation == mFormatRequestGeneration
+                && current != null && requestedVideo != null
+                && Helpers.equals(current.videoId, requestedVideo.videoId);
     }
 
     private void processFormatInfo(MediaItemFormatInfo formatInfo) {
@@ -417,6 +438,7 @@ public class VideoLoaderController extends BasePlayerController {
     }
 
     private void disposeActions() {
+        mFormatRequestGeneration++;
         MediaServiceManager.instance().disposeActions();
         RxHelper.disposeActions(mFormatInfoAction);
         Utils.removeCallbacks(mReloadVideo, mLoadNext, mRestartEngine, mMetadataSync);

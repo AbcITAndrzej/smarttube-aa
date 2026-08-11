@@ -83,6 +83,11 @@
     <string name="mobile_update_permission_title">Zezwól na instalowanie aktualizacji</string>
     <string name="mobile_update_permission_message">Włącz „Zezwalaj z tego źródła” dla SmartTube, a potem wróć, aby kontynuować instalację.</string>
     <string name="mobile_update_permission_open">Otwórz ustawienia</string>
+    <string name="mobile_update_disable_startup">Wyłącz sprawdzanie aktualizacji przy uruchomieniu</string>
+    <string name="mobile_startup_signin_title">Zaloguj się do YouTube</string>
+    <string name="mobile_startup_signin_message">Nie jesteś zalogowany. Zaloguj się, aby korzystać ze swoich playlist, subskrypcji i historii w aplikacji oraz Android Auto.</string>
+    <string name="mobile_startup_signin_action">Zaloguj się</string>
+    <string name="mobile_startup_signin_later">Później</string>
     <string name="mobile_radio_settings_entry">Radio (eksperymentalne)</string>
     <string name="mobile_radio_title">Radio</string>
     <string name="mobile_radio_summary">Eksperymentalny katalog działających stacji z całego świata z Radio Browser. Synchronizacja i ulubione są zapisywane tylko na tym urządzeniu.</string>

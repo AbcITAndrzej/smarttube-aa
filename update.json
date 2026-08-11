@@ -2,17 +2,21 @@
   "package": {
     "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk"
   },
-  "32.04-mobile-p13-aa1.20": {
-    "versionCode": 2404,
+  "32.04-mobile-p13-aa1.21": {
+    "versionCode": 2405,
     "changelog": [
-      "Subtitle color, background, size and font settings",
-      "Live subtitle appearance updates with profile persistence",
-      "Subtitle appearance shortcut in the active player and a dedicated reset"
+      "Silent update check at startup with an opt-out checkbox",
+      "A sign-in prompt shown only to signed-out users",
+      "Stable rapid next-item switching in the mobile player and Android Auto",
+      "Improved Shorts pagination, subtitle binding and rotation stability",
+      "Player controls stay hidden after zooming or panning until the next tap"
     ],
     "changelog_pl": [
-      "Ustawienia koloru, tła, wielkości i czcionki napisów",
-      "Zmiany wyglądu napisów na żywo z zapisem w profilu",
-      "Skrót wyglądu napisów w odtwarzaczu i osobny reset"
+      "Ciche sprawdzanie aktualizacji przy starcie z checkboxem wyłączającym",
+      "Komunikat logowania wyświetlany wyłącznie niezalogowanym użytkownikom",
+      "Stabilne szybkie przełączanie filmów i utworów w Android Auto",
+      "Lepsze doładowywanie Shorts, napisy i stabilność obrotu",
+      "Kontrolki po zoomie lub przesunięciu wracają dopiero po tapnięciu"
     ]
   }
 }

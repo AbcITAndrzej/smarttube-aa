@@ -68,6 +68,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         MobileBackgroundPlaybackRepository, PlaybackView,
         com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.PlayerView {
     private static final long SNAPSHOT_INTERVAL_MS = 500;
+    private static final long RAPID_SKIP_COALESCE_MS = 200L;
     private final Context applicationContext;
     private final LegacyMediaIndex index;
     private final LegacyErrorMapper errors;
@@ -140,6 +141,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private long pendingStartPositionMs;
     private final List<String> scopedPlaybackQueue = new ArrayList<>();
     private int scopedPlaybackIndex = -1;
+    private int pendingScopedPlaybackIndex = -1;
+    private int pendingScopedSkipCommands;
+    private boolean applyingScopedSkip;
+    private final Runnable applyPendingScopedSkip = this::applyPendingScopedSkip;
     private String preferredAudioAppliedMediaId;
     private String preferredAudioAttemptSignature;
 
@@ -400,6 +405,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     private void prepareNow(String mediaId, long startPositionMs) {
         try {
+            if (!applyingScopedSkip) cancelPendingScopedSkip("new prepare");
             String currentBefore = offlinePlayback ? offlineMediaId
                     : radioPlayback ? radioMediaId
                     : video == null ? "" : LegacyMediaMapper.stableId(video);
@@ -613,15 +619,45 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         int current = scopedPlaybackQueue.indexOf(currentId);
         if (current < 0) current = scopedPlaybackIndex;
         if (current < 0) return false;
-        int next = (current + direction + scopedPlaybackQueue.size())
+        int base = pendingScopedPlaybackIndex >= 0 ? pendingScopedPlaybackIndex : current;
+        int next = (base + direction + scopedPlaybackQueue.size())
                 % scopedPlaybackQueue.size();
+        pendingScopedPlaybackIndex = next;
+        pendingScopedSkipCommands++;
+        main.removeCallbacks(applyPendingScopedSkip);
+        main.postDelayed(applyPendingScopedSkip, RAPID_SKIP_COALESCE_MS);
+        MobileDiagnostics.info("P22-RapidSkip", "mobile queued " + base
+                + " -> " + next + " commands=" + pendingScopedSkipCommands);
+        return true;
+    }
+
+    private void applyPendingScopedSkip() {
+        int next = pendingScopedPlaybackIndex;
+        int commands = pendingScopedSkipCommands;
+        pendingScopedPlaybackIndex = -1;
+        pendingScopedSkipCommands = 0;
+        if (next < 0 || next >= scopedPlaybackQueue.size()) return;
         String nextId = scopedPlaybackQueue.get(next);
         scopedPlaybackIndex = next;
-        MobileDiagnostics.info("P16-Shorts", "scoped switch " + current
-                + " -> " + next + " id=" + nextId);
-        prepareNow(nextId, 0L);
-        play();
-        return true;
+        MobileDiagnostics.info("P22-RapidSkip", "mobile apply index=" + next
+                + " commands=" + commands + " id=" + nextId);
+        applyingScopedSkip = true;
+        try {
+            prepareNow(nextId, 0L);
+            play();
+        } finally {
+            applyingScopedSkip = false;
+        }
+    }
+
+    private void cancelPendingScopedSkip(String reason) {
+        if (pendingScopedPlaybackIndex < 0 && pendingScopedSkipCommands == 0) return;
+        main.removeCallbacks(applyPendingScopedSkip);
+        MobileDiagnostics.debug("P22-RapidSkip", "mobile cancel reason=" + reason
+                + " target=" + pendingScopedPlaybackIndex
+                + " commands=" + pendingScopedSkipCommands);
+        pendingScopedPlaybackIndex = -1;
+        pendingScopedSkipCommands = 0;
     }
 
     private boolean playScopedNextAtEnd() {
@@ -693,6 +729,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
 
     @Override public void release() {
         MobileDiagnostics.debug("DataPlayer", "release");
+        cancelPendingScopedSkip("repository release");
         instantPlay.cancel();
         listenSaveController.reset();
         playlistPlaybackContext = false;

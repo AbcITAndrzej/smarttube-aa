@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.20`
+Aktualne wydanie: `32.04-mobile-p13-aa1.21`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -34,7 +34,15 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.20
+## Co zmienia aa1.21
+
+- automatycznie i cicho sprawdza aktualizacje przy uruchomieniu; w Ustawieniach można wyłączyć tę kontrolę,
+- niezalogowanym użytkownikom pokazuje na starcie czytelne przejście do mobilnego ekranu logowania,
+- stabilizuje szybkie przełączanie następnych filmów i utworów Android Auto, odrzucając spóźnione odpowiedzi poprzednich żądań,
+- poprawia doładowywanie listy Shorts oraz zachowanie playera i napisów przy obrocie ekranu,
+- po powiększeniu lub przesunięciu filmu ukrywa kontrolki także na pauzie; wracają dopiero po tapnięciu.
+
+## Zmiany z aa1.20
 
 - dodaje ustawienia koloru i tła, wielkości oraz kroju czcionki napisów,
 - stosuje zmiany wyglądu napisów na żywo i zapamiętuje je w bieżącym profilu,

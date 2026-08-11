@@ -13,12 +13,14 @@ import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.adapter.MobileSettingsAdapter;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.model.*;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobileSettingsViewModel;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.startup.MobileStartupPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.update.MobileUpdateController;
 
 public final class MobileSettingsFragment extends Fragment {
@@ -65,6 +67,12 @@ public final class MobileSettingsFragment extends Fragment {
                 MobileFragmentSupport.navigator(this).openDiagnostics());
         updateController = new MobileUpdateController(requireActivity(), this::requestInstallPermission);
         view.findViewById(R.id.mobile_update_button).setOnClickListener(v -> updateController.check());
+        MobileStartupPreferences startupPreferences = new MobileStartupPreferences(requireContext());
+        MaterialCheckBox disableStartupUpdate =
+                view.findViewById(R.id.mobile_disable_startup_update_check);
+        disableStartupUpdate.setChecked(startupPreferences.isStartupUpdateCheckDisabled());
+        disableStartupUpdate.setOnCheckedChangeListener((button, checked) ->
+                startupPreferences.setStartupUpdateCheckDisabled(checked));
         MobileSettingsAdapter adapter = new MobileSettingsAdapter(item -> handleClick(vm, item));
         list.setLayoutManager(new LinearLayoutManager(requireContext()));
         list.setHasFixedSize(true);

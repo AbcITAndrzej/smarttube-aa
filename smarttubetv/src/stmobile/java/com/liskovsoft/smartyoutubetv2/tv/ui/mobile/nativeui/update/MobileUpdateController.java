@@ -6,6 +6,7 @@ import android.os.Build;
 import androidx.annotation.Nullable;
 import com.liskovsoft.appupdatechecker2.AppUpdateChecker;
 import com.liskovsoft.appupdatechecker2.AppUpdateCheckerListener;
+import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import java.util.Collections;
 import java.util.List;
@@ -22,6 +23,7 @@ public final class MobileUpdateController implements AppUpdateCheckerListener {
     private AlertDialog dialog;
     private boolean active;
     private boolean updateReady;
+    private boolean interactive;
 
     public MobileUpdateController(Activity activity, PermissionRequester permissionRequester) {
         this.activity = activity;
@@ -29,15 +31,29 @@ public final class MobileUpdateController implements AppUpdateCheckerListener {
     }
 
     public void check() {
+        startCheck(true);
+    }
+
+    /** Runs silently unless a newer APK is actually available. */
+    public void checkAutomatically() {
+        startCheck(false);
+    }
+
+    private void startCheck(boolean interactive) {
         dismissDialog();
         active = true;
         updateReady = false;
-        dialog = new AlertDialog.Builder(activity)
-                .setTitle(R.string.mobile_update_check)
-                .setMessage(R.string.mobile_update_checking)
-                .setCancelable(false)
-                .create();
-        dialog.show();
+        this.interactive = interactive;
+        if (interactive) {
+            dialog = new AlertDialog.Builder(activity)
+                    .setTitle(R.string.mobile_update_check)
+                    .setMessage(R.string.mobile_update_checking)
+                    .setCancelable(false)
+                    .create();
+            dialog.show();
+        } else {
+            MobileDiagnostics.info("StartupUpdate", "automatic update check started");
+        }
         checker = new AppUpdateChecker(activity, this);
         checker.forceCheckForUpdates(withCacheBuster(
                 activity.getResources().getStringArray(R.array.update_urls)));
@@ -45,6 +61,7 @@ public final class MobileUpdateController implements AppUpdateCheckerListener {
 
     @Override public void onUpdateFound(String versionName, List<String> changelog, String apkPath) {
         if (!canShow()) return;
+        MobileDiagnostics.info("StartupUpdate", "update available version=" + versionName);
         updateReady = true;
         String details = joinChangelog(changelog);
         dismissDialog();
@@ -60,6 +77,18 @@ public final class MobileUpdateController implements AppUpdateCheckerListener {
     @Override public void onUpdateError(Exception error) {
         if (!canShow()) return;
         dismissDialog();
+        if (!interactive) {
+            if (error != null && AppUpdateCheckerListener.LATEST_VERSION.equals(error.getMessage())) {
+                MobileDiagnostics.info("StartupUpdate", "installed version is current");
+            } else {
+                String message = error == null || error.getMessage() == null
+                        ? error == null ? "unknown" : error.getClass().getSimpleName()
+                        : error.getMessage();
+                MobileDiagnostics.warn("StartupUpdate", "automatic update check failed: " + message);
+            }
+            active = false;
+            return;
+        }
         if (error != null && AppUpdateCheckerListener.LATEST_VERSION.equals(error.getMessage())) {
             dialog = new AlertDialog.Builder(activity)
                     .setTitle(R.string.mobile_update_latest_title)
@@ -95,6 +124,7 @@ public final class MobileUpdateController implements AppUpdateCheckerListener {
 
     public void close() {
         active = false;
+        updateReady = false;
         dismissDialog();
     }
 

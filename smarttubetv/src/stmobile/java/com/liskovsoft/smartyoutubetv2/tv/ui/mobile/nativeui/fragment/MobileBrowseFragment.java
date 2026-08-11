@@ -124,7 +124,7 @@ public final class MobileBrowseFragment extends Fragment {
                         : manager instanceof LinearLayoutManager
                         ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
                 int trigger = "shorts".equals(getPageId())
-                        ? Math.max(1, adapter.getItemCount() * 3 / 5)
+                        ? Math.max(1, adapter.getItemCount() * 3 / 10)
                         : adapter.getItemCount() - 6;
                 if (last >= trigger) vm.loadMore();
             }

@@ -51,6 +51,13 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> playlistBackgroundLoads =
             new ConcurrentHashMap<>();
+    /** One-page look-ahead used only by the dedicated Shorts grid. */
+    private final Object shortsBufferLock = new Object();
+    private MobileBrowsePayload shortsBufferedPayload;
+    private MobileResultCallback<MobileBrowsePayload> shortsWaitingCallback;
+    private Disposable shortsPrefetchDisposable;
+    private boolean shortsPrefetchInFlight;
+    private long shortsPrefetchGeneration;
     private volatile ItemUpdateListener itemUpdateListener;
 
     public LegacyBrowseRepository(ContentService content, NotificationsService notifications,
@@ -78,6 +85,9 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         if (cached != null) {
             MobileDiagnostics.debug("DataBrowse", "browse cache hit page=" + page.id());
             callback.onSuccess(cached);
+            if (page == LegacyBrowsePage.SHORTS && countItems(cached) > 0) {
+                startShortsPrefetch(cached);
+            }
             return MobileRequest.NONE;
         }
         MobileDiagnostics.debug("DataBrowse", "load page=" + page.id() + " source=" + page.source());
@@ -122,12 +132,16 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         browseCacheEnhancementSignatures.remove(page.id());
         browseContinuations.remove(page.id());
         emptyReloadCounts.remove(page.id());
+        if (page == LegacyBrowsePage.SHORTS) resetShortsPrefetch();
     }
 
     @Override public MobileRequest loadMoreBrowse(
             String pageId, MobileResultCallback<MobileBrowsePayload> callback) {
         if (callback == null) return MobileRequest.NONE;
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
+        if (page == LegacyBrowsePage.SHORTS) {
+            return loadMoreShortsBuffered(callback);
+        }
         LegacyGroupPaginator continuation = browseContinuations.get(page.id());
         MobileBrowsePayload current = browseCache.get(page.id());
         if (continuation == null || current == null) {
@@ -210,7 +224,13 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     @Override public void prefetchBrowse(String pageId) {
         LegacyBrowsePage page = LegacyBrowsePage.from(pageId);
-        if (getCachedBrowse(page) != null) return;
+        MobileBrowsePayload cached = getCachedBrowse(page);
+        if (cached != null) {
+            if (page == LegacyBrowsePage.SHORTS && countItems(cached) > 0) {
+                startShortsPrefetch(cached);
+            }
+            return;
+        }
         if (browsePrefetches.putIfAbsent(page.id(), Boolean.TRUE) != null) return;
         MobileDiagnostics.debug("DataBrowse", "prefetch page=" + page.id());
         try {
@@ -222,10 +242,14 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                         LegacyGroupPaginator continuation = new LegacyGroupPaginator(groups);
                         browseContinuations.put(page.id(), continuation);
                         boolean hasMore = continuation.hasMore();
-                        cacheBrowse(page, mapBrowsePayload(page, groups, hasMore));
+                        MobileBrowsePayload payload = mapBrowsePayload(page, groups, hasMore);
+                        cacheBrowse(page, payload);
                         browsePrefetches.remove(page.id());
                         MobileDiagnostics.debug("DataBrowse",
                                 "prefetch ready page=" + page.id());
+                        if (page == LegacyBrowsePage.SHORTS && countItems(payload) > 0) {
+                            startShortsPrefetch(payload);
+                        }
                         if (metadataEnhancer != null && groups != null && !groups.isEmpty()) {
                             List<MediaGroup> snapshot = new ArrayList<>(groups);
                             metadataEnhancer.enhance(snapshot, () ->
@@ -366,6 +390,9 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         MobileBrowsePayload payload = mapBrowsePayload(page, snapshot, hasMore);
         cacheBrowse(page, payload);
         callback.onSuccess(payload);
+        if (page == LegacyBrowsePage.SHORTS && countItems(payload) > 0) {
+            startShortsPrefetch(payload);
+        }
 
         if (metadataEnhancer == null || snapshot.isEmpty() || request == null) return;
         // Enhancement is a cache-warming background task rather than part of the screen request.
@@ -465,6 +492,209 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             callback.onError(errors.map(error));
             return MobileRequest.NONE;
         }
+    }
+
+    /**
+     * Delivers a ready look-ahead page instantly or joins the single in-flight Shorts request.
+     * The background request deliberately survives Fragment/ViewModel cancellation; its result is
+     * a bounded one-page cache and can be consumed by a later visit to the same feed.
+     */
+    private MobileRequest loadMoreShortsBuffered(
+            MobileResultCallback<MobileBrowsePayload> callback) {
+        MobileBrowsePayload ready = null;
+        MobileBrowsePayload current = browseCache.get(LegacyBrowsePage.SHORTS.id());
+        boolean start = false;
+        synchronized (shortsBufferLock) {
+            if (shortsBufferedPayload != null) {
+                ready = shortsBufferedPayload;
+                shortsBufferedPayload = null;
+            } else {
+                // MobileBrowseViewModel already prevents parallel loadMore calls. Retaining the
+                // latest callback is defensive and avoids starting a duplicate network request.
+                shortsWaitingCallback = callback;
+                if (!shortsPrefetchInFlight) start = true;
+            }
+        }
+        if (ready != null) {
+            deliverShortsPayload(callback, ready, "buffer-hit");
+        } else if (start && current != null) {
+            startShortsPrefetch(current);
+        } else if (start) {
+            // A cold caller without a visible payload falls back to the regular first-page path.
+            synchronized (shortsBufferLock) {
+                if (shortsWaitingCallback == callback) shortsWaitingCallback = null;
+            }
+            return loadBrowse(LegacyBrowsePage.SHORTS.id(), callback);
+        }
+        return MobileRequest.NONE;
+    }
+
+    private void startShortsPrefetch(MobileBrowsePayload current) {
+        if (current == null || !current.hasMore()) return;
+        final long generation;
+        synchronized (shortsBufferLock) {
+            if (shortsPrefetchInFlight || shortsBufferedPayload != null) return;
+            shortsPrefetchInFlight = true;
+            generation = ++shortsPrefetchGeneration;
+        }
+
+        LegacyGroupPaginator continuation = browseContinuations.get(LegacyBrowsePage.SHORTS.id());
+        int groupIndex = continuation == null ? -1 : continuation.nextSlotIndex();
+        if (continuation == null || groupIndex < 0) {
+            startShortsRootPrefetch(current, generation, "no-continuation");
+            return;
+        }
+
+        MediaGroup source = continuation.sourceAt(groupIndex);
+        int beforeCount = countItems(current);
+        long startedNanos = System.nanoTime();
+        MobileDiagnostics.info("P22-ShortsBuffer", "prefetch start mode=continuation"
+                + " items=" + beforeCount + " group=" + groupIndex);
+        try {
+            AtomicBoolean emitted = new AtomicBoolean(false);
+            Disposable disposable = content.continueGroupObserve(source)
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(nextPage -> {
+                        emitted.set(true);
+                        if (!isCurrentShortsPrefetch(generation)) return;
+                        if (nextPage == null) {
+                            continuation.markFinished(groupIndex);
+                            startShortsRootPrefetch(current, generation, "null-page");
+                            return;
+                        }
+                        continuation.append(groupIndex, nextPage);
+                        int raw = countItems(mapBrowsePayload(LegacyBrowsePage.SHORTS,
+                                Collections.singletonList(nextPage), true));
+                        boolean canContinue = continuation.hasMore()
+                                || emptyReloadCounts.getOrDefault(
+                                LegacyBrowsePage.SHORTS.id(), 0) < 2;
+                        MobileBrowsePayload combined = appendContinuation(
+                                LegacyBrowsePage.SHORTS, current, nextPage,
+                                groupIndex, canContinue);
+                        int afterCount = countItems(combined);
+                        MobileDiagnostics.info("P22-ShortsBuffer", "prefetch ready mode=continuation"
+                                + " items=" + beforeCount + "->" + afterCount
+                                + " raw=" + raw + " rejected="
+                                + Math.max(0, raw - Math.max(0, afterCount - beforeCount))
+                                + " elapsedMs="
+                                + ((System.nanoTime() - startedNanos) / 1_000_000L));
+                        completeShortsPrefetch(generation, combined);
+                    }, error -> {
+                        if (!isCurrentShortsPrefetch(generation)) return;
+                        continuation.markFinished(groupIndex);
+                        MobileDiagnostics.warn("P22-ShortsBuffer",
+                                "continuation failed; reload root: " + error.getMessage());
+                        startShortsRootPrefetch(current, generation, "continuation-error");
+                    }, () -> {
+                        if (emitted.get() || !isCurrentShortsPrefetch(generation)) return;
+                        continuation.markFinished(groupIndex);
+                        startShortsRootPrefetch(current, generation, "empty-continuation");
+                    });
+            synchronized (shortsBufferLock) {
+                if (generation == shortsPrefetchGeneration) shortsPrefetchDisposable = disposable;
+                else disposable.dispose();
+            }
+        } catch (Throwable error) {
+            continuation.markFinished(groupIndex);
+            startShortsRootPrefetch(current, generation, "continuation-throw");
+        }
+    }
+
+    private void startShortsRootPrefetch(MobileBrowsePayload current, long generation,
+                                         String reason) {
+        if (!isCurrentShortsPrefetch(generation)) return;
+        int beforeCount = countItems(current);
+        long startedNanos = System.nanoTime();
+        MobileDiagnostics.info("P22-ShortsBuffer", "prefetch start mode=root reason="
+                + reason + " items=" + beforeCount);
+        try {
+            Disposable disposable = grid(LegacyBrowsePage.SHORTS).toList()
+                    .subscribeOn(Schedulers.io())
+                    .subscribe(groups -> {
+                        if (!isCurrentShortsPrefetch(generation)) return;
+                        LegacyGroupPaginator nextContinuation = new LegacyGroupPaginator(groups);
+                        browseContinuations.put(LegacyBrowsePage.SHORTS.id(), nextContinuation);
+                        MobileBrowsePayload fresh = mapBrowsePayload(
+                                LegacyBrowsePage.SHORTS, groups, true);
+                        int raw = countItems(fresh);
+                        MobileBrowsePayload combined = mergeGridPayload(current, fresh, true);
+                        int afterCount = countItems(combined);
+                        int emptyReloads = afterCount > beforeCount ? 0
+                                : emptyReloadCounts.getOrDefault(
+                                LegacyBrowsePage.SHORTS.id(), 0) + 1;
+                        emptyReloadCounts.put(LegacyBrowsePage.SHORTS.id(), emptyReloads);
+                        boolean canRetry = nextContinuation.hasMore() || emptyReloads < 2;
+                        combined = withHasMore(combined, canRetry);
+                        MobileDiagnostics.info("P22-ShortsBuffer", "prefetch ready mode=root"
+                                + " items=" + beforeCount + "->" + afterCount
+                                + " raw=" + raw + " rejected="
+                                + Math.max(0, raw - Math.max(0, afterCount - beforeCount))
+                                + " retry=" + canRetry + " elapsedMs="
+                                + ((System.nanoTime() - startedNanos) / 1_000_000L));
+                        completeShortsPrefetch(generation, combined);
+                    }, error -> failShortsPrefetch(generation, error));
+            synchronized (shortsBufferLock) {
+                if (generation == shortsPrefetchGeneration) shortsPrefetchDisposable = disposable;
+                else disposable.dispose();
+            }
+        } catch (Throwable error) {
+            failShortsPrefetch(generation, error);
+        }
+    }
+
+    private boolean isCurrentShortsPrefetch(long generation) {
+        synchronized (shortsBufferLock) {
+            return shortsPrefetchInFlight && generation == shortsPrefetchGeneration;
+        }
+    }
+
+    private void completeShortsPrefetch(long generation, MobileBrowsePayload payload) {
+        MobileResultCallback<MobileBrowsePayload> waiting;
+        synchronized (shortsBufferLock) {
+            if (!shortsPrefetchInFlight || generation != shortsPrefetchGeneration) return;
+            shortsPrefetchInFlight = false;
+            shortsPrefetchDisposable = null;
+            waiting = shortsWaitingCallback;
+            shortsWaitingCallback = null;
+            if (waiting == null) shortsBufferedPayload = payload;
+        }
+        if (waiting != null) deliverShortsPayload(waiting, payload, "joined-prefetch");
+    }
+
+    private void failShortsPrefetch(long generation, Throwable error) {
+        MobileResultCallback<MobileBrowsePayload> waiting;
+        synchronized (shortsBufferLock) {
+            if (generation != shortsPrefetchGeneration) return;
+            shortsPrefetchInFlight = false;
+            shortsPrefetchDisposable = null;
+            waiting = shortsWaitingCallback;
+            shortsWaitingCallback = null;
+        }
+        MobileDiagnostics.error("P22-ShortsBuffer", "prefetch failed", error);
+        if (waiting != null) waiting.onError(errors.map(error));
+    }
+
+    private void deliverShortsPayload(MobileResultCallback<MobileBrowsePayload> callback,
+                                      MobileBrowsePayload payload, String source) {
+        cacheBrowse(LegacyBrowsePage.SHORTS, payload);
+        MobileDiagnostics.info("P22-ShortsBuffer", "deliver source=" + source
+                + " items=" + countItems(payload) + " hasMore=" + payload.hasMore());
+        callback.onSuccess(payload);
+        // Keep exactly one subsequent page warm. No video stream is downloaded here.
+        startShortsPrefetch(payload);
+    }
+
+    private void resetShortsPrefetch() {
+        Disposable disposable;
+        synchronized (shortsBufferLock) {
+            shortsPrefetchGeneration++;
+            shortsPrefetchInFlight = false;
+            shortsBufferedPayload = null;
+            shortsWaitingCallback = null;
+            disposable = shortsPrefetchDisposable;
+            shortsPrefetchDisposable = null;
+        }
+        if (disposable != null && !disposable.isDisposed()) disposable.dispose();
     }
 
     private MobileBrowsePayload mergeGridPayload(MobileBrowsePayload current,

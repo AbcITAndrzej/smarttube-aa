@@ -31,4 +31,8 @@ public final class ExperimentalCarVideoActivity extends MobileNativeActivity {
     @Override protected boolean shouldRequestNotificationPermission() {
         return false;
     }
+
+    @Override protected boolean shouldRunStartupFlow() {
+        return false;
+    }
 }

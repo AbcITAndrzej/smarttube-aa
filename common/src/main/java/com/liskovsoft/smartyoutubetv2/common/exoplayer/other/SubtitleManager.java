@@ -82,6 +82,12 @@ public class SubtitleManager implements TextOutput, OnDataChange {
         }
     }
 
+    /** Stop observing preferences when the owning PlayerView is detached. */
+    public void release() {
+        mPlayerData.removeOnChange(this);
+        subsBuffer = null;
+    }
+
     private List<SubtitleStyle> getSubtitleStyles() {
         return mSubtitleStyles;
     }

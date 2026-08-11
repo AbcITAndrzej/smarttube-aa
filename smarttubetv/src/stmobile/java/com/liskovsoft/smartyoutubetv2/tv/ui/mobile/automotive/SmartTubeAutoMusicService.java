@@ -148,6 +148,8 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private static final long AUTO_ADVANCE_MIN_DURATION_MS = 10000L;
     private static final int MAX_RESUME_SOURCE_ATTEMPTS = 5;
     private static final long RESUME_RETRY_BASE_DELAY_MS = 1500L;
+    /** Coalesce a burst of steering-wheel/phone next commands into one expensive prepare. */
+    private static final long RAPID_SKIP_COALESCE_MS = 200L;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, MobileMediaItem> mediaByBrowserId = new LinkedHashMap<>();
@@ -246,6 +248,11 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private boolean likedCatalogReady;
     private String lastRecoveryMediaId;
     private int recoveryAttemptsForMediaId;
+    private int pendingManualSkipIndex = -1;
+    private int pendingManualSkipCommands;
+    private long pendingManualSkipStartedMs;
+    private boolean applyingManualSkip;
+    private final Runnable applyPendingManualSkip = this::applyPendingManualSkip;
     @Override
     public void onCreate() {
         super.onCreate();
@@ -662,6 +669,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     public void onDestroy() {
         destroyed = true;
         MobileDiagnostics.info("P13-AA-Service", "onDestroy");
+        cancelPendingManualSkip("service destroy");
         mainHandler.removeCallbacks(radioCatalogRefresh);
         if (radioRepository != null) {
             radioRepository.removeChangeListener(radioCatalogListener);
@@ -1777,6 +1785,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     private void playBrowserMediaId(
             String browserId, boolean fromAutoAdvance, boolean fromResume,
             String forcedPlaybackMediaId) {
+        if (!applyingManualSkip) cancelPendingManualSkip("direct selection");
         MobileMediaItem item = mediaByBrowserId.get(browserId);
         if (item == null) {
             MobileDiagnostics.warn("P13-AA-Playback", "missing item browserId=" + browserId);
@@ -2688,19 +2697,64 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             return;
         }
 
-        int target = resolveManualTargetIndex(delta);
+        // Shuffle deliberately remains immediate. Combining random selections would make a burst
+        // non-deterministic and could repeatedly pick the current item.
+        if (shuffleMode == PlaybackStateCompat.SHUFFLE_MODE_ALL && delta > 0) {
+            int target = resolveManualTargetIndex(delta);
+            MobileDiagnostics.info("P22-RapidSkip", "shuffle immediate from="
+                    + activeQueueIndex + " to=" + target);
+            playQueueIndex(target, false);
+            return;
+        }
+
+        int base = pendingManualSkipIndex >= 0 ? pendingManualSkipIndex : activeQueueIndex;
+        int target = resolveManualTargetIndex(base, delta);
         if (target < 0 || target >= activeQueue.size()) {
             MobileDiagnostics.info("P13-AA-Queue",
                     "skip ignored delta=" + delta + " target=" + target
-                            + " index=" + activeQueueIndex + " queueSize=" + activeQueue.size()
+                            + " index=" + base + " queueSize=" + activeQueue.size()
                             + " repeat=" + repeatMode + " shuffle=" + shuffleMode);
             return;
         }
 
-        MobileDiagnostics.info("P13-AA-Queue",
-                "skip delta=" + delta + " from=" + activeQueueIndex + " to=" + target
-                        + " repeat=" + repeatMode + " shuffle=" + shuffleMode);
-        playQueueIndex(target, false);
+        if (pendingManualSkipCommands == 0) pendingManualSkipStartedMs = System.currentTimeMillis();
+        pendingManualSkipIndex = target;
+        pendingManualSkipCommands++;
+        mainHandler.removeCallbacks(applyPendingManualSkip);
+        mainHandler.postDelayed(applyPendingManualSkip, RAPID_SKIP_COALESCE_MS);
+        MobileDiagnostics.info("P22-RapidSkip", "queued delta=" + delta
+                + " from=" + base + " to=" + target
+                + " commands=" + pendingManualSkipCommands);
+    }
+
+    private void applyPendingManualSkip() {
+        int target = pendingManualSkipIndex;
+        int commands = pendingManualSkipCommands;
+        long elapsed = pendingManualSkipStartedMs <= 0L ? 0L
+                : Math.max(0L, System.currentTimeMillis() - pendingManualSkipStartedMs);
+        pendingManualSkipIndex = -1;
+        pendingManualSkipCommands = 0;
+        pendingManualSkipStartedMs = 0L;
+        if (destroyed || activeQueue == null || target < 0 || target >= activeQueue.size()) return;
+        MobileDiagnostics.info("P22-RapidSkip", "apply from=" + activeQueueIndex
+                + " to=" + target + " commands=" + commands + " settleMs=" + elapsed);
+        applyingManualSkip = true;
+        try {
+            playQueueIndex(target, false);
+        } finally {
+            applyingManualSkip = false;
+        }
+    }
+
+    private void cancelPendingManualSkip(String reason) {
+        if (pendingManualSkipCommands <= 0 && pendingManualSkipIndex < 0) return;
+        mainHandler.removeCallbacks(applyPendingManualSkip);
+        MobileDiagnostics.debug("P22-RapidSkip", "cancel reason=" + reason
+                + " target=" + pendingManualSkipIndex
+                + " commands=" + pendingManualSkipCommands);
+        pendingManualSkipIndex = -1;
+        pendingManualSkipCommands = 0;
+        pendingManualSkipStartedMs = 0L;
     }
 
     private void playQueueIndex(int index, boolean fromAutoAdvance) {
@@ -2714,6 +2768,10 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
     }
 
     private int resolveManualTargetIndex(int delta) {
+        return resolveManualTargetIndex(activeQueueIndex, delta);
+    }
+
+    private int resolveManualTargetIndex(int currentIndex, int delta) {
         if (activeQueue == null || activeQueue.isEmpty()) {
             return -1;
         }
@@ -2721,7 +2779,7 @@ public final class SmartTubeAutoMusicService extends MediaBrowserServiceCompat {
             return randomQueueIndex(true);
         }
 
-        int target = activeQueueIndex + delta;
+        int target = currentIndex + delta;
         if (target >= 0 && target < activeQueue.size()) {
             return target;
         }
