@@ -156,7 +156,7 @@ public class SubtitleManager implements TextOutput, OnDataChange {
                 new CaptionStyleCompat(textColor,
                         backgroundColor, Color.TRANSPARENT,
                         subtitleStyle.captionStyle,
-                        outlineColor, Typeface.DEFAULT_BOLD);
+                        outlineColor, resolveTypeface());
         mSubtitleView.setStyle(style);
 
         float textSize = getTextSizePx();
@@ -171,11 +171,13 @@ public class SubtitleManager implements TextOutput, OnDataChange {
         if (captioningManager != null) {
             CaptionStyle userStyle = captioningManager.getUserStyle();
 
+            Typeface typeface = mPlayerData.getSubtitleFont() == PlayerData.SUBTITLE_FONT_DEFAULT_BOLD
+                    ? userStyle.getTypeface() : resolveTypeface();
             CaptionStyleCompat style =
                     new CaptionStyleCompat(userStyle.foregroundColor,
                             userStyle.backgroundColor, VERSION.SDK_INT >= 21 ? userStyle.windowColor : Color.TRANSPARENT,
                             userStyle.edgeType,
-                            userStyle.edgeColor, userStyle.getTypeface());
+                            userStyle.edgeColor, typeface);
             mSubtitleView.setStyle(style);
 
             float textSizePx = getTextSizePx();
@@ -186,5 +188,19 @@ public class SubtitleManager implements TextOutput, OnDataChange {
     private float getTextSizePx() {
         float textSizePx = mSubtitleView.getContext().getResources().getDimension(R.dimen.subtitle_text_size);
         return textSizePx * mPlayerData.getSubtitleScale();
+    }
+
+    private Typeface resolveTypeface() {
+        switch (mPlayerData.getSubtitleFont()) {
+            case PlayerData.SUBTITLE_FONT_SANS_SERIF:
+                return Typeface.create(Typeface.SANS_SERIF, Typeface.NORMAL);
+            case PlayerData.SUBTITLE_FONT_SERIF:
+                return Typeface.create(Typeface.SERIF, Typeface.NORMAL);
+            case PlayerData.SUBTITLE_FONT_MONOSPACE:
+                return Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL);
+            case PlayerData.SUBTITLE_FONT_DEFAULT_BOLD:
+            default:
+                return Typeface.DEFAULT_BOLD;
+        }
     }
 }

@@ -18,6 +18,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileEnhance
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileInstantPlayPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobilePlayerPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.PlayerLanguageCatalog;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.SubtitleAppearanceDialog;
 import java.util.List;
 
 /** Phone/tablet player settings. This fragment intentionally has no Android Auto dependency. */
@@ -28,6 +29,7 @@ public final class PlayerSettingsFragment extends Fragment {
     private MaterialButton preferredAudio;
     private MaterialButton preferredSubtitles;
     private MaterialButton doubleTapInterval;
+    private MaterialButton subtitleAppearance;
 
     public static PlayerSettingsFragment newInstance() {
         return new PlayerSettingsFragment();
@@ -115,12 +117,19 @@ public final class PlayerSettingsFragment extends Fragment {
         preferredAudio = view.findViewById(R.id.mobile_player_pref_audio_language);
         preferredSubtitles = view.findViewById(R.id.mobile_player_pref_subtitle_language);
         doubleTapInterval = view.findViewById(R.id.mobile_player_pref_double_tap_interval);
+        subtitleAppearance = view.findViewById(R.id.mobile_player_pref_subtitle_appearance);
         preferredAudio.setOnClickListener(v -> chooseLanguage(true));
         preferredSubtitles.setOnClickListener(v -> chooseLanguage(false));
         doubleTapInterval.setOnClickListener(v -> chooseDoubleTapInterval());
+        subtitleAppearance.setOnClickListener(v ->
+                SubtitleAppearanceDialog.show(requireContext(), this::updateSubtitleAppearanceLabel));
+        view.findViewById(R.id.mobile_player_pref_subtitle_reset).setOnClickListener(v ->
+                SubtitleAppearanceDialog.showResetConfirmation(requireContext(),
+                        this::updateSubtitleAppearanceLabel));
         view.findViewById(R.id.mobile_player_pref_reset).setOnClickListener(v -> confirmReset());
         updateLanguageLabels();
         updateDoubleTapIntervalLabel();
+        updateSubtitleAppearanceLabel();
     }
 
     private void bindSwitch(View root, int id, boolean checked, BooleanSetter setter) {
@@ -190,6 +199,12 @@ public final class PlayerSettingsFragment extends Fragment {
             preferredSubtitles.setText(getString(R.string.mobile_player_default_subtitles_value,
                     PlayerLanguageCatalog.labelFor(requireContext(),
                             preferences.getPreferredSubtitleLanguage())));
+        }
+    }
+
+    private void updateSubtitleAppearanceLabel() {
+        if (subtitleAppearance != null && isAdded()) {
+            subtitleAppearance.setText(SubtitleAppearanceDialog.summary(requireContext()));
         }
     }
 

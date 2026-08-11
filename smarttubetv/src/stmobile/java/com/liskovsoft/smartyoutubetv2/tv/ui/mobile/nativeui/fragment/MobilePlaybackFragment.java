@@ -48,6 +48,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.performance.MobilePe
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.MobileSegmentSeekBar;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.PreferredTrackResolver;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.TrackPickerBottomSheet;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.player.SubtitleAppearanceDialog;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioPreferences;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.viewmodel.MobilePlaybackViewModel;
@@ -816,6 +817,8 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
             labels.add(getString(R.string.mobile_native_speed));
             actions.add(2);
         } else {
+            labels.add(getString(R.string.mobile_subtitle_appearance_title));
+            actions.add(7);
             labels.add(getString(R.string.mobile_native_quality));
             actions.add(1);
             labels.add(getString(R.string.mobile_native_speed));
@@ -842,6 +845,8 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
                     else if (action == 4) enterPictureInPicture();
                     else if (action == 5) toggleFullscreen();
                     else if (action == 6) showSleepTimerMenu();
+                    else if (action == 7) SubtitleAppearanceDialog.show(requireContext(),
+                            this::keepControlsVisible);
                 })
                 .show();
     }

@@ -114,6 +114,55 @@
                         style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:text="@string/mobile_subtitle_appearance_section" />
+
+                    <TextView
+                        style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="@string/mobile_subtitle_appearance_summary" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/mobile_player_pref_subtitle_appearance"
+                        style="@style/Widget.SmartTube.Mobile.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:minHeight="48dp"
+                        android:text="@string/mobile_subtitle_appearance_title" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/mobile_player_pref_subtitle_reset"
+                        style="@style/Widget.SmartTube.Mobile.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:minHeight="48dp"
+                        android:text="@string/mobile_subtitle_reset" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="?attr/colorSurface"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                app:strokeColor="@color/mobile_outline"
+                app:strokeWidth="1dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
                         android:text="@string/mobile_player_gestures_section" />
 
                     <com.google.android.material.switchmaterial.SwitchMaterial

@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.19`
+Aktualne wydanie: `32.04-mobile-p13-aa1.20`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -34,7 +34,13 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.19
+## Co zmienia aa1.20
+
+- dodaje ustawienia koloru i tła, wielkości oraz kroju czcionki napisów,
+- stosuje zmiany wyglądu napisów na żywo i zapamiętuje je w bieżącym profilu,
+- dodaje skrót „Wygląd napisów” w menu uruchomionego filmu oraz osobny reset wyglądu.
+
+## Zmiany z aa1.19
 
 - automatycznie wybiera preferowany polski lektor także dla ścieżek opisanych przez YouTube jako `pl (dubbed)`,
 - dodaje stan „Jasność automatyczna systemu” na dolnym końcu lewego gestu jasności,

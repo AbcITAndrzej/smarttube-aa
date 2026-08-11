@@ -29,6 +29,10 @@ import java.util.Map;
 
 public class PlayerData extends DataChangeBase implements PlayerConstants, ProfileChangeListener {
     private static final String VIDEO_PLAYER_DATA = "video_player_data";
+    public static final int SUBTITLE_FONT_DEFAULT_BOLD = 0;
+    public static final int SUBTITLE_FONT_SANS_SERIF = 1;
+    public static final int SUBTITLE_FONT_SERIF = 2;
+    public static final int SUBTITLE_FONT_MONOSPACE = 3;
     public static final int OK_ONLY_UI = 0;
     public static final int OK_UI_AND_PAUSE = 1;
     public static final int OK_ONLY_PAUSE = 2;
@@ -101,6 +105,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
     private final Runnable mPersistStateInt = this::persistStateInt;
     private boolean mIsLegacyCodecsForced;
     private boolean mIsAudioDelayEnabled;
+    private int mSubtitleFont;
 
     private static class SpeedItem {
         public String channelId;
@@ -484,6 +489,23 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         persistState();
     }
 
+    public int getSubtitleFont() {
+        return mSubtitleFont;
+    }
+
+    public void setSubtitleFont(int font) {
+        mSubtitleFont = font;
+        persistState();
+    }
+
+    /** Restores only subtitle appearance. Language and track preferences are untouched. */
+    public void resetSubtitleAppearance() {
+        mSubtitleStyleIndex = 4; // Yellow on a semitransparent background.
+        mSubtitleScale = 1.0f;
+        mSubtitleFont = SUBTITLE_FONT_DEFAULT_BOLD;
+        persistState();
+    }
+
     public float getSubtitlePosition() {
         return mSubtitlePosition;
     }
@@ -847,6 +869,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
         mLastAudioLanguages = Helpers.parseStrList(split, 60);
         mIsVideoFlipEnabled = Helpers.parseBoolean(split, 61, false);
         mIsAudioDelayEnabled = Helpers.parseBoolean(split, 62, false);
+        mSubtitleFont = Helpers.parseInt(split, 63, SUBTITLE_FONT_DEFAULT_BOLD);
 
         if (speeds != null) {
             for (String speedSpec : speeds) {
@@ -859,8 +882,12 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
             mSpeed = 1.0f;
         }
 
-        if (mSubtitleStyleIndex >= mSubtitleStyles.size()) {
+        if (mSubtitleStyleIndex < 0 || mSubtitleStyleIndex >= mSubtitleStyles.size()) {
             mSubtitleStyleIndex = yellowOnSemiBgSubIdx;
+        }
+
+        if (mSubtitleFont < SUBTITLE_FONT_DEFAULT_BOLD || mSubtitleFont > SUBTITLE_FONT_MONOSPACE) {
+            mSubtitleFont = SUBTITLE_FONT_DEFAULT_BOLD;
         }
     }
 
@@ -884,7 +911,7 @@ public class PlayerData extends DataChangeBase implements PlayerConstants, Profi
                 mIsNumberKeySeekEnabled, mIsSkip24RateEnabled, mAfrPauseMs, mIsLiveChatEnabled, mLastSubtitleFormats, mLastSpeed, mRotationAngle,
                 mZoomPercents, mPlaybackMode, mAudioLanguage, mSubtitleLanguage, mEnabledSubtitlesPerChannel, mIsSubtitlesPerChannelEnabled,
                 mIsSpeedPerChannelEnabled, Helpers.mergeArray(mSpeeds.values().toArray()), mPitch, mIsSkipShortsEnabled, mLastAudioLanguages,
-                mIsVideoFlipEnabled, mIsAudioDelayEnabled
+                mIsVideoFlipEnabled, mIsAudioDelayEnabled, mSubtitleFont
         ));
     }
 
