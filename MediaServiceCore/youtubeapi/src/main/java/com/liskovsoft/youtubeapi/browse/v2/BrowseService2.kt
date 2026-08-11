@@ -13,9 +13,22 @@ import com.liskovsoft.youtubeapi.common.models.impl.mediaitem.ShortsMediaItem
 import com.liskovsoft.youtubeapi.next.v2.gen.getItems
 import com.liskovsoft.youtubeapi.next.v2.gen.getContinuationToken
 import com.liskovsoft.youtubeapi.next.v2.gen.getShelves
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 internal open class BrowseService2 {
+    companion object {
+        private const val SHORTS_DETAILS_PARALLELISM = 3
+        private const val SHORTS_DETAILS_CACHE_SIZE = 96
+    }
+
     private val mBrowseApi = RetrofitHelper.create(BrowseApi::class.java)
+    private val reelDetailsCache = ConcurrentHashMap<String, ReelResult>()
+    private val reelDetailsCacheOrder = ConcurrentLinkedQueue<String>()
 
     //fun getHome(): List<MediaGroup?>? {
     //    val home = getBrowseRows(BrowseApiHelper.getHomeQueryWeb(), MediaGroup.TYPE_HOME)
@@ -244,19 +257,62 @@ internal open class BrowseService2 {
         val continuation = mBrowseApi?.getReelContinuationResult(BrowseApiHelper.getReelContinuationQuery(AppClient.WEB, continuationKey))
 
         return RetrofitHelper.get(continuation, auth)?.let {
-            val result = mutableListOf<MediaItem?>()
-
-            it.getItems()?.forEach {
-                if (it?.videoId != null && it.params != null) {
-                    val details = mBrowseApi?.getReelResult(BrowseApiHelper.getReelDetailsQuery(AppClient.WEB, it.videoId, it.params))
-
-                    RetrofitHelper.get(details, auth)?.let {
-                            info -> result.add(ShortsMediaItem(it, info))
-                    }
-                }
-            }
+            val result = loadShortsDetails(it.getItems(), auth)
 
             ShortsMediaGroup(result, it.getContinuationToken(), MediaGroupOptions.create(MediaGroup.TYPE_SHORTS))
+        }
+    }
+
+    /**
+     * A reel sequence contains only ids, thumbnails and per-item params. YouTube requires a
+     * separate reel_item_watch call for the title/channel metadata of every entry. The old
+     * implementation performed those calls serially, making a 12-item page wait for twelve
+     * network round trips. Resolve a small batch concurrently and remember recent details so a
+     * root-feed fallback does not download metadata for duplicate reels again.
+     */
+    private fun loadShortsDetails(entries: List<ReelWatchEndpoint?>?, auth: Boolean): MutableList<MediaItem?> {
+        val endpoints = entries?.filterNotNull()?.filter {
+            it.videoId != null && it.params != null
+        } ?: return mutableListOf()
+
+        val result = mutableListOf<MediaItem?>()
+        runBlocking {
+            endpoints.chunked(SHORTS_DETAILS_PARALLELISM).forEach { batch ->
+                val resolved = batch.map { endpoint ->
+                    async(Dispatchers.IO) {
+                        runCatching {
+                            loadReelDetails(endpoint, auth)?.let {
+                                ShortsMediaItem(endpoint, it)
+                            }
+                        }.getOrNull()
+                    }
+                }.awaitAll().filterNotNull()
+                result.addAll(resolved)
+            }
+        }
+        return result
+    }
+
+    private fun loadReelDetails(endpoint: ReelWatchEndpoint, auth: Boolean): ReelResult? {
+        val videoId = endpoint.videoId ?: return null
+        val params = endpoint.params ?: return null
+        val cacheKey = "$auth:$videoId:${params.hashCode()}"
+        reelDetailsCache[cacheKey]?.let { return it }
+
+        val call = mBrowseApi.getReelResult(
+            BrowseApiHelper.getReelDetailsQuery(AppClient.WEB, videoId, params))
+        val details = RetrofitHelper.get(call, auth) ?: return null
+        if (reelDetailsCache.putIfAbsent(cacheKey, details) == null) {
+            reelDetailsCacheOrder.offer(cacheKey)
+            trimReelDetailsCache()
+        }
+        return details
+    }
+
+    private fun trimReelDetailsCache() {
+        while (reelDetailsCache.size > SHORTS_DETAILS_CACHE_SIZE) {
+            val oldest = reelDetailsCacheOrder.poll() ?: return
+            reelDetailsCache.remove(oldest)
         }
     }
 

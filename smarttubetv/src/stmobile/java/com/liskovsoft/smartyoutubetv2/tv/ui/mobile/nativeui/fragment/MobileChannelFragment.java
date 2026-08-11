@@ -1,13 +1,11 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
 
 import android.os.Bundle;
-import android.content.res.Configuration;
 import android.view.*;
 import android.widget.*;
 import androidx.annotation.*;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
-import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.appbar.MaterialToolbar;
@@ -62,17 +60,13 @@ public final class MobileChannelFragment extends Fragment {
             }
         });
         adapterRef[0] = adapter;
-        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
-            grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
-                @Override public int getSpanSize(int position) {
-                    return adapter.getLandscapeSpanSize(position);
-                }
-            });
-            list.setLayoutManager(grid);
-        } else {
-            list.setLayoutManager(new LinearLayoutManager(requireContext()));
-        }
+        GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
+        grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override public int getSpanSize(int position) {
+                return adapter.getGridSpanSize(position);
+            }
+        });
+        list.setLayoutManager(grid);
         list.setHasFixedSize(true);
         list.setAdapter(adapter);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -80,9 +74,7 @@ public final class MobileChannelFragment extends Fragment {
                 if (dy <= 0) return;
                 RecyclerView.LayoutManager manager = recyclerView.getLayoutManager();
                 int last = manager instanceof GridLayoutManager
-                        ? ((GridLayoutManager) manager).findLastVisibleItemPosition()
-                        : manager instanceof LinearLayoutManager
-                        ? ((LinearLayoutManager) manager).findLastVisibleItemPosition() : -1;
+                        ? ((GridLayoutManager) manager).findLastVisibleItemPosition() : -1;
                 if (last >= adapter.getItemCount() - 6) vm.loadMore();
             }
         });

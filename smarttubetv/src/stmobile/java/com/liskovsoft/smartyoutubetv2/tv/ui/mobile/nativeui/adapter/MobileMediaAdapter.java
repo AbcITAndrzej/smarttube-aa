@@ -140,8 +140,8 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
     }
     @Override public int getItemCount() { return rows.size(); }
 
-    /** Section headers and Shorts pairs occupy the full landscape grid width. */
-    public int getLandscapeSpanSize(int position) {
+    /** Section headers and Shorts pairs occupy the full two-column grid width. */
+    public int getGridSpanSize(int position) {
         int type = getItemViewType(position);
         return type == TYPE_MEDIA ? 1 : 2;
     }

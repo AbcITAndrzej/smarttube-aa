@@ -14,6 +14,7 @@ import io.reactivex.Observable;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -24,7 +25,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class LegacyBrowseRepository implements MobileBrowseRepository {
     private static final long BROWSE_CACHE_TTL_MS = 10 * 60 * 1000L;
+    private static final long SHORTS_CACHE_TTL_MS = 20 * 60 * 1000L;
     private static final long PLAYLIST_CACHE_TTL_MS = 30 * 60 * 1000L;
+    private static final int SHORTS_PREFETCH_WINDOW_PAGES = 3;
     private final ContentService content;
     private final NotificationsService notifications;
     private final LegacyMediaIndex index;
@@ -51,9 +54,10 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Boolean> playlistBackgroundLoads =
             new ConcurrentHashMap<>();
-    /** One-page look-ahead used only by the dedicated Shorts grid. */
+    /** Bounded rolling look-ahead used only by the dedicated Shorts grid. */
     private final Object shortsBufferLock = new Object();
-    private MobileBrowsePayload shortsBufferedPayload;
+    private final ArrayDeque<MobileBrowsePayload> shortsBufferedPayloads = new ArrayDeque<>();
+    private MobileBrowsePayload shortsPrefetchTailPayload;
     private MobileResultCallback<MobileBrowsePayload> shortsWaitingCallback;
     private Disposable shortsPrefetchDisposable;
     private boolean shortsPrefetchInFlight;
@@ -363,8 +367,10 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         String expectedSignature = metadataEnhancer == null
                 ? "" : metadataEnhancer.preferenceSignature();
         String cachedSignature = browseCacheEnhancementSignatures.get(page.id());
+        long cacheTtlMs = page == LegacyBrowsePage.SHORTS
+                ? SHORTS_CACHE_TTL_MS : BROWSE_CACHE_TTL_MS;
         if (cachedAt == null || !expectedSignature.equals(cachedSignature)
-                || System.currentTimeMillis() - cachedAt >= BROWSE_CACHE_TTL_MS) {
+                || System.currentTimeMillis() - cachedAt >= cacheTtlMs) {
             browseCache.remove(page.id());
             browseCacheTimes.remove(page.id());
             browseCacheEnhancementSignatures.remove(page.id());
@@ -495,9 +501,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     }
 
     /**
-     * Delivers a ready look-ahead page instantly or joins the single in-flight Shorts request.
-     * The background request deliberately survives Fragment/ViewModel cancellation; its result is
-     * a bounded one-page cache and can be consumed by a later visit to the same feed.
+     * Delivers the oldest ready look-ahead page instantly or joins the single in-flight Shorts
+     * request. Network requests stay serialized because every reel continuation owns the token for
+     * its successor, while the rolling queue keeps several already-resolved pages ready for UI.
+     * The background work deliberately survives Fragment/ViewModel cancellation and can be
+     * consumed by a later visit to the same feed.
      */
     private MobileRequest loadMoreShortsBuffered(
             MobileResultCallback<MobileBrowsePayload> callback) {
@@ -505,9 +513,8 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         MobileBrowsePayload current = browseCache.get(LegacyBrowsePage.SHORTS.id());
         boolean start = false;
         synchronized (shortsBufferLock) {
-            if (shortsBufferedPayload != null) {
-                ready = shortsBufferedPayload;
-                shortsBufferedPayload = null;
+            if (!shortsBufferedPayloads.isEmpty()) {
+                ready = shortsBufferedPayloads.removeFirst();
             } else {
                 // MobileBrowseViewModel already prevents parallel loadMore calls. Retaining the
                 // latest callback is defensive and avoids starting a duplicate network request.
@@ -532,8 +539,13 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
     private void startShortsPrefetch(MobileBrowsePayload current) {
         if (current == null || !current.hasMore()) return;
         final long generation;
+        final MobileBrowsePayload prefetchBase;
         synchronized (shortsBufferLock) {
-            if (shortsPrefetchInFlight || shortsBufferedPayload != null) return;
+            if (shortsPrefetchInFlight
+                    || shortsBufferedPayloads.size() >= SHORTS_PREFETCH_WINDOW_PAGES) return;
+            prefetchBase = shortsPrefetchTailPayload != null
+                    ? shortsPrefetchTailPayload : current;
+            if (!prefetchBase.hasMore()) return;
             shortsPrefetchInFlight = true;
             generation = ++shortsPrefetchGeneration;
         }
@@ -541,15 +553,16 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         LegacyGroupPaginator continuation = browseContinuations.get(LegacyBrowsePage.SHORTS.id());
         int groupIndex = continuation == null ? -1 : continuation.nextSlotIndex();
         if (continuation == null || groupIndex < 0) {
-            startShortsRootPrefetch(current, generation, "no-continuation");
+            startShortsRootPrefetch(prefetchBase, generation, "no-continuation");
             return;
         }
 
         MediaGroup source = continuation.sourceAt(groupIndex);
-        int beforeCount = countItems(current);
+        int beforeCount = countItems(prefetchBase);
         long startedNanos = System.nanoTime();
         MobileDiagnostics.info("P22-ShortsBuffer", "prefetch start mode=continuation"
-                + " items=" + beforeCount + " group=" + groupIndex);
+                + " items=" + beforeCount + " group=" + groupIndex
+                + " buffered=" + shortsBufferedCount());
         try {
             AtomicBoolean emitted = new AtomicBoolean(false);
             Disposable disposable = content.continueGroupObserve(source)
@@ -559,7 +572,7 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                         if (!isCurrentShortsPrefetch(generation)) return;
                         if (nextPage == null) {
                             continuation.markFinished(groupIndex);
-                            startShortsRootPrefetch(current, generation, "null-page");
+                            startShortsRootPrefetch(prefetchBase, generation, "null-page");
                             return;
                         }
                         continuation.append(groupIndex, nextPage);
@@ -569,7 +582,7 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                                 || emptyReloadCounts.getOrDefault(
                                 LegacyBrowsePage.SHORTS.id(), 0) < 2;
                         MobileBrowsePayload combined = appendContinuation(
-                                LegacyBrowsePage.SHORTS, current, nextPage,
+                                LegacyBrowsePage.SHORTS, prefetchBase, nextPage,
                                 groupIndex, canContinue);
                         int afterCount = countItems(combined);
                         MobileDiagnostics.info("P22-ShortsBuffer", "prefetch ready mode=continuation"
@@ -584,11 +597,11 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                         continuation.markFinished(groupIndex);
                         MobileDiagnostics.warn("P22-ShortsBuffer",
                                 "continuation failed; reload root: " + error.getMessage());
-                        startShortsRootPrefetch(current, generation, "continuation-error");
+                        startShortsRootPrefetch(prefetchBase, generation, "continuation-error");
                     }, () -> {
                         if (emitted.get() || !isCurrentShortsPrefetch(generation)) return;
                         continuation.markFinished(groupIndex);
-                        startShortsRootPrefetch(current, generation, "empty-continuation");
+                        startShortsRootPrefetch(prefetchBase, generation, "empty-continuation");
                     });
             synchronized (shortsBufferLock) {
                 if (generation == shortsPrefetchGeneration) shortsPrefetchDisposable = disposable;
@@ -596,7 +609,7 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
             }
         } catch (Throwable error) {
             continuation.markFinished(groupIndex);
-            startShortsRootPrefetch(current, generation, "continuation-throw");
+            startShortsRootPrefetch(prefetchBase, generation, "continuation-throw");
         }
     }
 
@@ -650,15 +663,31 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
 
     private void completeShortsPrefetch(long generation, MobileBrowsePayload payload) {
         MobileResultCallback<MobileBrowsePayload> waiting;
+        boolean continueWarming;
+        int buffered;
         synchronized (shortsBufferLock) {
             if (!shortsPrefetchInFlight || generation != shortsPrefetchGeneration) return;
             shortsPrefetchInFlight = false;
             shortsPrefetchDisposable = null;
+            shortsPrefetchTailPayload = payload;
             waiting = shortsWaitingCallback;
             shortsWaitingCallback = null;
-            if (waiting == null) shortsBufferedPayload = payload;
+            if (waiting == null
+                    && shortsBufferedPayloads.size() < SHORTS_PREFETCH_WINDOW_PAGES) {
+                shortsBufferedPayloads.addLast(payload);
+            }
+            buffered = shortsBufferedPayloads.size();
+            continueWarming = waiting == null && payload != null && payload.hasMore()
+                    && buffered < SHORTS_PREFETCH_WINDOW_PAGES;
         }
-        if (waiting != null) deliverShortsPayload(waiting, payload, "joined-prefetch");
+        MobileDiagnostics.info("P22-ShortsBuffer", "prefetch stored buffered=" + buffered
+                + "/" + SHORTS_PREFETCH_WINDOW_PAGES
+                + " waiting=" + (waiting != null));
+        if (waiting != null) {
+            deliverShortsPayload(waiting, payload, "joined-prefetch");
+        } else if (continueWarming) {
+            startShortsPrefetch(payload);
+        }
     }
 
     private void failShortsPrefetch(long generation, Throwable error) {
@@ -678,10 +707,17 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
                                       MobileBrowsePayload payload, String source) {
         cacheBrowse(LegacyBrowsePage.SHORTS, payload);
         MobileDiagnostics.info("P22-ShortsBuffer", "deliver source=" + source
-                + " items=" + countItems(payload) + " hasMore=" + payload.hasMore());
+                + " items=" + countItems(payload) + " hasMore=" + payload.hasMore()
+                + " buffered=" + shortsBufferedCount());
         callback.onSuccess(payload);
-        // Keep exactly one subsequent page warm. No video stream is downloaded here.
+        // Refill the rolling metadata window. No video stream is downloaded here.
         startShortsPrefetch(payload);
+    }
+
+    private int shortsBufferedCount() {
+        synchronized (shortsBufferLock) {
+            return shortsBufferedPayloads.size();
+        }
     }
 
     private void resetShortsPrefetch() {
@@ -689,7 +725,8 @@ public final class LegacyBrowseRepository implements MobileBrowseRepository {
         synchronized (shortsBufferLock) {
             shortsPrefetchGeneration++;
             shortsPrefetchInFlight = false;
-            shortsBufferedPayload = null;
+            shortsBufferedPayloads.clear();
+            shortsPrefetchTailPayload = null;
             shortsWaitingCallback = null;
             disposable = shortsPrefetchDisposable;
             shortsPrefetchDisposable = null;

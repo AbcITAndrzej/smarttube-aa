@@ -79,7 +79,7 @@ public final class MobileSearchFragment extends Fragment {
             GridLayoutManager grid = new GridLayoutManager(requireContext(), 2);
             grid.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
                 @Override public int getSpanSize(int position) {
-                    return resultAdapter.getLandscapeSpanSize(position);
+                    return resultAdapter.getGridSpanSize(position);
                 }
             });
             results.setLayoutManager(grid);

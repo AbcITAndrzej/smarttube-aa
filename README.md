@@ -8,7 +8,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 **[Pobierz zawsze najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk)**
 
-Aktualne wydanie: `32.04-mobile-p13-aa1.21`
+Aktualne wydanie: `32.04-mobile-p13-aa1.22`
 
 Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest).
 
@@ -34,7 +34,15 @@ Pozostałe warianty APK i archiwum źródeł są dostępne w [GitHub Releases](h
 
 Szczegóły i ograniczenia opisuje [instrukcja Android Auto](docs/ANDROID-AUTO.md).
 
-## Co zmienia aa1.21
+## Co zmienia aa1.22
+
+- ustawia dwukolumnowy układ kafelków na stałe także w pionie, bez zmiany po powrocie z playera,
+- przyspiesza kolejne strony Shorts dzięki trzem porcjom pobieranym z wyprzedzeniem,
+- wykorzystuje sekwencję Shorts, równoległe pobieranie metadanych i ograniczony cache ostatnich rolek,
+- doładowuje dokładnie jedną porcję po dojściu do 75% listy i automatycznie uzupełnia bufor,
+- zachowuje dotychczasowe źródło jako bezpieczny fallback, gdy kontynuacja YouTube przestanie działać.
+
+## Zmiany z aa1.21
 
 - automatycznie i cicho sprawdza aktualizacje przy uruchomieniu; w Ustawieniach można wyłączyć tę kontrolę,
 - niezalogowanym użytkownikom pokazuje na starcie czytelne przejście do mobilnego ekranu logowania,
