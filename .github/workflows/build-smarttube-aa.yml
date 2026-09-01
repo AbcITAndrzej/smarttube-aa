@@ -6,7 +6,7 @@ on:
     tags:
       - "v*"
     branches:
-      - "chatgpt-aa1.29-global-audio-faststart"
+      - "chatgpt-aa1.30-sabr-av-multiaudio"
 
 permissions:
   contents: write
@@ -22,20 +22,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply and commit aa1.29 runtime patch
+      - name: Apply and commit aa1.30 runtime patches
         run: |
           set -euxo pipefail
-          git apply --check .github/aa129-runtime.patch
-          git apply .github/aa129-runtime.patch
-          git rm .github/aa129-runtime.patch
+          for patch in .github/aa130-01.patch .github/aa130-02.patch .github/aa130-03.patch .github/aa130-04.patch .github/aa130-05.patch; do
+            git apply --check "$patch"
+          done
+          for patch in .github/aa130-01.patch .github/aa130-02.patch .github/aa130-03.patch .github/aa130-04.patch .github/aa130-05.patch; do
+            git apply "$patch"
+          done
+          git rm .github/aa130-01.patch .github/aa130-02.patch .github/aa130-03.patch .github/aa130-04.patch .github/aa130-05.patch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/models/VideoInfo.java
+          git add MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/VideoInfoServiceBase.java
           git add exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
-          git add smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyTrackMapper.java
-          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java
-          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
-          git commit -m "V14: global audio identity and fast startup [skip ci]"
+          git add exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrStream.java
+          git add smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
+          git add smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/player/MobileInstantPlayController.java
+          git commit -m "V15: full A/V SABR multi-audio and diagnostics [skip ci]"
           git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Set up Java 11
@@ -48,12 +52,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.29 test version
+      - name: Stamp aa1.30 test version
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode 2408/versionCode 2413/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.29-test5/' smarttubetv/build.gradle
-          grep -n 'versionCode\|mobile-p13-aa1.29-test5' smarttubetv/build.gradle
+          sed -i 's/versionCode 2408/versionCode 2414/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.30-test6/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.30-test6' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
