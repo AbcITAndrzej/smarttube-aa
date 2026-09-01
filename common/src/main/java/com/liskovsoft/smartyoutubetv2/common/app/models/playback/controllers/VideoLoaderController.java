@@ -22,9 +22,12 @@ import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.VideoActionPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
+import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+
+import java.util.List;
 
 import io.reactivex.disposables.Disposable;
 
@@ -39,6 +42,10 @@ public class VideoLoaderController extends BasePlayerController {
     private Disposable mFormatInfoAction;
     /** Rejects a late format response after rapid next/previous changes. */
     private long mFormatRequestGeneration;
+    // V10: one-video survival fallback. Armed only after a real mid-stream 403.
+    private String mProgressiveFallbackVideoId;
+    private long mProgressiveFallbackPositionMs;
+    private MediaItemFormatInfo mLastFormatInfo;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
     };
@@ -79,6 +86,13 @@ public class VideoLoaderController extends BasePlayerController {
     public void onNewVideo(Video item) {
         if (item == null) {
             return;
+        }
+
+        if (mProgressiveFallbackVideoId != null && !Helpers.equals(mProgressiveFallbackVideoId, item.videoId)) {
+            Log.d(TAG, "V10_PROGRESSIVE clear old=%s new=%s", mProgressiveFallbackVideoId, item.videoId);
+            mProgressiveFallbackVideoId = null;
+            mProgressiveFallbackPositionMs = 0;
+            mLastFormatInfo = null;
         }
 
         item.isShuffled = false;
@@ -326,6 +340,7 @@ public class VideoLoaderController extends BasePlayerController {
         String bgImageUrl = null;
 
         getVideo().sync(formatInfo);
+        mLastFormatInfo = formatInfo;
 
         // Fix stretched video for a couple milliseconds (before the onVideoSizeChanged gets called)
         applyAspectRatio(formatInfo);
@@ -354,6 +369,29 @@ public class VideoLoaderController extends BasePlayerController {
             //} else { // 18+ video or the video is hidden/removed
             //    scheduleNextVideoTimer(5_000);
             //}
+        } else if (shouldUseProgressiveFallback(formatInfo)) {
+            List<String> progressiveUrls = formatInfo.createUrlList();
+            MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
+            String clientName = clientInfo != null ? clientInfo.getClientName() : "unknown";
+            long resumeMs = mProgressiveFallbackPositionMs;
+            Log.d(TAG, "V10_PROGRESSIVE selected client=%s urls=%s resumeMs=%s", clientName,
+                    progressiveUrls != null ? progressiveUrls.size() : 0, resumeMs);
+            MobileDiagnostics.session("V10_PROGRESSIVE", "selected client=" + clientName
+                    + " urls=" + (progressiveUrls != null ? progressiveUrls.size() : 0)
+                    + " resumeMs=" + resumeMs);
+            player.openUrlList(formatInfo);
+            if (resumeMs > 0) {
+                player.setPositionMs(Math.max(0, resumeMs - 750));
+            }
+        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()) {
+            MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
+            Log.d(TAG, "V11_SABR_POT selected client=%s potLen=%s",
+                    clientInfo != null ? clientInfo.getClientName() : "unknown",
+                    formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0);
+            MobileDiagnostics.session("V11_SABR_POT", "selected client="
+                    + (clientInfo != null ? clientInfo.getClientName() : "unknown")
+                    + " potLen=" + (formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0));
+            player.openSabr(formatInfo);
         } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
             Log.d(TAG, "Loading regular video in dash format...");
 
@@ -362,9 +400,6 @@ public class VideoLoaderController extends BasePlayerController {
             } else {
                 player.openDash(formatInfo);
             }
-        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()) {
-            Log.d(TAG, "Loading video in sabr format...");
-            player.openSabr(formatInfo);
         } else if (acceptDashLive(formatInfo)) {
             Log.d(TAG, "Loading live video (current or past live stream) in dash format...");
             player.openDashUrl(formatInfo.getDashManifestUrl());
@@ -373,7 +408,7 @@ public class VideoLoaderController extends BasePlayerController {
             player.openHlsUrl(formatInfo.getHlsManifestUrl());
         } else if (formatInfo.containsUrlFormats()) {
             Log.d(TAG, "Loading url list video. This is always LQ...");
-            player.openUrlList(formatInfo.createUrlList());
+            player.openUrlList(formatInfo);
         } else {
             Log.d(TAG, "Empty format info received. Seems future live translation. No video data to pass to the player.");
             player.setTitle(formatInfo.getPlayabilityReason());
@@ -385,6 +420,58 @@ public class VideoLoaderController extends BasePlayerController {
         }
 
         player.showBackground(bgImageUrl); // remove bg (if video playing) or set another bg
+    }
+
+    /**
+     * Arms V10 progressive fallback only when the current VOD really exposes at least one
+     * regular/muxed URL. Returns false when the fallback cannot be used or is already active.
+     */
+    public boolean enableProgressiveFallbackForCurrentVideo() {
+        Video video = getVideo();
+        MediaItemFormatInfo info = mLastFormatInfo;
+        if (video == null || video.isLive || info == null || !info.containsUrlFormats()) {
+            return false;
+        }
+
+        List<String> urls = info.createUrlList();
+        if (urls == null || urls.isEmpty() || Helpers.equals(mProgressiveFallbackVideoId, video.videoId)) {
+            return false;
+        }
+
+        mProgressiveFallbackVideoId = video.videoId;
+        mProgressiveFallbackPositionMs = getPlayer() != null ? getPlayer().getPositionMs() : 0;
+        MediaItemFormatInfo.ClientInfo clientInfo = info.getClientInfo();
+        String clientName = clientInfo != null ? clientInfo.getClientName() : "unknown";
+        Log.d(TAG, "V10_PROGRESSIVE armed video=%s client=%s urls=%s positionMs=%s",
+                video.videoId, clientName, urls.size(), mProgressiveFallbackPositionMs);
+        MobileDiagnostics.session("V10_PROGRESSIVE", "armed client=" + clientName
+                + " urls=" + urls.size() + " positionMs=" + mProgressiveFallbackPositionMs);
+        return true;
+    }
+
+    public boolean isProgressiveFallbackActiveForCurrentVideo() {
+        Video video = getVideo();
+        return video != null && Helpers.equals(mProgressiveFallbackVideoId, video.videoId);
+    }
+
+    public void disableProgressiveFallbackForCurrentVideo() {
+        if (mProgressiveFallbackVideoId != null) {
+            Log.d(TAG, "V10_PROGRESSIVE disabled video=%s", mProgressiveFallbackVideoId);
+            MobileDiagnostics.session("V10_PROGRESSIVE", "disabled after fallback rejection");
+        }
+        mProgressiveFallbackVideoId = null;
+        mProgressiveFallbackPositionMs = 0;
+    }
+
+    private boolean shouldUseProgressiveFallback(MediaItemFormatInfo formatInfo) {
+        Video video = getVideo();
+        if (video == null || video.isLive || formatInfo == null
+                || !Helpers.equals(mProgressiveFallbackVideoId, video.videoId)
+                || !formatInfo.containsUrlFormats()) {
+            return false;
+        }
+        List<String> urls = formatInfo.createUrlList();
+        return urls != null && !urls.isEmpty();
     }
 
     private void reloadVideo(int delayMs) {

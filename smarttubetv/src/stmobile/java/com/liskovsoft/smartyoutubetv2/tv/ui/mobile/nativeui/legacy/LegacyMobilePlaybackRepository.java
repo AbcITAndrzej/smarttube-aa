@@ -1304,6 +1304,11 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     @Override public void openDashUrl(String url) { diagnostics.onSource("dash-url", url); if (controller != null) controller.openDashUrl(url); }
     @Override public void openHlsUrl(String url) { diagnostics.onSource("hls", url); if (controller != null) controller.openHlsUrl(url); }
     @Override public void openUrlList(List<String> urls) { diagnostics.onSource("url-list", urls == null || urls.isEmpty() ? null : urls.get(0)); if (controller != null) controller.openUrlList(urls); }
+    @Override public void openUrlList(MediaItemFormatInfo info) {
+        List<String> urls = info == null ? null : info.createUrlList();
+        diagnostics.onSource("progressive-v10", urls == null || urls.isEmpty() ? null : urls.get(0));
+        if (controller != null) controller.openUrlList(info);
+    }
     @Override public void openMerged(MediaItemFormatInfo info, String hls) { diagnostics.onSource("merged", hls); if (controller != null) controller.openMerged(info, hls); }
     @Override public void openMerged(InputStream dash, String hls) { diagnostics.onSource("merged", hls); if (controller != null) controller.openMerged(dash, hls); }
     @Override public long getPositionMs() {

@@ -26,21 +26,25 @@ public class VideoInfoService extends VideoInfoServiceBase {
     private static final String TAG = VideoInfoService.class.getSimpleName();
     private static VideoInfoService sInstance;
     private final VideoInfoApi mVideoInfoApi;
+    // V11: prefer the same WEB + SABR + content-bound PoToken path that passed
+    // the full reference download. A WEB result is accepted only when the
+    // complete SABR transport and its video-bound token are available; otherwise
+    // firstInfoWith continues to the direct iOS fallback.
     private final static AppClient[] VIDEO_INFO_TYPE_LIST = {
-            AppClient.WEB_EMBED, // Restricted (18+) videos
-            AppClient.TV, // Supports auth. Fixes "please sign in" bug! (the best for Premium users)
-            AppClient.ANDROID_REEL, // doesn't require pot and cipher
-            AppClient.ANDROID_VR, // doesn't require pot and cipher (often hangs?)
-            AppClient.WEB, // Fix video clip blocked in current location
-            AppClient.WEB_SAFARI,
+            AppClient.WEB,
             AppClient.IOS,
-            AppClient.GEO, // Fix video clip blocked in current location
-            AppClient.MWEB, // single audio language
+            AppClient.WEB_EMBED, // Web CONTENT PoToken when this fallback is used
+            AppClient.WEB_SAFARI,
+            AppClient.GEO,
+            AppClient.MWEB,
+            AppClient.ANDROID_VR,
+            AppClient.TV,
+            AppClient.ANDROID_REEL,
             AppClient.TV_LEGACY,
             AppClient.TV_DOWNGRADED,
-            AppClient.TV_EMBED, // single audio language
-            AppClient.TV_SIMPLY, // hangs?
-            //AppClient.ANDROID_SDK_LESS, // doesn't require pot (hangs on Cronet!)
+            AppClient.TV_EMBED,
+            AppClient.TV_SIMPLY,
+            //AppClient.ANDROID_SDK_LESS,
     };
     @Nullable
     private AppClient mActualInfoType = null;
@@ -103,9 +107,52 @@ public class VideoInfoService extends VideoInfoServiceBase {
     }
 
     private VideoInfo firstPlayable(String videoId, String clickTrackingParams) {
-        VideoInfo result = firstInfoWith(videoId, clickTrackingParams, info -> !info.isUnplayable());
+        VideoInfo result = firstInfoWith(videoId, clickTrackingParams,
+                info -> isUsablePlaybackResult(info, videoId));
 
         return result != null ? result : firstInfoWith(videoId, clickTrackingParams, info -> true);
+    }
+
+    private boolean isUsablePlaybackResult(VideoInfo info, String videoId) {
+        if (info == null || info.isUnplayable()) {
+            return false;
+        }
+
+        AppClient client = info.getClient();
+        if (client == null || !client.isWebPotRequired()) {
+            return true;
+        }
+
+        boolean completeSabr = info.getAdaptiveFormats() != null
+                && !info.getAdaptiveFormats().isEmpty()
+                && hasText(info.getServerAbrStreamingUrl())
+                && hasText(info.getVideoPlaybackUstreamerConfig());
+        String poToken = null;
+
+        if (completeSabr) {
+            try {
+                poToken = PoTokenGate.getPoToken(client, videoId);
+            } catch (RuntimeException error) {
+                Log.w(TAG, "V11_SABR_POT token rejected client=%s error=%s",
+                        client.getClientName(), error.getClass().getSimpleName());
+            }
+        }
+
+        boolean usable = completeSabr && hasText(poToken);
+        Log.d(TAG, "V11_SABR_POT candidate client=%s completeSabr=%s pot=%s potLen=%s usable=%s",
+                client.getClientName(), completeSabr, hasText(poToken), poToken != null ? poToken.length() : 0, usable);
+
+        if (usable) {
+            // Reused by transformFormats; PoTokenGate also keeps the matching
+            // videoId-bound token cached for this request/session.
+            info.setPoToken(poToken);
+        }
+
+        return usable;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isEmpty();
     }
 
     private interface InfoTester {
@@ -118,7 +165,13 @@ public class VideoInfoService extends VideoInfoServiceBase {
         AppClient nextType = beginType;
 
         do {
-            VideoInfo result = getVideoInfoWithRentFix(nextType, videoId, clickTrackingParams);
+            VideoInfo result = null;
+            try {
+                result = getVideoInfoWithRentFix(nextType, videoId, clickTrackingParams);
+            } catch (RuntimeException error) {
+                Log.w(TAG, "V11_SABR_POT client fallback client=%s error=%s",
+                        nextType.getClientName(), error.getClass().getSimpleName());
+            }
 
             if (result != null && infoTester.test(result)) {
                 return result;
@@ -199,14 +252,25 @@ public class VideoInfoService extends VideoInfoServiceBase {
 
     private VideoInfo getVideoInfo(AppClient client, String videoInfoQuery) {
         boolean auth = client.isAuthSupported() && mAuthBlock;
+        // A WEB PoToken is bound to the visitorData returned by BotGuard. Send
+        // the same value in X-Goog-Visitor-Id as in the JSON request context.
+        String visitorData = PoTokenGate.getVisitorData(client);
+        boolean usesPoTokenVisitor = visitorData != null && !visitorData.isEmpty();
+
+        if (!usesPoTokenVisitor) {
+            visitorData = mAppService.getVisitorData();
+        }
+
+        Log.d(TAG, "V11_SABR_POT request identity client=%s visitorSource=%s",
+                client, usesPoTokenVisitor ? "poToken" : "app");
 
         if (client.isReelClient()) {
-            Call<VideoInfoReel> wrapper = mVideoInfoApi.getVideoInfoReel(videoInfoQuery, mAppService.getVisitorData(),
+            Call<VideoInfoReel> wrapper = mVideoInfoApi.getVideoInfoReel(videoInfoQuery, visitorData,
                     client.getUserAgent(), client.getInnerTubeName(), client.getClientVersion());
             return getVideoInfoReel(wrapper, auth);
         }
 
-        Call<VideoInfo> wrapper = mVideoInfoApi.getVideoInfo(videoInfoQuery, mAppService.getVisitorData(),
+        Call<VideoInfo> wrapper = mVideoInfoApi.getVideoInfo(videoInfoQuery, visitorData,
                 client.getUserAgent(), client.getInnerTubeName(), client.getClientVersion());
         return getVideoInfo(wrapper, auth);
     }

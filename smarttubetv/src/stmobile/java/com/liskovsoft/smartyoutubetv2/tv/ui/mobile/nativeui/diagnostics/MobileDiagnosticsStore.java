@@ -182,6 +182,8 @@ public final class MobileDiagnosticsStore {
         instantPlayLastReadyMs = -1L;
         instantPlayLastTimeoutMs = -1L;
         increment(KEY_TOTAL_PREPARES);
+        MobileDiagnostics.session("Playback", "prepare owner=" + playbackOwner
+                + " mediaId=" + mediaId + " radio=" + radio);
     }
 
 
@@ -189,6 +191,8 @@ public final class MobileDiagnosticsStore {
         if (!capture()) return;
         playbackEngine = safe(engineName, "unknown");
         media3SourceKind = safe(sourceKind, "none");
+        MobileDiagnostics.session("Playback", "engine=" + playbackEngine
+                + " sourceKind=" + media3SourceKind);
         if (playbackEngine.toLowerCase(Locale.ROOT).contains("media3")) {
             increment(KEY_TOTAL_MEDIA3_ACTIVATIONS);
         }
@@ -224,6 +228,8 @@ public final class MobileDiagnosticsStore {
             lastPrepareDurationMs = Math.max(0L, now - prepareStartedElapsedMs);
         }
         state = playWhenReady ? "READY" : "READY/PAUSED";
+        MobileDiagnostics.session("Playback", "ready playWhenReady=" + playWhenReady
+                + " prepareMs=" + lastPrepareDurationMs);
         if (forbiddenRecoveryPending) {
             forbiddenRecoveryPending = false;
             forbiddenRetryCounted = false;
@@ -235,6 +241,7 @@ public final class MobileDiagnosticsStore {
         if (!capture()) return;
         sourceKind = safe(kind, "unknown");
         sourceHost = extractHost(url);
+        MobileDiagnostics.session("Source", "kind=" + sourceKind + " url=" + safe(url, ""));
         if (forbiddenRecoveryPending && !forbiddenRetryCounted) {
             forbiddenRetryCounted = true;
             increment(KEY_TOTAL_PLAYBACK_RELOADS);
@@ -244,6 +251,7 @@ public final class MobileDiagnosticsStore {
     public void onSourceKind(String kind) {
         if (!capture()) return;
         sourceKind = safe(kind, "unknown");
+        MobileDiagnostics.session("Source", "kind=" + sourceKind);
     }
 
     public void onTransient403(Throwable error) {
@@ -253,6 +261,7 @@ public final class MobileDiagnosticsStore {
         lastError = compactError(error);
         lastErrorWallMs = System.currentTimeMillis();
         increment(KEY_TOTAL_TRANSIENT_403);
+        MobileDiagnostics.sessionError("Transient403", "forbidden stream detected", error);
     }
 
     public void onPlaybackError(Throwable error) {
@@ -261,16 +270,19 @@ public final class MobileDiagnosticsStore {
         lastError = compactError(error);
         lastErrorWallMs = System.currentTimeMillis();
         increment(KEY_TOTAL_ERRORS);
+        MobileDiagnostics.sessionError("PlaybackError", "state=ERROR", error);
     }
 
     public void onEngineRestart() {
         if (!capture()) return;
         increment(KEY_TOTAL_ENGINE_RESTARTS);
+        MobileDiagnostics.session("Playback", "engine restart");
     }
 
     public void onPlaybackReload() {
         if (!capture()) return;
         increment(KEY_TOTAL_PLAYBACK_RELOADS);
+        MobileDiagnostics.session("Playback", "video reload/retry");
     }
 
     public void onRadioDvrFallback() {
@@ -724,7 +736,7 @@ public final class MobileDiagnosticsStore {
     }
 
     private boolean capture() {
-        return featureFlags.isDiagnosticsCaptureEnabled();
+        return featureFlags.isDiagnosticsCaptureEnabled() || MobileDiagnostics.isSessionCaptureActive();
     }
 
     private synchronized void increment(String key) {

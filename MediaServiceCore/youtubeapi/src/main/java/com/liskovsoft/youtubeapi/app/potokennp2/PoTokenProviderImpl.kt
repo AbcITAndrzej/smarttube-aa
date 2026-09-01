@@ -143,8 +143,10 @@ internal object PoTokenProviderImpl : PoTokenProvider {
 
         Log.d(
             TAG,
-            "poToken for $videoId: playerPot=$playerPot, " +
-                    "streamingPot=$streamingPot, visitor_data=$visitorData"
+            "poToken generated: videoIdLen=${videoId.length}, " +
+                    "playerPotLen=${playerPot?.length ?: 0}, " +
+                    "streamingPotLen=${streamingPot.length}, " +
+                    "visitorDataLen=${visitorData.length}"
         )
 
         return PoTokenResult(videoId, visitorData, playerPot, streamingPot)

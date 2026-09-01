@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_diagnostic_log_title">SESSION LOG</string>
+    <string name="mobile_diagnostic_log_summary">Records a full troubleshooting session from START to STOP. Start it, return to a video, reproduce the playback/network failure, then come back here and stop the recording.</string>
+    <string name="mobile_diagnostic_log_privacy">Nothing is uploaded automatically. The file may contain video IDs, device details, server hosts and temporary signed media URLs/tokens. Review it before sharing.</string>
+    <string name="mobile_diagnostic_log_start">START</string>
+    <string name="mobile_diagnostic_log_stop">STOP</string>
+    <string name="mobile_diagnostic_log_save">SAVE LOG FILE</string>
+    <string name="mobile_diagnostic_log_status_idle">Idle. Press START immediately before reproducing the problem.</string>
+    <string name="mobile_diagnostic_log_status_recording">RECORDING • %1$s • %2$s\nYou can leave Diagnostics now. Recording continues until STOP.</string>
+    <string name="mobile_diagnostic_log_status_ready">Ready: %1$s • %2$s\nPress SAVE LOG FILE and choose where to store it.</string>
+    <string name="mobile_diagnostic_log_status_warning">Logger warning: %1$s</string>
+    <string name="mobile_diagnostic_log_started">Diagnostic recording started: %1$s</string>
+    <string name="mobile_diagnostic_log_stopped">Diagnostic recording stopped: %1$s</string>
+    <string name="mobile_diagnostic_log_saved">Diagnostic log saved.</string>
+    <string name="mobile_diagnostic_log_no_file">No completed diagnostic log yet.</string>
+    <string name="mobile_diagnostic_log_start_error">Could not start diagnostic log: %1$s</string>
+    <string name="mobile_diagnostic_log_save_error">Could not save diagnostic log: %1$s</string>
+</resources>

@@ -441,6 +441,16 @@ public class VideoInfo {
             return false;
         }
 
+        // In a valid SABR response the adaptive format descriptors may not
+        // contain individual media URLs. The media is fetched through the
+        // shared serverAbrStreamingUrl using videoPlaybackUstreamerConfig, so
+        // treating every URL-less descriptor as broken rejects a playable WEB
+        // response before the SABR/token gate can validate it.
+        if (mServerAbrStreamingUrl != null && !mServerAbrStreamingUrl.isEmpty()
+                && mVideoPlaybackUstreamerConfig != null && !mVideoPlaybackUstreamerConfig.isEmpty()) {
+            return false;
+        }
+
         boolean allBroken = true;
 
         for (AdaptiveVideoFormat format : mAdaptiveFormats) {

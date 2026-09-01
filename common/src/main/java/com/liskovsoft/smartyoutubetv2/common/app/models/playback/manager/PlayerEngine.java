@@ -13,6 +13,10 @@ public interface PlayerEngine extends PlayerConstants {
     void openDashUrl(String dashManifestUrl);
     void openHlsUrl(String hlsPlaylistUrl);
     void openUrlList(List<String> urlList);
+    /** V10: preserves client metadata (especially User-Agent) for progressive/muxed fallback. */
+    default void openUrlList(MediaItemFormatInfo formatInfo) {
+        openUrlList(formatInfo != null ? formatInfo.createUrlList() : null);
+    }
     void openMerged(MediaItemFormatInfo formatInfo, String hlsPlaylistUrl);
     void openMerged(InputStream dashManifest, String hlsPlaylistUrl);
     long getPositionMs();

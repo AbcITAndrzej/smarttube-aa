@@ -3,6 +3,7 @@ package com.liskovsoft.youtubeapi.app.playerdata
 import com.eclipsesource.v8.V8ScriptExecutionException
 import com.liskovsoft.googlecommon.common.helpers.YouTubeHelper
 import com.liskovsoft.sharedutils.helpers.Helpers
+import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.youtubeapi.app.nsigsolver.common.YouTubeInfoExtractor
 import com.liskovsoft.youtubeapi.app.nsigsolver.impl.V8ChallengeProvider
 import com.liskovsoft.youtubeapi.app.nsigsolver.provider.ChallengeInput
@@ -25,17 +26,24 @@ internal class PlayerDataExtractor(val playerUrl: String) {
         // web url: https://www.youtube.com/s/player/e12fbea4/player_ias_tce.vflset/en_US/base.js
         playerUrl
             //.replace("_tce", "") // global helper functions, web url
-            //.replace("/player_ias.vflset/en_US/base.js", "/tv-player-ias.vflset/tv-player-ias.js") // does not validates cpn
+            //.replace("/player_ias.vflset/en_US/base.js", "/tv-player-ias.vflset/tv-player-ias.js") // does not validate cpn
             //.replace("-es6", "-ias") // es6 no supported
+            .replace("-tcl", "") // 403 fix: incompatible nParam in tv-player *-tcl variants
+            .replace("/tv-player-es6.vflset/tv-player-es6.js", "/player_es6.vflset/en_US/base.js") // 403 fix: use compatible web nParam
+            .replace("/tv-player-ias.vflset/tv-player-ias.js", "/player_ias.vflset/en_US/base.js") // 403 fix: use compatible web nParam
     }
 
     init {
+        Log.d(tag, "playerUrl original=%s fixed=%s changed=%s", playerUrl, fixedPlayerUrl, playerUrl != fixedPlayerUrl)
+
         // Get the code from the cache
         restoreAllData()
         checkSigData()
         checkCpnData()
+        Log.d(tag, "extractor state nFunc=%s sFunc=%s cpnCode=%s signatureTimestamp=%s",
+            nFuncCode, sFuncCode, cpnCode != null, signatureTimestamp)
 
-        if (cpnCode == null || signatureTimestamp == null) {
+        if (signatureTimestamp == null) {
             fetchAllData()
             checkCpnData()
             persistAllData()
@@ -64,7 +72,7 @@ internal class PlayerDataExtractor(val playerUrl: String) {
      * "cpn":"KjdxegeSaJXRctIl"
      */
     fun createClientPlaybackNonce(): String? {
-        return cpnCode?.let { ClientPlaybackNonceExtractor.createClientPlaybackNonce(it) } ?: YouTubeHelper.generateCPNParameter()
+        return cpnCode?.let { ClientPlaybackNonceExtractor.createClientPlaybackNonce(it) } ?: YouTubeHelper.generateCPNParameter2()
     }
 
     /**
@@ -100,24 +108,88 @@ internal class PlayerDataExtractor(val playerUrl: String) {
         var nProcessed: List<String?>? = null
         var sProcessed: List<String?>? = null
 
-        val nRequest = nParams?.takeIf { nFuncCode }?.filterNotNull()?.takeIf { it.isNotEmpty() }?.distinct()?.let {
+        val nValues = nParams?.filterNotNull()?.distinct().orEmpty()
+        val sValues = sParams?.filterNotNull()?.distinct().orEmpty()
+
+        // V7: do not suppress a real challenge just because the startup self-test
+        // failed. A false-negative self-test previously produced a misleading
+        // "responses=0" and left the original URL untouched. We now attempt the
+        // solver for actual non-null values and fail safely if it cannot solve them.
+        val nRequest = nValues.takeIf { it.isNotEmpty() }?.let {
             JsChallengeRequest(JsChallengeType.N, ChallengeInput(fixedPlayerUrl, it))
         }
 
-        val sRequest = sParams?.takeIf { sFuncCode }?.filterNotNull()?.takeIf { it.isNotEmpty() }?.distinct()?.let {
+        val sRequest = sValues.takeIf { it.isNotEmpty() }?.let {
             JsChallengeRequest(JsChallengeType.SIG, ChallengeInput(fixedPlayerUrl, it))
         }
 
-        val result = V8ChallengeProvider.bulkSolve(listOfNotNull(nRequest, sRequest))
+        val requests = listOfNotNull(nRequest, sRequest)
+        Log.d(tag, "V7_AUTH solver request fixedUrl=%s nSlots=%s nValues=%s sSlots=%s sValues=%s selfTestN=%s selfTestS=%s requests=%s",
+            fixedPlayerUrl, nParams?.size ?: 0, nValues.size, sParams?.size ?: 0, sValues.size,
+            nFuncCode, sFuncCode, requests.size)
+
+        if (requests.isEmpty()) {
+            Log.d(tag, "V7_AUTH solver skipped: no non-null n/s values")
+            return Pair(null, null)
+        }
+
+        val result = try {
+            V8ChallengeProvider.bulkSolve(requests).toList()
+        } catch (error: Exception) {
+            Log.e(tag, "V7_AUTH solver exception: " + error.javaClass.simpleName)
+            return Pair(null, null)
+        }
+
+        Log.d(tag, "V7_AUTH solver result responses=%s requested=%s", result.size, requests.size)
 
         for (item in result) {
-            when (item.response?.type) {
-                JsChallengeType.N ->
-                    nProcessed = nParams?.map { item.response.output.results[it] }
-                JsChallengeType.SIG ->
-                    sProcessed = sParams?.map { item.response.output.results[it] }
+            val response = item.response
+            val outputCount = response?.output?.results?.size ?: 0
+            Log.d(tag, "V7_AUTH solver response type=%s ok=%s error=%s outputs=%s",
+                item.request.type.value, response != null, item.error?.javaClass?.simpleName ?: "none", outputCount)
+
+            if (response == null) {
+                continue
+            }
+
+            when (response.type) {
+                JsChallengeType.N -> {
+                    val mapped = nParams?.map { input -> input?.let { response.output.results[it] } }
+                    val expected = nParams?.count { it != null } ?: 0
+                    val solved = mapped?.count { it != null } ?: 0
+                    val changed = if (nParams != null && mapped != null)
+                        nParams.indices.count { nParams[it] != null && mapped[it] != null && nParams[it] != mapped[it] }
+                    else 0
+                    val complete = expected > 0 && solved == expected
+                    Log.d(tag, "V7_AUTH N expected=%s solved=%s changed=%s complete=%s", expected, solved, changed, complete)
+                    if (complete) {
+                        nProcessed = mapped
+                        if (changed > 0) nFuncCode = true
+                    }
+                }
+                JsChallengeType.SIG -> {
+                    val mapped = sParams?.map { input -> input?.let { response.output.results[it] } }
+                    val expected = sParams?.count { it != null } ?: 0
+                    val solved = mapped?.count { it != null } ?: 0
+                    val changed = if (sParams != null && mapped != null)
+                        sParams.indices.count { sParams[it] != null && mapped[it] != null && sParams[it] != mapped[it] }
+                    else 0
+                    val complete = expected > 0 && solved == expected
+                    Log.d(tag, "V7_AUTH SIG expected=%s solved=%s changed=%s complete=%s", expected, solved, changed, complete)
+                    if (complete) {
+                        sProcessed = mapped
+                        if (changed > 0) sFuncCode = true
+                    }
+                }
                 else -> {}
             }
+        }
+
+        if (nRequest != null && nProcessed == null) {
+            Log.w(tag, "V7_AUTH N not applied: solver response missing or incomplete")
+        }
+        if (sRequest != null && sProcessed == null) {
+            Log.w(tag, "V7_AUTH SIG not applied: solver response missing or incomplete")
         }
 
         return Pair(nProcessed, sProcessed)
@@ -132,6 +204,8 @@ internal class PlayerDataExtractor(val playerUrl: String) {
 
         cpnCode = jsCode?.let { ClientPlaybackNonceExtractor.extractClientPlaybackNonceCode(it) }
         signatureTimestamp = jsCode?.let { CommonExtractor.extractSignatureTimestamp(it) }
+        Log.d(tag, "player data fetched fixedUrl=%s jsLoaded=%s cpnCode=%s signatureTimestamp=%s",
+            fixedPlayerUrl, jsCode != null, cpnCode != null, signatureTimestamp)
     }
 
     private fun persistAllData() {
@@ -165,6 +239,7 @@ internal class PlayerDataExtractor(val playerUrl: String) {
 
     private fun checkSigData() {
         if (nFuncCode && sFuncCode) {
+            Log.d(tag, "V7_AUTH self-test skipped: cached n/s capabilities are valid")
             V8ChallengeProvider.warmup() // enable hot start
             return
         }
@@ -176,21 +251,31 @@ internal class PlayerDataExtractor(val playerUrl: String) {
                 listOf(
                     JsChallengeRequest(JsChallengeType.N, ChallengeInput(fixedPlayerUrl, listOf(nParam))),
                     JsChallengeRequest(JsChallengeType.SIG, ChallengeInput(fixedPlayerUrl, listOf(sigParam))),
-                ))
+                )).toList()
 
+            Log.d(tag, "V7_AUTH self-test responses=%s fixedUrl=%s", result.size, fixedPlayerUrl)
             for (item in result) {
-                when (item.response?.type) {
+                val response = item.response
+                val outputCount = response?.output?.results?.size ?: 0
+                Log.d(tag, "V7_AUTH self-test type=%s ok=%s error=%s outputs=%s",
+                    item.request.type.value, response != null, item.error?.javaClass?.simpleName ?: "none", outputCount)
+                if (response == null) {
+                    continue
+                }
+                when (response.type) {
                     JsChallengeType.N ->
-                        if (item.response.output.results[nParam]?.let { it != nParam } ?: false)
+                        if (response.output.results[nParam]?.let { it != nParam } ?: false)
                             nFuncCode = true
                     JsChallengeType.SIG ->
-                        if (item.response.output.results[sigParam]?.let { it != sigParam } ?: false)
+                        if (response.output.results[sigParam]?.let { it != sigParam } ?: false)
                             sFuncCode = true
                     else -> {}
                 }
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+            Log.d(tag, "V7_AUTH self-test final nFunc=%s sFunc=%s", nFuncCode, sFuncCode)
+        } catch (error: Exception) {
+            Log.e(tag, "V7_AUTH self-test exception: " + error.javaClass.simpleName)
         }
     }
+
 }

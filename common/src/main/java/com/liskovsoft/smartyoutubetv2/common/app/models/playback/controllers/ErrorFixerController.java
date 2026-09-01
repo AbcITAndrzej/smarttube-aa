@@ -11,6 +11,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.playback.BasePlayerContr
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.listener.PlayerEventListener;
 import com.liskovsoft.smartyoutubetv2.common.exoplayer.selector.FormatItem;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector;
+import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector.OnLongBuffering;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
@@ -33,28 +34,38 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onEngineError(int type, int rendererIndex, Throwable error) {
         Log.e(TAG, "Player error occurred: %s. Trying to fix…", type);
+        MobileDiagnostics.sessionError("EngineError",
+                "type=" + type + " renderer=" + rendererIndex, error);
 
         runEngineErrorAction(type, rendererIndex, error);
     }
 
     @Override
     public void onLongBuffering() {
+        if (getPlayer() == null) {
+            return;
+        }
+
+        MobileDiagnostics.session("LongBuffer",
+                "playable=" + mBufferingDetector.isPlayable()
+                        + " offline=" + isOfflineVideo()
+                        + " subtitles=" + isSubtitlesEnabled());
+
         if (isStreamEnded()) {
             getMainController().onPlayEnd();
         } else if (isOfflineVideo() && isSubtitlesEnabled()) {
             // Long loading subtitles cause hangs
             disableSubtitles();
             mVideoLoaderController.reloadVideo();
+        } else if (!mBufferingDetector.isPlayable()) {
+            // Current upstream recovery for a client that never became playable.
+            MessageHelpers.showLongMessage(getContext(), "Fixing stalled client...");
+            YouTubeServiceManager.instance().applyNoPlaybackFix();
+            mVideoLoaderController.reloadVideo();
         } else if (!getPlayerTweaksData().isNetworkErrorFixingDisabled()) {
-            //if (!isFasterDataSourceEnabled()) {
-            //    enableFasterDataSource();
-            //    restartEngine();
-            //}
-
-            //switchNextEngine();
-            //restartEngine();
-
+            // Avoid reloading after lowering quality: restart the engine instead.
             lowerVideoQuality();
+            mVideoLoaderController.restartEngine();
         }
     }
 
@@ -66,6 +77,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onSeekEnd() {
         mBufferingDetector.reset();
+        // Detect a stall that starts immediately after a seek.
+        mBufferingDetector.onStartBuffering();
     }
 
     @Override
@@ -80,7 +93,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
 
     @Override
     public void onNewVideo(Video item) {
-        mBufferingDetector.reset();
+        mBufferingDetector.start();
     }
 
     @Override
@@ -168,17 +181,41 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             //    YouTubeServiceManager.instance().applyNoPlaybackFix(); // Response code: 403
             //}
 
+            restartEngine = false;
+            showMessage = false;
+
             boolean isGeneralError = Helpers.startsWithAny(errorContent, "Response code: 429", "Response code: 500");
             if (isGeneralError && isSubtitlesEnabled()) {
                 disableSubtitles(); // Response code: 429
             } else if (isGeneralError && getPlayerTweaksData().isHighBitrateFormatsEnabled()) {
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
+            } else if (!mBufferingDetector.isPlayable()) { // Response code: 403
+                if (forbiddenStream && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+                    // The muxed fallback itself was rejected before becoming playable. Do not loop it.
+                    Log.d(TAG, "V10_PROGRESSIVE fallback rejected before play; return to client rotation");
+                    MobileDiagnostics.session("V10_PROGRESSIVE", "fallback rejected before play");
+                    mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
+                    YouTubeServiceManager.instance().applyNoPlaybackFix();
+                } else {
+                    // Current upstream behavior: rotate to another engine/client when this one never worked.
+                    switchNextEngine();
+                    restartEngine = true;
+                    showMessage = true;
+                }
+            } else if (forbiddenStream && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+                // Progressive played but GVS later rejected it too. Disable the survival path and rotate client.
+                Log.d(TAG, "V10_PROGRESSIVE fallback got mid-stream 403; disabling");
+                MobileDiagnostics.session("V10_PROGRESSIVE", "fallback got mid-stream 403; disabling");
+                mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
+                YouTubeServiceManager.instance().applyNoPlaybackFix();
+            } else if (forbiddenStream && mVideoLoaderController.enableProgressiveFallbackForCurrentVideo()) {
+                // V10: the high-quality DASH source played and then GVS rejected a later range.
+                // Keep the client/session intact and reload the same item through its muxed URL.
+                Log.d(TAG, "V10_PROGRESSIVE mid-stream 403: progressive fallback armed");
+                MobileDiagnostics.session("V10_PROGRESSIVE", "mid-stream 403 fallback armed");
             } else {
                 YouTubeServiceManager.instance().applyNoPlaybackFix(); // Response code: 403
             }
-
-            restartEngine = false;
-            showMessage = false;
         } else if (type == PlayerEventListener.ERROR_TYPE_RENDERER && rendererIndex == PlayerEventListener.RENDERER_INDEX_SUBTITLE) {
             // "Response code: 429" (subtitle error)
             // "Response code: 500" (subtitle error)
@@ -284,6 +321,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             return;
         }
 
+        MobileDiagnostics.sessionError("FormatError", "loadFormatInfo failed", error);
         String message = error.getMessage();
         String className = error.getClass().getSimpleName();
         String fullMsg = String.format("loadFormatInfo error: %s: %s", className, Utils.getStackTraceAsString(error));

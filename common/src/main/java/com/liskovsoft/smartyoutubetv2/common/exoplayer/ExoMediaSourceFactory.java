@@ -106,6 +106,32 @@ public class ExoMediaSourceFactory {
     }
 
     /**
+     * V10 survival path for mid-stream GVS 403: use a muxed/progressive format with the
+     * same client User-Agent that produced the URL. This avoids DASH audio/video chunk
+     * range requests while preserving the original client identity.
+     */
+    public MediaSource fromUrlList(MediaItemFormatInfo formatInfo) {
+        List<String> urlList = formatInfo != null ? formatInfo.createUrlList() : null;
+        if (urlList == null || urlList.isEmpty()) {
+            throw new IllegalStateException("V10 progressive fallback requested without URL formats");
+        }
+
+        MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
+        String clientName = clientInfo != null ? clientInfo.getClientName() : "unknown";
+        String userAgent = clientInfo != null ? clientInfo.getUserAgent() : null;
+        Log.d(TAG, "V10_PROGRESSIVE source client=%s urls=%s userAgent=%s",
+                clientName, urlList.size(), TextUtils.isEmpty(userAgent) ? "default" : userAgent);
+
+        ExtractorMediaSource extractorSource = new ExtractorMediaSource.Factory(getMediaDataSourceFactory(formatInfo))
+                .setExtractorsFactory(new DefaultExtractorsFactory())
+                .createMediaSource(Uri.parse(urlList.get(0)));
+        if (mTrackErrorFixer != null) {
+            extractorSource.addEventListener(Utils.sHandler, mTrackErrorFixer);
+        }
+        return extractorSource;
+    }
+
+    /**
      * Returns a new DataSource factory.
      *
      * @param useBandwidthMeter Whether to set {@link #BANDWIDTH_METER} as a listener to the new
@@ -113,8 +139,12 @@ public class ExoMediaSourceFactory {
      * @return A new DataSource factory.
      */
     private DataSource.Factory buildDataSourceFactory(boolean useBandwidthMeter) {
+        return buildDataSourceFactory(useBandwidthMeter, USER_AGENT);
+    }
+
+    private DataSource.Factory buildDataSourceFactory(boolean useBandwidthMeter, String userAgent) {
         DefaultBandwidthMeter bandwidthMeter = useBandwidthMeter ? BANDWIDTH_METER : null;
-        return new DefaultDataSourceFactory(mContext, bandwidthMeter, buildHttpDataSourceFactory(useBandwidthMeter));
+        return new DefaultDataSourceFactory(mContext, bandwidthMeter, buildHttpDataSourceFactory(useBandwidthMeter, userAgent));
     }
 
     /**
@@ -125,12 +155,17 @@ public class ExoMediaSourceFactory {
      * @return A new HttpDataSource factory.
      */
     private HttpDataSource.Factory buildHttpDataSourceFactory(boolean useBandwidthMeter) {
+        return buildHttpDataSourceFactory(useBandwidthMeter, USER_AGENT);
+    }
+
+    private HttpDataSource.Factory buildHttpDataSourceFactory(boolean useBandwidthMeter, String userAgent) {
         PlayerTweaksData tweaksData = PlayerTweaksData.instance(mContext);
         int source = tweaksData.getPlayerDataSource();
         DefaultBandwidthMeter bandwidthMeter = useBandwidthMeter ? BANDWIDTH_METER : null;
-        return source == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP ? buildOkHttpDataSourceFactory(bandwidthMeter) :
-                        source == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET && CronetManager.getEngine(mContext) != null ? buildCronetDataSourceFactory(bandwidthMeter) :
-                                buildDefaultHttpDataSourceFactory(bandwidthMeter);
+        String effectiveUserAgent = TextUtils.isEmpty(userAgent) ? USER_AGENT : userAgent;
+        return source == PlayerTweaksData.PLAYER_DATA_SOURCE_OKHTTP ? buildOkHttpDataSourceFactory(bandwidthMeter, effectiveUserAgent) :
+                        source == PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET && CronetManager.getEngine(mContext) != null ? buildCronetDataSourceFactory(bandwidthMeter, effectiveUserAgent) :
+                                buildDefaultHttpDataSourceFactory(bandwidthMeter, effectiveUserAgent);
     }
 
     @SuppressWarnings("deprecation")
@@ -184,7 +219,7 @@ public class ExoMediaSourceFactory {
     private MediaSource buildSabrMediaSource(MediaItemFormatInfo formatInfo) {
         // Are you using FrameworkSampleSource or ExtractorSampleSource when you build your player?
         SabrMediaSource sabrSource = new SabrMediaSource.Factory(
-                getSabrChunkSourceFactory(),
+                getSabrChunkSourceFactory(formatInfo),
                 null
         )
                 .setLoadErrorHandlingPolicy(new SabrDefaultLoadErrorHandlingPolicy())
@@ -198,7 +233,7 @@ public class ExoMediaSourceFactory {
     private MediaSource buildDashMediaSource(MediaItemFormatInfo formatInfo) {
         // Are you using FrameworkSampleSource or ExtractorSampleSource when you build your player?
         DashMediaSource dashSource = new DashMediaSource.Factory(
-                getDashChunkSourceFactory(),
+                getDashChunkSourceFactory(formatInfo),
                 null
         )
                 .setLoadErrorHandlingPolicy(new DashDefaultLoadErrorHandlingPolicy())
@@ -277,13 +312,21 @@ public class ExoMediaSourceFactory {
      * Use OkHttp for networking
      */
     private HttpDataSource.Factory buildOkHttpDataSourceFactory(DefaultBandwidthMeter bandwidthMeter) {
-        OkHttpDataSourceFactory dataSourceFactory = new OkHttpDataSourceFactory(OkHttpManager.instance().getClient(), USER_AGENT,
+        return buildOkHttpDataSourceFactory(bandwidthMeter, USER_AGENT);
+    }
+
+    private HttpDataSource.Factory buildOkHttpDataSourceFactory(DefaultBandwidthMeter bandwidthMeter, String userAgent) {
+        OkHttpDataSourceFactory dataSourceFactory = new OkHttpDataSourceFactory(OkHttpManager.instance().getClient(), userAgent,
                 bandwidthMeter);
         addCommonHeaders(dataSourceFactory);
         return dataSourceFactory;
     }
 
     private HttpDataSource.Factory buildCronetDataSourceFactory(DefaultBandwidthMeter bandwidthMeter) {
+        return buildCronetDataSourceFactory(bandwidthMeter, USER_AGENT);
+    }
+
+    private HttpDataSource.Factory buildCronetDataSourceFactory(DefaultBandwidthMeter bandwidthMeter, String userAgent) {
         CronetDataSourceFactory dataSourceFactory =
                 new CronetDataSourceFactory(
                         new CronetEngineWrapper(CronetManager.getEngine(mContext)),
@@ -293,7 +336,7 @@ public class ExoMediaSourceFactory {
                         (int) OkHttpManager.getConnectTimeoutMs(),
                         (int) OkHttpManager.getReadTimeoutMs(),
                         true,
-                        USER_AGENT);
+                        userAgent);
         addCommonHeaders(dataSourceFactory);
         return dataSourceFactory;
     }
@@ -302,8 +345,12 @@ public class ExoMediaSourceFactory {
      * Use built-in component for networking
      */
     private HttpDataSource.Factory buildDefaultHttpDataSourceFactory(DefaultBandwidthMeter bandwidthMeter) {
+        return buildDefaultHttpDataSourceFactory(bandwidthMeter, USER_AGENT);
+    }
+
+    private HttpDataSource.Factory buildDefaultHttpDataSourceFactory(DefaultBandwidthMeter bandwidthMeter, String userAgent) {
         DefaultHttpDataSourceFactory dataSourceFactory = new DefaultHttpDataSourceFactory(
-                USER_AGENT, bandwidthMeter, (int) OkHttpManager.getConnectTimeoutMs(),
+                userAgent, bandwidthMeter, (int) OkHttpManager.getConnectTimeoutMs(),
                 (int) OkHttpManager.getReadTimeoutMs(), true); // allowCrossProtocolRedirects = true
 
         addCommonHeaders(dataSourceFactory); // cause troubles for some users
@@ -367,8 +414,18 @@ public class ExoMediaSourceFactory {
     }
 
     @NonNull
+    private SabrChunkSource.Factory getSabrChunkSourceFactory(MediaItemFormatInfo formatInfo) {
+        return new DefaultSabrChunkSource.Factory(getMediaDataSourceFactory(formatInfo), MAX_SEGMENTS_PER_LOAD);
+    }
+
+    @NonNull
     private DashChunkSource.Factory getDashChunkSourceFactory() {
         return new DefaultDashChunkSource.Factory(getMediaDataSourceFactory(), MAX_SEGMENTS_PER_LOAD);
+    }
+
+    @NonNull
+    private DashChunkSource.Factory getDashChunkSourceFactory(MediaItemFormatInfo formatInfo) {
+        return new DefaultDashChunkSource.Factory(getMediaDataSourceFactory(formatInfo), MAX_SEGMENTS_PER_LOAD);
     }
 
     private Factory getMediaDataSourceFactory() {
@@ -377,6 +434,21 @@ public class ExoMediaSourceFactory {
         }
 
         return mMediaDataSourceFactory;
+    }
+
+    private Factory getMediaDataSourceFactory(MediaItemFormatInfo formatInfo) {
+        String userAgent = USER_AGENT;
+        MediaItemFormatInfo.ClientInfo clientInfo = formatInfo != null ? formatInfo.getClientInfo() : null;
+
+        if (clientInfo != null && !TextUtils.isEmpty(clientInfo.getUserAgent())) {
+            userAgent = clientInfo.getUserAgent();
+            Log.d(TAG, "Media stream client=%s userAgent=%s", clientInfo.getClientName(), userAgent);
+        } else {
+            Log.d(TAG, "Media stream client is unknown. Using fallback userAgent=%s", USER_AGENT);
+        }
+
+        // Do not cache this factory: the next item may be produced by a different YouTube client.
+        return buildDataSourceFactory(USE_BANDWIDTH_METER, userAgent);
     }
 
     // EXO: 2.10 - 2.12

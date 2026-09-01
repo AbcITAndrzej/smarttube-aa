@@ -1,22 +1,8 @@
 {
-  "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk"
-  },
-  "32.04-mobile-p13-aa1.22": {
-    "versionCode": 2406,
-    "changelog": [
-      "Permanent two-column mobile feeds in portrait and landscape",
-      "Three-page Shorts look-ahead buffer with automatic refill",
-      "Faster reel metadata loading with bounded parallel requests and cache",
-      "One continuation page consumed near 75 percent of the list",
-      "Existing YouTube source retained as a safe fallback"
-    ],
-    "changelog_pl": [
-      "Stały dwukolumnowy układ feedów w pionie i poziomie",
-      "Bufor trzech kolejnych porcji Shorts z automatycznym uzupełnianiem",
-      "Szybsze metadane rolek dzięki kontrolowanym zapytaniom równoległym i cache",
-      "Jedna porcja kontynuacji pobierana w pobliżu 75 procent listy",
-      "Dotychczasowe źródło YouTube zachowane jako bezpieczny fallback"
-    ]
-  }
+    "package":  {
+                    "downloadUrl":  "https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk"
+                },
+    "32.04-mobile-p13-aa1.24":  {
+                                    "versionCode":  2408
+                                }
 }

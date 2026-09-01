@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="mobile_diagnostic_log_title">LOG SESJI</string>
+    <string name="mobile_diagnostic_log_summary">Pełny zapis diagnostyczny od START do STOP. Naciśnij START, wróć do filmu, odtwórz problem z odtwarzaniem/siecią, a po błędzie wróć tutaj i zatrzymaj nagrywanie.</string>
+    <string name="mobile_diagnostic_log_privacy">Nic nie jest wysyłane automatycznie. Plik może zawierać ID filmów, dane urządzenia, hosty serwerów oraz tymczasowe podpisane adresy URL/tokeny strumienia. Przejrzyj go przed udostępnieniem.</string>
+    <string name="mobile_diagnostic_log_start">START</string>
+    <string name="mobile_diagnostic_log_stop">STOP</string>
+    <string name="mobile_diagnostic_log_save">ZAPISZ PLIK LOGU</string>
+    <string name="mobile_diagnostic_log_status_idle">Logger bezczynny. Naciśnij START bezpośrednio przed odtworzeniem problemu.</string>
+    <string name="mobile_diagnostic_log_status_recording">NAGRYWANIE • %1$s • %2$s\nMożesz teraz wyjść z Diagnostyki. Nagrywanie trwa aż do STOP.</string>
+    <string name="mobile_diagnostic_log_status_ready">Gotowy: %1$s • %2$s\nNaciśnij ZAPISZ PLIK LOGU i wybierz miejsce zapisu.</string>
+    <string name="mobile_diagnostic_log_status_warning">Ostrzeżenie loggera: %1$s</string>
+    <string name="mobile_diagnostic_log_started">Rozpoczęto nagrywanie diagnostyczne: %1$s</string>
+    <string name="mobile_diagnostic_log_stopped">Zatrzymano nagrywanie diagnostyczne: %1$s</string>
+    <string name="mobile_diagnostic_log_saved">Plik diagnostyczny został zapisany.</string>
+    <string name="mobile_diagnostic_log_no_file">Nie ma jeszcze zakończonego logu diagnostycznego.</string>
+    <string name="mobile_diagnostic_log_start_error">Nie udało się uruchomić logu diagnostycznego: %1$s</string>
+    <string name="mobile_diagnostic_log_save_error">Nie udało się zapisać logu diagnostycznego: %1$s</string>
+</resources>

@@ -65,19 +65,92 @@ public abstract class VideoInfoServiceBase {
             }
         urlHolders.add(videoInfo.getUrlHolder());
 
-        Pair<List<String>, List<String>> result = mAppService.bulkSigExtract(extractNParams(urlHolders), extractSParams(urlHolders));
+        List<String> inputN = extractNParams(urlHolders);
+        List<String> inputS = extractSParams(urlHolders);
+        Log.d(TAG, "V7_AUTH V2 decipher holders=%s nValues=%s sValues=%s",
+                urlHolders.size(), countNonNull(inputN), countNonNull(inputS));
+        logAuthState("before", urlHolders);
+
+        Pair<List<String>, List<String>> result = mAppService.bulkSigExtract(inputN, inputS);
 
         if (result != null) {
             List<String> nParams = result.getFirst();
             List<String> signatures = result.getSecond();
+            Log.d(TAG, "V7_AUTH V2 transformed nOut=%s nChanged=%s sOut=%s sChanged=%s",
+                    countNonNull(nParams), countChanged(inputN, nParams),
+                    countNonNull(signatures), countChanged(inputS, signatures));
 
             applyNParams(urlHolders, nParams);
             applySignatures(urlHolders, signatures);
+        } else {
+            Log.w(TAG, "V7_AUTH V2 bulkSigExtract returned null");
         }
 
-        String poToken = PoTokenGate.getPoToken(videoInfo.getClient(), videoInfo.getVideoDetails().getVideoId());
+        // V9: PoToken is client-bound. Web-family clients get their Web CONTENT
+        // token; direct IOS/ANDROID_VR clients intentionally do not receive a
+        // token produced for a different client/session.
+        String poToken = videoInfo.getClient() != null
+                ? PoTokenGate.getPoToken(videoInfo.getClient(), videoInfo.getVideoDetails().getVideoId())
+                : null;
+        Log.d(TAG, "V9_CLIENT path=V2 client=%s version=%s webPotRequired=%s potApplied=%s potLen=%s",
+                videoInfo.getClient() != null ? videoInfo.getClient().getClientName() : "unknown",
+                videoInfo.getClient() != null ? videoInfo.getClient().getClientVersion() : "unknown",
+                videoInfo.getClient() != null && videoInfo.getClient().isWebPotRequired(),
+                poToken != null, poToken != null ? poToken.length() : 0);
         videoInfo.setPoToken(poToken);
         applySessionPoToken(urlHolders, poToken);
+        logAuthState("final", urlHolders);
+    }
+
+    private static int countNonNull(List<String> values) {
+        if (values == null) {
+            return 0;
+        }
+        int result = 0;
+        for (String value : values) {
+            if (value != null) {
+                result++;
+            }
+        }
+        return result;
+    }
+
+    private static int countChanged(List<String> input, List<String> output) {
+        if (input == null || output == null || input.size() != output.size()) {
+            return 0;
+        }
+        int result = 0;
+        for (int i = 0; i < input.size(); i++) {
+            String before = input.get(i);
+            String after = output.get(i);
+            if (before != null && after != null && !before.equals(after)) {
+                result++;
+            }
+        }
+        return result;
+    }
+
+    private static void logAuthState(String stage, List<VideoUrlHolder> urlHolders) {
+        for (int i = 0; i < urlHolders.size(); i++) {
+            VideoUrlHolder holder = urlHolders.get(i);
+            String n = holder.getParam("n");
+            String pot = holder.getParam("pot");
+            Log.d(TAG,
+                    "V7_AUTH V2 %s idx=%s c=%s itag=%s n=%s nLen=%s s=%s sig=%s lsig=%s spc=%s pot=%s potLen=%s",
+                    stage, i,
+                    valueOrDash(holder.getParam("c")),
+                    valueOrDash(holder.getParam("itag")),
+                    n != null, n != null ? n.length() : 0,
+                    holder.getSParam() != null,
+                    holder.getParam("sig") != null || holder.getParam("signature") != null,
+                    holder.getParam("lsig") != null,
+                    holder.getParam("spc") != null,
+                    pot != null, pot != null ? pot.length() : 0);
+        }
+    }
+
+    private static String valueOrDash(String value) {
+        return value != null ? value : "-";
     }
 
     private static List<String> extractSParams(List<VideoUrlHolder> urlHolders) {

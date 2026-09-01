@@ -20,14 +20,17 @@ internal object URLS {
 }
 
 internal object CLIENTS {
+    // V9: refresh the direct iOS playback identity. The old 20.11.6 / iOS 16
+    // identity is the exact client that the session log shows being rejected by
+    // GVS at the deterministic next byte range around one minute.
     val IOS = CLIENT(
         NAME = "iOS",
-        VERSION = "20.11.6",
-        USER_AGENT = "com.google.ios.youtube/20.11.6 (iPhone10,4; U; CPU iOS 16_7_7 like Mac OS X)",
+        VERSION = "21.26.4",
+        USER_AGENT = "com.google.ios.youtube/21.26.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
         DEVICE_MAKE = "Apple",
-        DEVICE_MODEL = "iPhone10,4",
-        OS_NAME = "iOS",
-        OS_VERSION = "16.7.7.20H330"
+        DEVICE_MODEL = "iPhone16,2",
+        OS_NAME = "iPhone",
+        OS_VERSION = "18.3.2.22D82"
     )
 
     //val IOS = CLIENT(
@@ -42,7 +45,8 @@ internal object CLIENTS {
 
     val WEB = CLIENT(
         NAME = "WEB",
-        VERSION = "2.20260206.01.00",
+        // V11: identity validated by the V8.1 WEB/SABR reference run.
+        VERSION = "2.20260831.01.00",
         API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8",
         API_VERSION = "v1",
         STATIC_VISITOR_ID = "6zpwvWUNAco",

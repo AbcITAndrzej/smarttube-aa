@@ -1,10 +1,15 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.fragment;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -19,16 +24,32 @@ import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.core.MobileFragmentSupport;
+import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.DiagnosticSessionLogger;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileDiagnosticsStore;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.diagnostics.MobileFeatureFlags;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.performance.MobilePerformanceMonitor;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Locale;
+
 /** User-visible local diagnostics. Reports are copied to clipboard only; nothing is uploaded. */
 public final class DiagnosticsFragment extends Fragment {
+    private static final int REQUEST_EXPORT_SESSION_LOG = 702;
+
+    private final Handler ui = new Handler(Looper.getMainLooper());
+    private final Runnable sessionLogTick = this::tickSessionLogUi;
+
     private MobileDiagnosticsStore diagnostics;
     private MobileFeatureFlags featureFlags;
+    private DiagnosticSessionLogger sessionLogger;
     private TextView report;
     private SwitchMaterial recentEvents;
+    private TextView sessionLogStatus;
+    private View sessionLogStart;
+    private View sessionLogStop;
+    private View sessionLogSave;
 
     public static DiagnosticsFragment newInstance() {
         return new DiagnosticsFragment();
@@ -43,7 +64,9 @@ public final class DiagnosticsFragment extends Fragment {
     @Override public void onViewCreated(@NonNull View view, @Nullable Bundle state) {
         diagnostics = MobileDiagnosticsStore.get(requireContext());
         featureFlags = new MobileFeatureFlags(requireContext());
+        sessionLogger = DiagnosticSessionLogger.get(requireContext());
         report = view.findViewById(R.id.mobile_diagnostics_report);
+        attachSessionLogSection();
 
         MaterialToolbar toolbar = view.findViewById(R.id.mobile_toolbar);
         toolbar.setNavigationIcon(R.drawable.mobile_ic_back_24);
@@ -189,11 +212,166 @@ public final class DiagnosticsFragment extends Fragment {
         view.findViewById(R.id.mobile_diagnostics_copy).setOnClickListener(v -> copyReport());
         view.findViewById(R.id.mobile_diagnostics_reset).setOnClickListener(v -> confirmReset());
         render();
+        updateSessionLogUi();
     }
 
     @Override public void onResume() {
         super.onResume();
         if (report != null) render();
+        scheduleSessionLogTick();
+    }
+
+    @Override public void onPause() {
+        ui.removeCallbacks(sessionLogTick);
+        super.onPause();
+    }
+
+    @Override public void onDestroyView() {
+        ui.removeCallbacks(sessionLogTick);
+        sessionLogStatus = null;
+        sessionLogStart = null;
+        sessionLogStop = null;
+        sessionLogSave = null;
+        report = null;
+        super.onDestroyView();
+    }
+
+    @Override public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_EXPORT_SESSION_LOG || resultCode != Activity.RESULT_OK
+                || data == null || data.getData() == null || sessionLogger == null) {
+            return;
+        }
+
+        Uri destination = data.getData();
+        try (OutputStream output = requireContext().getContentResolver().openOutputStream(destination)) {
+            if (output == null) throw new IOException("Cannot open destination file");
+            sessionLogger.copyLastLog(output);
+            Toast.makeText(requireContext(), R.string.mobile_diagnostic_log_saved,
+                    Toast.LENGTH_LONG).show();
+        } catch (IOException error) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.mobile_diagnostic_log_save_error, error.getMessage()),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void attachSessionLogSection() {
+        if (report == null || !(report.getParent() instanceof ViewGroup)) return;
+        ViewGroup reportCard = (ViewGroup) report.getParent();
+        if (!(reportCard.getParent() instanceof ViewGroup)) return;
+        ViewGroup content = (ViewGroup) reportCard.getParent();
+        View section = getLayoutInflater().inflate(
+                R.layout.mobile_diagnostic_log_section, content, false);
+        content.addView(section, Math.min(1, content.getChildCount()));
+
+        sessionLogStatus = section.findViewById(R.id.mobile_diagnostic_log_status);
+        sessionLogStart = section.findViewById(R.id.mobile_diagnostic_log_start);
+        sessionLogStop = section.findViewById(R.id.mobile_diagnostic_log_stop);
+        sessionLogSave = section.findViewById(R.id.mobile_diagnostic_log_save);
+
+        sessionLogStart.setOnClickListener(v -> startSessionLog());
+        sessionLogStop.setOnClickListener(v -> stopSessionLog());
+        sessionLogSave.setOnClickListener(v -> exportSessionLog());
+    }
+
+    private void startSessionLog() {
+        if (sessionLogger == null) return;
+        try {
+            File file = sessionLogger.start();
+            Toast.makeText(requireContext(),
+                    getString(R.string.mobile_diagnostic_log_started, file.getName()),
+                    Toast.LENGTH_LONG).show();
+            updateSessionLogUi();
+            scheduleSessionLogTick();
+        } catch (IOException error) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.mobile_diagnostic_log_start_error, error.getMessage()),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void stopSessionLog() {
+        if (sessionLogger == null) return;
+        File file = sessionLogger.stop();
+        ui.removeCallbacks(sessionLogTick);
+        updateSessionLogUi();
+        if (file != null) {
+            Toast.makeText(requireContext(),
+                    getString(R.string.mobile_diagnostic_log_stopped, file.getName()),
+                    Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void exportSessionLog() {
+        if (sessionLogger == null || sessionLogger.isRecording()) return;
+        File file = sessionLogger.getLastFile();
+        if (file == null || !file.isFile()) {
+            Toast.makeText(requireContext(), R.string.mobile_diagnostic_log_no_file,
+                    Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_TITLE, file.getName());
+        startActivityForResult(intent, REQUEST_EXPORT_SESSION_LOG);
+    }
+
+    private void scheduleSessionLogTick() {
+        ui.removeCallbacks(sessionLogTick);
+        if (sessionLogger != null && sessionLogger.isRecording()) {
+            ui.postDelayed(sessionLogTick, 1_000L);
+        }
+    }
+
+    private void tickSessionLogUi() {
+        updateSessionLogUi();
+        scheduleSessionLogTick();
+    }
+
+    private void updateSessionLogUi() {
+        if (sessionLogger == null || sessionLogStatus == null) return;
+        boolean active = sessionLogger.isRecording();
+        File last = sessionLogger.getLastFile();
+        String error = sessionLogger.getLastError();
+
+        if (active) {
+            sessionLogStatus.setText(getString(R.string.mobile_diagnostic_log_status_recording,
+                    formatDuration(sessionLogger.getElapsedMs()),
+                    formatBytes(sessionLogger.getBytesWritten())));
+        } else if (last != null && last.isFile()) {
+            String status = getString(R.string.mobile_diagnostic_log_status_ready,
+                    last.getName(), formatBytes(last.length()));
+            if (error != null && !error.isEmpty()) {
+                status += "\n" + getString(R.string.mobile_diagnostic_log_status_warning, error);
+            }
+            sessionLogStatus.setText(status);
+        } else {
+            sessionLogStatus.setText(R.string.mobile_diagnostic_log_status_idle);
+        }
+
+        if (sessionLogStart != null) sessionLogStart.setEnabled(!active);
+        if (sessionLogStop != null) sessionLogStop.setEnabled(active);
+        if (sessionLogSave != null) sessionLogSave.setEnabled(!active && last != null && last.isFile());
+    }
+
+    private static String formatDuration(long elapsedMs) {
+        long totalSeconds = Math.max(0L, elapsedMs) / 1_000L;
+        long hours = totalSeconds / 3_600L;
+        long minutes = (totalSeconds % 3_600L) / 60L;
+        long seconds = totalSeconds % 60L;
+        if (hours > 0L) return String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds);
+        return String.format(Locale.US, "%02d:%02d", minutes, seconds);
+    }
+
+    private static String formatBytes(long bytes) {
+        if (bytes >= 1024L * 1024L) {
+            return String.format(Locale.US, "%.1f MiB", bytes / (1024f * 1024f));
+        }
+        if (bytes >= 1024L) return String.format(Locale.US, "%.1f KiB", bytes / 1024f);
+        return bytes + " B";
     }
 
     private void render() {

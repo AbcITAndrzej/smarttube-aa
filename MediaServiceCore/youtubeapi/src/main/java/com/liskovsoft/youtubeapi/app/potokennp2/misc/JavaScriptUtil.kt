@@ -7,6 +7,7 @@ import com.liskovsoft.sharedutils.okhttp.OkHttpManager
 import com.liskovsoft.youtubeapi.app.potokennp2.core.PoTokenException
 import okio.ByteString.Companion.decodeBase64
 import okio.ByteString.Companion.toByteString
+import java.util.regex.Pattern
 
 /**
  * Parses the raw challenge data obtained from the Create endpoint and returns an object that can be
@@ -83,6 +84,76 @@ internal fun parseDescrambledChallengeData(rawChallengeData: String): String {
             .value("clientExperimentsStateBlob", clientExperimentsStateBlob)
             .done()
     )
+}
+
+/**
+ * Parses the object-literal-like ytAtN payload embedded in the YouTube homepage.
+ * The payload may contain hex escapes, single quotes, unquoted keys and trailing commas.
+ */
+internal fun parseLooseJSON(looseJson: String): Map<String, String> {
+    val hexPattern = Pattern.compile("""\\x([0-9A-Fa-f]{2})""")
+    val hexMatcher = hexPattern.matcher(looseJson)
+
+    val sanitizedString = buildString {
+        var lastEnd = 0
+        while (hexMatcher.find()) {
+            append(looseJson, lastEnd, hexMatcher.start())
+            append(hexMatcher.group(1)!!.toInt(16).toChar())
+            lastEnd = hexMatcher.end()
+        }
+        append(looseJson, lastEnd, looseJson.length)
+    }
+
+    val trailingCommaPattern = Pattern.compile(""",\s*([\]}])""")
+    var jsonStr = trailingCommaPattern.matcher(sanitizedString).replaceAll("$1")
+
+    val singleQuotePattern = Pattern.compile("""'((?:[^'\\]|\\[\s\S])*)'""")
+    val singleQuoteMatcher = singleQuotePattern.matcher(jsonStr)
+    jsonStr = buildString {
+        var lastEnd = 0
+        while (singleQuoteMatcher.find()) {
+            append(jsonStr, lastEnd, singleQuoteMatcher.start())
+            val innerStr = singleQuoteMatcher.group(1)!!.replace("""\'""", "'")
+            append(quoteJson(innerStr))
+            lastEnd = singleQuoteMatcher.end()
+        }
+        append(jsonStr, lastEnd, jsonStr.length)
+    }
+
+    val unquotedKeyPattern = Pattern.compile("""([{,]\s*)([a-zA-Z0-9_$]+)\s*:""")
+    jsonStr = unquotedKeyPattern.matcher(jsonStr).replaceAll("""$1"$2":""")
+
+    val parsedData = JsonParser.`object`().from(jsonStr)
+    val result = LinkedHashMap<String, String>()
+    for ((key, value) in parsedData) {
+        result[key] = value?.toString() ?: "null"
+    }
+    return result
+}
+
+private fun quoteJson(value: String): String = buildString {
+    append('"')
+    for (char in value) {
+        when (char) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\b' -> append("\\b")
+            '\u000C' -> append("\\f")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> {
+                if (char.code < 0x20) {
+                    append("\\u00")
+                    append("0123456789abcdef"[char.code ushr 4])
+                    append("0123456789abcdef"[char.code and 0x0F])
+                } else {
+                    append(char)
+                }
+            }
+        }
+    }
+    append('"')
 }
 
 /**

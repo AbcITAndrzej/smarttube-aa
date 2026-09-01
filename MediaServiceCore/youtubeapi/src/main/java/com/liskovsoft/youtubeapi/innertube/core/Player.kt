@@ -7,6 +7,7 @@ import com.liskovsoft.sharedutils.helpers.Helpers
 import com.liskovsoft.sharedutils.mylogger.Log
 import com.liskovsoft.youtubeapi.app.AppService
 import com.liskovsoft.youtubeapi.app.PoTokenGate
+import com.liskovsoft.youtubeapi.common.helpers.AppClient
 import com.liskovsoft.youtubeapi.formatbuilders.utils.MediaFormatUtils
 import com.liskovsoft.youtubeapi.innertube.impl.MediaFormatImpl
 import com.liskovsoft.youtubeapi.innertube.impl.MediaItemFormatInfoImpl
@@ -64,22 +65,65 @@ internal class Player private constructor(
         }
         urlHolders.add(formatInfo.sabrUrlHolder)
 
+        val inputN = extractNParams(urlHolders)
+        val inputS = extractSParams(urlHolders)
+        Log.d(TAG, "V7_AUTH Player decipher holders=%s nValues=%s sValues=%s",
+            urlHolders.size, inputN.count { it != null }, inputS.count { it != null })
+        logAuthState("before", urlHolders)
+
         val result: Pair<MutableList<String?>?, MutableList<String?>?>? =
-            appService.bulkSigExtract(extractNParams(urlHolders), extractSParams(urlHolders))
+            appService.bulkSigExtract(inputN, inputS)
 
         if (result != null) {
             val nParams = result.first
             val signatures = result.second
+            Log.d(TAG, "V7_AUTH Player transformed nOut=%s nChanged=%s sOut=%s sChanged=%s",
+                nParams?.count { it != null } ?: 0, countChanged(inputN, nParams),
+                signatures?.count { it != null } ?: 0, countChanged(inputS, signatures))
 
             applyNParams(urlHolders, nParams)
             applySignatures(urlHolders, signatures)
+        } else {
+            Log.w(TAG, "V7_AUTH Player bulkSigExtract returned null")
         }
 
         applyClientVer(urlHolders)
 
-        val poToken = PoTokenGate.getPoToken(formatInfo.clientInfo, formatInfo.videoId)
+        // V9: respect the token/client binding. This Innertube implementation
+        // is a WEB client, so a WEB CONTENT token is valid here. Never generate
+        // a Web BotGuard token merely because a final media URL exists.
+        val poToken = PoTokenGate.getPoToken(AppClient.WEB, formatInfo.videoId)
+        Log.d(TAG, "V9_CLIENT path=INNER client=WEB version=%s potApplied=%s potLen=%s",
+            AppClient.WEB.clientVersion, poToken != null, poToken?.length ?: 0)
         formatInfo.poToken = poToken
         applySessionPoToken(urlHolders, poToken)
+        logAuthState("final", urlHolders)
+    }
+
+    private fun countChanged(input: List<String?>, output: List<String?>?): Int {
+        if (output == null || input.size != output.size) {
+            return 0
+        }
+        return input.indices.count { input[it] != null && output[it] != null && input[it] != output[it] }
+    }
+
+    private fun logAuthState(stage: String, urlHolders: List<VideoUrlHolder>) {
+        for (i in urlHolders.indices) {
+            val holder = urlHolders[i]
+            val n = holder.getParam("n")
+            val pot = holder.getParam("pot")
+            Log.d(TAG,
+                "V7_AUTH Player %s idx=%s c=%s itag=%s n=%s nLen=%s s=%s sig=%s lsig=%s spc=%s pot=%s potLen=%s",
+                stage, i,
+                holder.getParam("c") ?: "-",
+                holder.getParam("itag") ?: "-",
+                n != null, n?.length ?: 0,
+                holder.getSParam() != null,
+                holder.getParam("sig") != null || holder.getParam("signature") != null,
+                holder.getParam("lsig") != null,
+                holder.getParam("spc") != null,
+                pot != null, pot?.length ?: 0)
+        }
     }
 
     private fun extractSParams(urlHolders: List<VideoUrlHolder>): List<String?> = urlHolders.map { it.getSParam() }

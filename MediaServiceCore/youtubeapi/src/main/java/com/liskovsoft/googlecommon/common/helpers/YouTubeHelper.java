@@ -295,4 +295,12 @@ public final class YouTubeHelper {
     public static String generateCPNParameter() {
         return RandomStringFromAlphabetGenerator.generate(16);
     }
+
+    /**
+     * New YouTube implementation of CPN used by recent player responses.
+     */
+    @NonNull
+    public static String generateCPNParameter2() {
+        return RandomStringFromAlphabetGenerator.generate2(16);
+    }
 }

@@ -2,6 +2,7 @@ package com.liskovsoft.googlecommon.common.helpers;
 
 import com.liskovsoft.sharedutils.helpers.Helpers;
 
+import java.security.SecureRandom;
 import java.util.Random;
 
 import javax.annotation.Nonnull;
@@ -39,6 +40,24 @@ public final class RandomStringFromAlphabetGenerator {
         return stringBuilder.toString();
     }
 
+    @Nonnull
+    private static String generate(
+            final String alphabet,
+            final int length) {
+        byte[] bytes = randomByteGenerator(length);
+        StringBuilder stringBuilder = new StringBuilder(length);
+        for (byte b : bytes) {
+            stringBuilder.append(alphabet.charAt(b & 63));
+        }
+        return stringBuilder.toString();
+    }
+
+    private static byte[] randomByteGenerator(final int length) {
+        byte[] bytes = new byte[length];
+        new SecureRandom().nextBytes(bytes);
+        return bytes;
+    }
+
     /**
      * Generate a random string from an alphabet.
      *
@@ -50,5 +69,13 @@ public final class RandomStringFromAlphabetGenerator {
     public static String generate(
             final int length) {
         return generate(CONTENT_PLAYBACK_NONCE_ALPHABET, length, Helpers.getRandom());
+    }
+
+    /**
+     * New YouTube implementation of the content playback nonce.
+     */
+    @Nonnull
+    public static String generate2(final int length) {
+        return generate(CONTENT_PLAYBACK_NONCE_ALPHABET, length);
     }
 }

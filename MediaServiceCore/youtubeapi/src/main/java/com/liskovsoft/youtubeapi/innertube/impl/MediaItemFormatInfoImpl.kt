@@ -166,7 +166,10 @@ internal data class MediaItemFormatInfoImpl(private val playerResult: PlayerResu
 
     override fun containsMedia() = containsDashUrl() || containsHlsUrl() || containsAdaptiveVideoFormats() || containsUrlFormats()
 
-    override fun containsSabrFormats() = containsAdaptiveVideoFormats() && getAdaptiveFormats()?.firstOrNull()?.getFormatType() == MediaFormat.FORMAT_TYPE_SABR
+    override fun containsSabrFormats() = containsAdaptiveVideoFormats()
+            && !getServerAbrStreamingUrl().isNullOrEmpty()
+            && !getVideoPlaybackUstreamerConfig().isNullOrEmpty()
+            && !_poToken.isNullOrEmpty()
 
     override fun containsDashFormats() = containsAdaptiveVideoFormats() && getAdaptiveFormats()?.firstOrNull()?.getFormatType() == MediaFormat.FORMAT_TYPE_DASH
 

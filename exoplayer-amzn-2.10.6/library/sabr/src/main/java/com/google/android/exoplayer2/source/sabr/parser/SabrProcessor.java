@@ -688,20 +688,23 @@ public class SabrProcessor {
     //}
 
     public StreamerContext createStreamerContext() {
-        return StreamerContext.newBuilder()
-                .setPoToken(
-                        ByteString.copyFrom(
-                                Base64.decode(poToken, Base64.URL_SAFE)
-                        )
-                )
+        StreamerContext.Builder builder = StreamerContext.newBuilder()
                 .setPlaybackCookie(
                         nextRequestPolicy != null ?
                                 nextRequestPolicy.getPlaybackCookie().toByteString() : ByteString.EMPTY
                 )
                 .setClientInfo(clientInfo)
                 .addAllSabrContexts(createSabrContexts())
-                .addAllUnsentSabrContexts(createUnsentSabrContexts())
-                .build();
+                .addAllUnsentSabrContexts(createUnsentSabrContexts());
+
+        if (poToken != null && !poToken.isEmpty()) {
+            byte[] decodedPoToken = Base64.decode(poToken, Base64.URL_SAFE);
+            if (decodedPoToken.length > 0) {
+                builder.setPoToken(ByteString.copyFrom(decodedPoToken));
+            }
+        }
+
+        return builder.build();
     }
 
     private List<SabrContext> createSabrContexts() {

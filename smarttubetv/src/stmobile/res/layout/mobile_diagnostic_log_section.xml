@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:layout_marginBottom="12dp"
+    app:cardBackgroundColor="?attr/colorSurface"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/mobile_outline"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            style="@style/TextAppearance.SmartTube.Mobile.TitleLarge"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/mobile_diagnostic_log_title" />
+
+        <TextView
+            style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/mobile_diagnostic_log_summary" />
+
+        <TextView
+            style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/mobile_diagnostic_log_privacy" />
+
+        <TextView
+            android:id="@+id/mobile_diagnostic_log_status"
+            style="@style/TextAppearance.SmartTube.Mobile.BodyMedium"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:padding="10dp"
+            android:text="@string/mobile_diagnostic_log_status_idle"
+            android:textIsSelectable="true"
+            android:typeface="monospace" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:weightSum="2">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_diagnostic_log_start"
+                style="@style/Widget.SmartTube.Mobile.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:minHeight="48dp"
+                android:text="@string/mobile_diagnostic_log_start" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/mobile_diagnostic_log_stop"
+                style="@style/Widget.SmartTube.Mobile.Button"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:minHeight="48dp"
+                android:text="@string/mobile_diagnostic_log_stop" />
+        </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/mobile_diagnostic_log_save"
+            style="@style/Widget.SmartTube.Mobile.Button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:enabled="false"
+            android:minHeight="48dp"
+            android:text="@string/mobile_diagnostic_log_save" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
