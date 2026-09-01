@@ -3,8 +3,6 @@ name: Build SmartTube AA APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - "chatgpt-build-aa1.24"
     tags:
       - "v*"
 
