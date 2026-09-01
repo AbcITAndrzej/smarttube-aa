@@ -83,6 +83,15 @@ public class VideoFormat {
     private int mMaxDvrDurationSec;
     @JsonPath("$.isDrc")
     private boolean mIsDrc;
+    // WEB SABR multi-audio metadata. The exact YouTube audio track id (for example
+    // "pl.4") is required by ClientAbrState.audio_track_id. URL-less SABR formats
+    // cannot recover this information from videoplayback query parameters.
+    @JsonPath("$.audioTrack.id")
+    private String mAudioTrackId;
+    @JsonPath("$.audioTrack.displayName")
+    private String mAudioTrackDisplayName;
+    @JsonPath("$.audioTrack.audioIsDefault")
+    private boolean mAudioTrackIsDefault;
     private VideoUrlHolder mUrlHolder;
 
     public String getUrl() {
@@ -257,7 +266,26 @@ public class VideoFormat {
     }
 
     public String getLanguage() {
+        // For multi-audio SABR, keep the exact audioTrack.id all the way to
+        // ExoPlayer. PreferredTrackResolver already accepts ids such as "pl.4"
+        // for a "pl" preference, while SABR needs the exact id in the request.
+        if (mAudioTrackId != null && !mAudioTrackId.isEmpty()) {
+            return mAudioTrackId;
+        }
+
         return mLanguage != null ? mLanguage : getUrlHolder().getLanguage();
+    }
+
+    public String getAudioTrackId() {
+        return mAudioTrackId;
+    }
+
+    public String getAudioTrackDisplayName() {
+        return mAudioTrackDisplayName;
+    }
+
+    public boolean isAudioTrackDefault() {
+        return mAudioTrackIsDefault;
     }
 
     public String getApproxDurationMs() {
