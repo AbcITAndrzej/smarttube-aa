@@ -3,8 +3,6 @@ name: Build SmartTube AA APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - "chatgpt-aa1.28-global-progressive-recovery"
     tags:
       - "v*"
 
@@ -28,12 +26,6 @@ jobs:
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
-
-      - name: Stamp aa1.28 test version
-        run: |
-          sed -i 's/versionCode 2408/versionCode 2412/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.28-test4/' smarttubetv/build.gradle
-          grep -n 'versionCode\|versionNameSuffix' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
