@@ -19,7 +19,9 @@ import com.liskovsoft.youtubeapi.videoinfo.models.formats.AdaptiveVideoFormat;
 import com.liskovsoft.youtubeapi.videoinfo.models.formats.VideoFormat;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import kotlin.Pair;
 
@@ -40,6 +42,12 @@ public abstract class VideoInfoServiceBase {
             return;
         }
 
+        // V14: YouTube now emits normal + DRC + voice-boost representations with
+        // the same itag. Legacy SABR cannot safely treat those as independent
+        // representations of one adaptive group. Keep the normal variant when it
+        // exists and retain DRC/VB only when it is the sole available variant.
+        normalizeAdaptiveAudioVariants(videoInfo);
+
         decipherFormats(videoInfo);
 
         if (videoInfo.isLive()) {
@@ -48,6 +56,78 @@ public abstract class VideoInfoServiceBase {
         }
 
         videoInfo.setVisitorCookie(getData().getVisitorCookie());
+    }
+
+
+    private void normalizeAdaptiveAudioVariants(VideoInfo videoInfo) {
+        List<AdaptiveVideoFormat> formats = videoInfo.getAdaptiveFormats();
+        if (formats == null || formats.isEmpty()) {
+            return;
+        }
+
+        Set<String> baseAudioKeys = new HashSet<>();
+        Set<String> logicalTracks = new HashSet<>();
+        int audioBefore = 0;
+
+        for (AdaptiveVideoFormat format : formats) {
+            if (!isAudioFormat(format)) {
+                continue;
+            }
+
+            audioBefore++;
+            String logicalTrack = audioLogicalTrackKey(format);
+            logicalTracks.add(logicalTrack);
+            if (!format.isDrc() && !format.isVb()) {
+                baseAudioKeys.add(audioVariantKey(format));
+            }
+        }
+
+        int removed = 0;
+        List<AdaptiveVideoFormat> normalized = new ArrayList<>(formats.size());
+        for (AdaptiveVideoFormat format : formats) {
+            boolean removableVariant = isAudioFormat(format)
+                    && (format.isDrc() || format.isVb())
+                    && baseAudioKeys.contains(audioVariantKey(format));
+            if (removableVariant) {
+                removed++;
+            } else {
+                normalized.add(format);
+            }
+        }
+
+        if (removed > 0) {
+            videoInfo.setAdaptiveFormats(normalized);
+        }
+
+        if (audioBefore > 0) {
+            Log.d(TAG,
+                    "V14_AUDIO_NORMALIZE audioBefore=%s audioAfter=%s removedVariants=%s logicalTracks=%s",
+                    audioBefore, audioBefore - removed, removed, logicalTracks.size());
+        }
+    }
+
+    private static boolean isAudioFormat(VideoFormat format) {
+        String mimeType = format != null ? format.getMimeType() : null;
+        return mimeType != null && mimeType.startsWith("audio/");
+    }
+
+    private static String audioVariantKey(VideoFormat format) {
+        return audioLogicalTrackKey(format) + "|" + format.getITag() + "|"
+                + (format.getMimeType() != null ? format.getMimeType() : "");
+    }
+
+    private static String audioLogicalTrackKey(VideoFormat format) {
+        if (format == null) {
+            return "default";
+        }
+
+        String trackId = format.getAudioTrackId();
+        if (trackId != null && !trackId.isEmpty()) {
+            return trackId;
+        }
+
+        String language = format.getLanguage();
+        return language != null && !language.isEmpty() ? language : "default";
     }
 
     private void decipherFormats(VideoInfo videoInfo) {
