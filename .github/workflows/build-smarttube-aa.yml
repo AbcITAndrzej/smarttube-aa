@@ -5,17 +5,38 @@ on:
   push:
     tags:
       - "v*"
+    branches:
+      - "chatgpt-aa1.29-global-audio-faststart"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-stmobile:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout public monorepo
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Apply and commit aa1.29 runtime patch
+        run: |
+          set -euxo pipefail
+          git apply --check .github/aa129-runtime.patch
+          git apply .github/aa129-runtime.patch
+          git rm .github/aa129-runtime.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/models/VideoInfo.java
+          git add exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
+          git add smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyTrackMapper.java
+          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java
+          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+          git commit -m "V14: global audio identity and fast startup [skip ci]"
+          git push origin HEAD:${GITHUB_REF_NAME}
 
       - name: Set up Java 11
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -26,6 +47,13 @@ jobs:
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
+
+      - name: Stamp aa1.29 test version
+        run: |
+          set -euxo pipefail
+          sed -i 's/versionCode 2408/versionCode 2413/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.29-test5/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.29-test5' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
@@ -56,4 +84,3 @@ jobs:
           name: SmartTube-AA-${{ github.ref_name }}-armeabi-v7a
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_armeabi-v7a.apk
           if-no-files-found: error
-
