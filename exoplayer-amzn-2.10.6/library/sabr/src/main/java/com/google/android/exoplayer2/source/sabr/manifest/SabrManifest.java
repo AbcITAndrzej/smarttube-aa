@@ -492,7 +492,7 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
             if (result.length() > 1) result.append(',');
             result.append(range.hasFormatId() ? formatKey(range.getFormatId()) : "-")
                     .append(':')
-                    .append(range.hasDurationMs() ? range.getDurationMs() : -1);
+                    .append(range.getDurationMs());
         }
         return result.append(']').toString();
     }
