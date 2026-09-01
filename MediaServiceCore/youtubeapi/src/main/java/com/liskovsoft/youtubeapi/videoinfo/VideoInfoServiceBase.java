@@ -20,7 +20,9 @@ import com.liskovsoft.youtubeapi.videoinfo.models.formats.VideoFormat;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import kotlin.Pair;
@@ -47,6 +49,7 @@ public abstract class VideoInfoServiceBase {
         // representations of one adaptive group. Keep the normal variant when it
         // exists and retain DRC/VB only when it is the sole available variant.
         normalizeAdaptiveAudioVariants(videoInfo);
+        logAdaptiveAudioCatalog(videoInfo);
 
         decipherFormats(videoInfo);
 
@@ -128,6 +131,59 @@ public abstract class VideoInfoServiceBase {
 
         String language = format.getLanguage();
         return language != null && !language.isEmpty() ? language : "default";
+    }
+
+    private void logAdaptiveAudioCatalog(VideoInfo videoInfo) {
+        List<AdaptiveVideoFormat> formats = videoInfo.getAdaptiveFormats();
+        if (formats == null || formats.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<AdaptiveVideoFormat>> tracks = new LinkedHashMap<>();
+        for (AdaptiveVideoFormat format : formats) {
+            if (!isAudioFormat(format)) {
+                continue;
+            }
+            String key = audioLogicalTrackKey(format);
+            List<AdaptiveVideoFormat> trackFormats = tracks.get(key);
+            if (trackFormats == null) {
+                trackFormats = new ArrayList<>();
+                tracks.put(key, trackFormats);
+            }
+            trackFormats.add(format);
+        }
+
+        String videoId = videoInfo.getVideoDetails() != null
+                ? videoInfo.getVideoDetails().getVideoId() : "-";
+        Log.d(TAG, "V15_AUDIO_CATALOG video=%s logicalTracks=%s representations=%s",
+                videoId, tracks.size(), countAudioFormats(formats));
+
+        for (Map.Entry<String, List<AdaptiveVideoFormat>> entry : tracks.entrySet()) {
+            List<AdaptiveVideoFormat> variants = entry.getValue();
+            AdaptiveVideoFormat first = variants.isEmpty() ? null : variants.get(0);
+            StringBuilder details = new StringBuilder();
+            for (AdaptiveVideoFormat variant : variants) {
+                if (details.length() > 0) details.append(',');
+                details.append(variant.getITag())
+                        .append('@').append(valueOrDash(variant.getLmt()))
+                        .append(variant.isDrc() ? "/DRC" : "")
+                        .append(variant.isVb() ? "/VB" : "");
+            }
+            Log.d(TAG, "V15_AUDIO_TRACK id=%s name=%s language=%s default=%s variants=[%s]",
+                    entry.getKey(),
+                    first != null ? valueOrDash(first.getAudioTrackDisplayName()) : "-",
+                    first != null ? valueOrDash(first.getLanguage()) : "-",
+                    first != null && first.isAudioTrackDefault(),
+                    details.toString());
+        }
+    }
+
+    private static int countAudioFormats(List<AdaptiveVideoFormat> formats) {
+        int count = 0;
+        for (AdaptiveVideoFormat format : formats) {
+            if (isAudioFormat(format)) count++;
+        }
+        return count;
     }
 
     private void decipherFormats(VideoInfo videoInfo) {
