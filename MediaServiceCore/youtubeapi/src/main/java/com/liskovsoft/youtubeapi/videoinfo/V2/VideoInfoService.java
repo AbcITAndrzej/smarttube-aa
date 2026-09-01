@@ -13,6 +13,7 @@ import com.liskovsoft.youtubeapi.service.internal.MediaServiceData;
 import com.liskovsoft.youtubeapi.innertube.initialresponse.InitialResponseService;
 import com.liskovsoft.youtubeapi.videoinfo.VideoInfoServiceBase;
 import com.liskovsoft.youtubeapi.videoinfo.models.CaptionTrack;
+import com.liskovsoft.youtubeapi.videoinfo.models.formats.AdaptiveVideoFormat;
 import com.liskovsoft.youtubeapi.videoinfo.models.TranslationLanguage;
 import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfo;
 import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfoHls;
@@ -127,6 +128,20 @@ public class VideoInfoService extends VideoInfoServiceBase {
                 && !info.getAdaptiveFormats().isEmpty()
                 && hasText(info.getServerAbrStreamingUrl())
                 && hasText(info.getVideoPlaybackUstreamerConfig());
+
+        int audioTrackAwareFormats = countAudioTrackAwareFormats(info);
+        if (completeSabr && audioTrackAwareFormats > 0) {
+            // Legacy ExoPlayer 2 SABR in this app does not implement YouTube's
+            // modern audio-track-aware session semantics reliably. In particular,
+            // these responses can contain several physical variants (normal/DRC/VB)
+            // under one logical audioTrack id and cause endless ReloadPlayerResponse.
+            // Do not enter the known-broken WEB SABR path. firstInfoWith() will
+            // immediately continue to the direct IOS client.
+            Log.w(TAG, "V12_MULTI_AUDIO_FALLBACK client=%s videoId=%s audioTrackFormats=%s -> IOS",
+                    client.getClientName(), videoId, audioTrackAwareFormats);
+            return false;
+        }
+
         String poToken = null;
 
         if (completeSabr) {
@@ -149,6 +164,21 @@ public class VideoInfoService extends VideoInfoServiceBase {
         }
 
         return usable;
+    }
+
+    private static int countAudioTrackAwareFormats(VideoInfo info) {
+        if (info == null || info.getAdaptiveFormats() == null) {
+            return 0;
+        }
+
+        int count = 0;
+        for (AdaptiveVideoFormat format : info.getAdaptiveFormats()) {
+            if (format != null && hasText(format.getAudioTrackId())) {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static boolean hasText(String value) {
