@@ -92,7 +92,12 @@ public class YouTubeMediaFormat implements MediaFormat {
         mediaFormat.mLanguage = format.getLanguage();
         mediaFormat.mTargetDurationSec = format.getTargetDurationSec();
         mediaFormat.mLmt = format.getLastModified();
-        mediaFormat.mQualityLabel = format.getQualityLabel();
+        // For true multi-audio tracks expose YouTube's logical display name
+        // rather than a codec/bitrate representation label.
+        mediaFormat.mQualityLabel = format.getAudioTrackDisplayName() != null
+                && !format.getAudioTrackDisplayName().isEmpty()
+                ? format.getAudioTrackDisplayName()
+                : format.getQualityLabel();
         mediaFormat.mMaxDvrDurationSec = format.getMaxDvrDurationSec();
         mediaFormat.mApproxDurationMs = Helpers.parseInt(format.getApproxDurationMs());
 
