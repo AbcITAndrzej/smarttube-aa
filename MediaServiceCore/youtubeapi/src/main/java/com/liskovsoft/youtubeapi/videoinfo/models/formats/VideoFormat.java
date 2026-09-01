@@ -83,6 +83,10 @@ public class VideoFormat {
     private int mMaxDvrDurationSec;
     @JsonPath("$.isDrc")
     private boolean mIsDrc;
+    // Modern WEB SABR audio topology marker. Presence means YouTube is using
+    // audio-track-aware SABR (multi-audio / original / DRC / voice-boost variants).
+    @JsonPath("$.audioTrack.id")
+    private String mAudioTrackId;
     private VideoUrlHolder mUrlHolder;
 
     public String getUrl() {
@@ -111,6 +115,10 @@ public class VideoFormat {
 
     public boolean isDrc() {
         return mIsDrc;
+    }
+
+    public String getAudioTrackId() {
+        return mAudioTrackId;
     }
 
     public String getContentLength() {
