@@ -1,6 +1,7 @@
 package com.google.android.exoplayer2.source.sabr.manifest;
 
 import android.util.Base64;
+import android.util.Log;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
@@ -33,6 +34,7 @@ import java.util.Map;
  * Represents a SABR media presentation
  */
 public class SabrManifest implements FilterableManifest<SabrManifest> {
+    private static final String TAG = SabrManifest.class.getSimpleName();
     /**
      * The {@code availabilityStartTime} value in milliseconds since epoch, or {@link C#TIME_UNSET} if
      * not present.
@@ -205,6 +207,14 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
                 ? selectedVideoFormat.height : -1;
         int bandwidthEstimate = trackType == C.TRACK_TYPE_VIDEO && selectedVideoFormat != null
                 ? selectedVideoFormat.bitrate : selectedAudioFormat != null ? selectedAudioFormat.bitrate : -1;
+        // YouTube's audioTrack.id is carried in Format.language only when the
+        // corresponding audioTrack.displayName was present (stored as label).
+        // Ordinary language metadata must not be mistaken for a SABR track id.
+        String audioTrackId = selectedAudioFormat != null
+                && selectedAudioFormat.label != null
+                && !selectedAudioFormat.label.isEmpty()
+                ? selectedAudioFormat.language : null;
+        boolean drcEnabled = selectedAudioFormat != null && selectedAudioFormat.isDrc;
 
         FormatId formatId = getFormatSelector(trackType).getSelectedFormatId();
         long startTimeMs = isInit ? 0 : seekTimeUs != C.TIME_UNSET
@@ -216,8 +226,24 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
                 .setPlayerTimeMs(startTimeMs)
                 .setClientViewportIsFlexible(false)
                 .setBandwidthEstimate(bandwidthEstimate)
-                .setDrcEnabled(false)
+                .setDrcEnabled(drcEnabled)
                 .setEnabledTrackTypesBitfield(height != -1 ? EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY);
+
+        if (audioTrackId != null && !audioTrackId.isEmpty()) {
+            clientAbrStateBuilder.setAudioTrackId(audioTrackId);
+        }
+
+        if (isInit) {
+            FormatId audioFormatId = getFormatSelector(C.TRACK_TYPE_AUDIO).getSelectedFormatId();
+            FormatId videoFormatId = getFormatSelector(C.TRACK_TYPE_VIDEO).getSelectedFormatId();
+            Log.d(TAG, "V14_SABR_INIT trackType=" + trackType
+                    + " audioTrackId=" + audioTrackId
+                    + " audioItag=" + (audioFormatId != null ? audioFormatId.getItag() : -1)
+                    + " audioLmt=" + (audioFormatId != null && audioFormatId.hasLastModified()
+                    ? audioFormatId.getLastModified() : -1)
+                    + " drc=" + drcEnabled
+                    + " videoItag=" + (videoFormatId != null ? videoFormatId.getItag() : -1));
+        }
 
         if (height != -1) {
             clientAbrStateBuilder
