@@ -3,8 +3,6 @@ name: Build SmartTube AA APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - "chatgpt-aa1.25-sabr-formatid"
     tags:
       - "v*"
 
@@ -28,12 +26,6 @@ jobs:
 
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
-
-      - name: Stamp aa1.25 test version
-        run: |
-          sed -i 's/versionCode 2408/versionCode 2409/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.25-test1/' smarttubetv/build.gradle
-          grep -nE 'versionCode|versionNameSuffix "-mobile' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
@@ -64,3 +56,4 @@ jobs:
           name: SmartTube-AA-${{ github.ref_name }}-armeabi-v7a
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_armeabi-v7a.apk
           if-no-files-found: error
+
