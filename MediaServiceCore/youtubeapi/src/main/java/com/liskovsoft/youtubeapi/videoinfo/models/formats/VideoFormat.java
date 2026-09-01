@@ -83,6 +83,16 @@ public class VideoFormat {
     private int mMaxDvrDurationSec;
     @JsonPath("$.isDrc")
     private boolean mIsDrc;
+    @JsonPath("$.isVb")
+    private boolean mIsVb;
+    // Modern YouTube multi-audio identity. Keep this separate from codec/bitrate
+    // representations so one logical language track may contain several formats.
+    @JsonPath("$.audioTrack.id")
+    private String mAudioTrackId;
+    @JsonPath("$.audioTrack.displayName")
+    private String mAudioTrackDisplayName;
+    @JsonPath("$.audioTrack.audioIsDefault")
+    private boolean mAudioTrackIsDefault;
     private VideoUrlHolder mUrlHolder;
 
     public String getUrl() {
@@ -111,6 +121,22 @@ public class VideoFormat {
 
     public boolean isDrc() {
         return mIsDrc;
+    }
+
+    public boolean isVb() {
+        return mIsVb;
+    }
+
+    public String getAudioTrackId() {
+        return mAudioTrackId;
+    }
+
+    public String getAudioTrackDisplayName() {
+        return mAudioTrackDisplayName;
+    }
+
+    public boolean isAudioTrackDefault() {
+        return mAudioTrackIsDefault;
     }
 
     public String getContentLength() {
@@ -257,6 +283,13 @@ public class VideoFormat {
     }
 
     public String getLanguage() {
+        // For SABR multi-audio the exact audioTrack.id (e.g. "pl.4") is the
+        // stable logical identity. URL-less WEB formats cannot recover it from
+        // videoplayback parameters, so preserve it in Format.language.
+        if (mAudioTrackId != null && !mAudioTrackId.isEmpty()) {
+            return mAudioTrackId;
+        }
+
         return mLanguage != null ? mLanguage : getUrlHolder().getLanguage();
     }
 
