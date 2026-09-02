@@ -169,11 +169,12 @@ public abstract class VideoInfoServiceBase {
                         .append(variant.isDrc() ? "/DRC" : "")
                         .append(variant.isVb() ? "/VB" : "");
             }
-            Log.d(TAG, "V15_AUDIO_TRACK id=%s name=%s language=%s default=%s variants=[%s]",
+            Log.d(TAG, "V16_AUDIO_TRACK id=%s name=%s language=%s default=%s autoDubbed=%s variants=[%s]",
                     entry.getKey(),
                     first != null ? valueOrDash(first.getAudioTrackDisplayName()) : "-",
                     first != null ? valueOrDash(first.getLanguage()) : "-",
                     first != null && first.isAudioTrackDefault(),
+                    first != null && first.isAudioTrackAutoDubbed(),
                     details.toString());
         }
     }

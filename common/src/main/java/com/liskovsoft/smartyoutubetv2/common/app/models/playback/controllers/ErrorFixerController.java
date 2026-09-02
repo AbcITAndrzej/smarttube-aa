@@ -71,6 +71,10 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             YouTubeServiceManager.instance().applyNoPlaybackFix();
             mVideoLoaderController.reloadVideo();
         } else if (!mBufferingDetector.isPlayable()
+                && mVideoLoaderController.tryPreserveMultiAudioRecovery("long-buffer")) {
+            Log.d(TAG, "V16_MULTI_AUDIO long buffering -> preserve adaptive audio");
+            MobileDiagnostics.session("V16_MULTI_AUDIO", "long-buffer -> adaptive-client-rotation");
+        } else if (!mBufferingDetector.isPlayable()
                 && mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("long-buffer")) {
             // V14: replace the stalled source from cached format info immediately.
             // Do not issue another /player request or start the same SABR twice.
@@ -147,6 +151,12 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         if (getPlayer() == null || !getPlayer().isLoading()
                 || mVideoLoaderController == null
                 || mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+            return;
+        }
+
+        if (mVideoLoaderController.tryPreserveMultiAudioRecovery("startup-stall")) {
+            Log.d(TAG, "V16_MULTI_AUDIO startup stall -> preserve adaptive audio");
+            MobileDiagnostics.session("V16_MULTI_AUDIO", "startup-stall -> adaptive-client-rotation");
             return;
         }
 

@@ -282,6 +282,11 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         // Common ErrorFixer may have switched sources at 7 s already.
                         // Do not undo that recovery with another metadata/SABR reload.
                         if (loader.isProgressiveFallbackActiveForCurrentVideo()) return true;
+                        if (loader.tryPreserveMultiAudioRecovery("mobile-watchdog")) {
+                            MobileDiagnostics.info("V16-MultiAudio",
+                                    "mobile watchdog preserved adaptive multi-audio");
+                            return true;
+                        }
                         if (loader.activateProgressiveFallbackForCurrentVideo("mobile-watchdog")) {
                             return true;
                         }

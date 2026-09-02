@@ -93,6 +93,8 @@ public class VideoFormat {
     private String mAudioTrackDisplayName;
     @JsonPath("$.audioTrack.audioIsDefault")
     private boolean mAudioTrackIsDefault;
+    @JsonPath("$.audioTrack.isAutoDubbed")
+    private boolean mAudioTrackIsAutoDubbed;
     private VideoUrlHolder mUrlHolder;
 
     public String getUrl() {
@@ -137,6 +139,10 @@ public class VideoFormat {
 
     public boolean isAudioTrackDefault() {
         return mAudioTrackIsDefault;
+    }
+
+    public boolean isAudioTrackAutoDubbed() {
+        return mAudioTrackIsAutoDubbed;
     }
 
     public String getContentLength() {
