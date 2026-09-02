@@ -158,7 +158,8 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
     }
 
     static String formatIdentity(String id, long lastModified, String language) {
-        return (id != null ? id : "-") + "|" + lastModified + "|" + (language != null ? language : "-");
+        String normalizedLanguage = language != null ? language.toLowerCase(java.util.Locale.US) : "-";
+        return (id != null ? id : "-") + "|" + lastModified + "|" + normalizedLanguage;
     }
 
     private static String formatIdentity(Format format) {
