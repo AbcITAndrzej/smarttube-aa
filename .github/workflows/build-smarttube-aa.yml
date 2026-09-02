@@ -3,17 +3,14 @@ name: Build SmartTube AA APK
 on:
   workflow_dispatch:
   push:
-    tags:
-      - "v*"
     branches:
-      - "chatgpt-aa1.31-multiaudio-preserve"
+      - "chatgpt-aa1.33-multiaudio-safe-fallback"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-stmobile:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -22,20 +19,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply and commit aa1.31 runtime changes
+      - name: Apply aa1.33 multi-audio safe fallback
         run: |
           set -euxo pipefail
-          python3 .github/aa131_apply.py
-          git rm .github/aa131_apply.py .github/aa131-runtime.patch
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/models/formats/VideoFormat.java
-          git add MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/VideoInfoServiceBase.java
-          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java
-          git add common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
-          git add smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyMobilePlaybackRepository.java
-          git commit -m "V16: preserve adaptive multi-audio before progressive fallback [skip ci]"
-          git push origin HEAD:${GITHUB_REF_NAME}
+          python3 .github/aa133_apply.py
+          grep -n 'V17_MULTI_AUDIO\|mMultiAudioRecoveryAttempts >= 3' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java
 
       - name: Set up Java 11
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -47,12 +35,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.31 test version
+      - name: Stamp aa1.33 test version
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode 2408/versionCode 2415/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.31-test7/' smarttubetv/build.gradle
-          grep -n 'versionCode\|mobile-p13-aa1.31-test7' smarttubetv/build.gradle
+          sed -i 's/versionCode 2408/versionCode 2416/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.33-test8/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.33-test8' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
