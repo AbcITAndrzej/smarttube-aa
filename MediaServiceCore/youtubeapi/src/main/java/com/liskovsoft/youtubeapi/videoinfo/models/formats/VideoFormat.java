@@ -47,6 +47,7 @@ public class VideoFormat {
     private int mAverageBitrate;
     @JsonPath("$.projectionType")
     private String mProjectionType;
+    @JsonPath("$.xtags")
     private String mXtags;
     @JsonPath("$.width")
     private int mWidth = -1;
@@ -93,6 +94,8 @@ public class VideoFormat {
     private String mAudioTrackDisplayName;
     @JsonPath("$.audioTrack.audioIsDefault")
     private boolean mAudioTrackIsDefault;
+    @JsonPath("$.audioTrack.isAutoDubbed")
+    private boolean mAudioTrackIsAutoDubbed;
     private VideoUrlHolder mUrlHolder;
 
     public String getUrl() {
@@ -137,6 +140,10 @@ public class VideoFormat {
 
     public boolean isAudioTrackDefault() {
         return mAudioTrackIsDefault;
+    }
+
+    public boolean isAudioTrackAutoDubbed() {
+        return mAudioTrackIsAutoDubbed;
     }
 
     public String getContentLength() {

@@ -23,6 +23,11 @@ internal data class MediaFormatImpl(private val streamingFormat: StreamingFormat
     private val _mimeType by lazy { streamingFormat.mimeType }
     private val _iTag by lazy { streamingFormat.itag?.takeIf { it != 0 }?.toString() ?: "" }
     private val _isDrc by lazy { streamingFormat.isDrc ?: false }
+    private val _isVb by lazy { streamingFormat.isVb ?: false }
+    private val _audioTrackId by lazy { streamingFormat.audioTrack?.id }
+    private val _audioTrackDisplayName by lazy { streamingFormat.audioTrack?.displayName }
+    private val _audioTrackDefault by lazy { streamingFormat.audioTrack?.audioIsDefault ?: false }
+    private val _audioTrackAutoDubbed by lazy { streamingFormat.audioTrack?.isAutoDubbed ?: false }
     private val _clen by lazy { streamingFormat.contentLength }
     private val _bitrate by lazy { streamingFormat.bitrate?.takeIf { it != 0 }?.toString() ?: "" }
     private val _projectionType by lazy { streamingFormat.projectionType }
@@ -52,13 +57,23 @@ internal data class MediaFormatImpl(private val streamingFormat: StreamingFormat
 
     override fun isDrc() = _isDrc
 
+    override fun isVb() = _isVb
+
+    override fun getAudioTrackId() = _audioTrackId
+
+    override fun getAudioTrackDisplayName() = _audioTrackDisplayName
+
+    override fun isAudioTrackDefault() = _audioTrackDefault
+
+    override fun isAudioTrackAutoDubbed() = _audioTrackAutoDubbed
+
     override fun getClen() = _clen
 
     override fun getBitrate() = _bitrate
 
     override fun getProjectionType() = _projectionType
 
-    override fun getXtags(): String? = null
+    override fun getXtags() = streamingFormat.xtags
 
     override fun getWidth() = _width
 
@@ -82,7 +97,7 @@ internal data class MediaFormatImpl(private val streamingFormat: StreamingFormat
 
     override fun getOtfTemplateUrl() = urlHolder.getOtfTemplateUrl()
 
-    override fun getLanguage() = urlHolder.getLanguage()
+    override fun getLanguage() = _audioTrackId ?: urlHolder.getLanguage()
 
     override fun getTargetDurationSec() = _targetDurationSec
 

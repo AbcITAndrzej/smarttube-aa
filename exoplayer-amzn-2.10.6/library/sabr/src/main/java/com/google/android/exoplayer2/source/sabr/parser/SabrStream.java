@@ -23,6 +23,7 @@ import com.google.android.exoplayer2.source.sabr.parser.results.ProcessStreamPro
 import com.google.android.exoplayer2.source.sabr.parser.ump.UMPDecoder;
 import com.google.android.exoplayer2.source.sabr.parser.ump.UMPPart;
 import com.google.android.exoplayer2.source.sabr.parser.ump.UMPPartId;
+import com.google.android.exoplayer2.source.sabr.protos.misc.FormatId;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.FormatInitializationMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.LiveMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.MediaHeader;
@@ -170,8 +171,8 @@ public class SabrStream {
         noNewSegmentsTracker.reset();
     }
 
-    public void reset(int iTag) {
-        processor.reset(iTag);
+    public void reset(FormatId formatId) {
+        processor.reset(formatId);
     }
 
     public FormatSelector getFormatSelector() {
@@ -182,20 +183,20 @@ public class SabrStream {
         processor.setFormatSelector(formatSelector);
     }
 
-    public long getSegmentStartTimeMs(int iTag) {
-        return processor.getSegmentStartTimeMs(iTag);
+    public long getSegmentStartTimeMs(FormatId formatId) {
+        return processor.getSegmentStartTimeMs(formatId);
     }
 
-    public long getSegmentDurationMs(int iTag) {
-        return processor.getSegmentDurationMs(iTag);
+    public long getSegmentDurationMs(FormatId formatId) {
+        return processor.getSegmentDurationMs(formatId);
     }
 
     public int getBackoffTimeMs() {
         return processor.getBackoffTimeMs();
     }
 
-    public MediaHeader getInitializedFormat(int iTag) {
-        return processor.getInitializedFormats().get(iTag);
+    public MediaHeader getInitializedFormat(FormatId formatId) {
+        return formatId != null ? processor.getInitializedFormats().get(formatId.toString()) : null;
     }
 
     public StreamerContext createStreamerContext() {

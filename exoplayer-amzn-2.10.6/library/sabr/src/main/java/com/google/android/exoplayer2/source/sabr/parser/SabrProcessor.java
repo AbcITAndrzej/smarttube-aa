@@ -25,6 +25,7 @@ import com.google.android.exoplayer2.source.sabr.parser.results.ProcessMediaHead
 import com.google.android.exoplayer2.source.sabr.parser.results.ProcessMediaResult;
 import com.google.android.exoplayer2.source.sabr.parser.results.ProcessSabrSeekResult;
 import com.google.android.exoplayer2.source.sabr.parser.results.ProcessStreamProtectionStatusResult;
+import com.google.android.exoplayer2.source.sabr.protos.misc.FormatId;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.FormatInitializationMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.LiveMetadata;
 import com.google.android.exoplayer2.source.sabr.protos.videostreaming.MediaHeader;
@@ -72,7 +73,7 @@ public class SabrProcessor {
     private NextRequestPolicy nextRequestPolicy;
     private final Map<Integer, SabrContextUpdate> sabrContextUpdates;
     private final Set<Integer> sabrContextsToSend;
-    private final Map<Integer, MediaHeader> initializedFormats;
+    private final Map<String, MediaHeader> initializedFormats;
     private final FormatSelector emptySelector;
 
     public SabrProcessor(
@@ -310,7 +311,7 @@ public class SabrProcessor {
         }
 
         if (!segment.mediaHeader.getIsInitSeg()) {
-            initializedFormats.put(segment.mediaHeader.getItag(), segment.mediaHeader);
+            initializedFormats.put(segment.mediaHeader.getFormatId().toString(), segment.mediaHeader);
         }
 
         Log.d(TAG, "MediaEnd for %s (sequence %s, data length = %s)",
@@ -653,24 +654,16 @@ public class SabrProcessor {
         return liveSegmentTargetDurationSec;
     }
 
-    public long getSegmentStartTimeMs(int iTag) {
-        MediaHeader mediaHeader = initializedFormats.get(iTag);
+    public long getSegmentStartTimeMs(FormatId formatId) {
+        MediaHeader mediaHeader = formatId != null ? initializedFormats.get(formatId.toString()) : null;
 
-        if (mediaHeader == null || mediaHeader.getStartMs() == -1) {
-            return 0;
-        }
-
+        if (mediaHeader == null || mediaHeader.getStartMs() == -1) return 0;
         return mediaHeader.getStartMs() + mediaHeader.getDurationMs();
     }
 
-    public long getSegmentDurationMs(int iTag) {
-        MediaHeader mediaHeader = initializedFormats.get(iTag);
-
-        if (mediaHeader == null) {
-            return 0;
-        }
-
-        return mediaHeader.getDurationMs();
+    public long getSegmentDurationMs(FormatId formatId) {
+        MediaHeader mediaHeader = formatId != null ? initializedFormats.get(formatId.toString()) : null;
+        return mediaHeader != null ? mediaHeader.getDurationMs() : 0;
     }
 
     public int getBackoffTimeMs() {
@@ -757,19 +750,20 @@ public class SabrProcessor {
         initializeFormatSelector();
     }
 
-    public @NonNull Map<Integer, MediaHeader> getInitializedFormats() {
+    public @NonNull Map<String, MediaHeader> getInitializedFormats() {
         return initializedFormats;
     }
 
-    public void reset(int iTag) {
-        MediaHeader mediaHeader = initializedFormats.get(iTag);
+    public void reset(FormatId formatId) {
+        String key = formatId != null ? formatId.toString() : null;
+        MediaHeader mediaHeader = key != null ? initializedFormats.get(key) : null;
 
         if (mediaHeader != null) {
             MediaHeader newHeader = mediaHeader.toBuilder()
                     .setStartMs(-1)
                     .setSequenceNumber(0)
                     .build();
-            initializedFormats.put(iTag, newHeader);
+            initializedFormats.put(key, newHeader);
         }
     }
 }

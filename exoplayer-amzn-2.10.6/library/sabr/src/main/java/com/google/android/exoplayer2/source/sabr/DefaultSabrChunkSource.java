@@ -156,6 +156,7 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         this.adaptationSetIndices = adaptationSetIndices;
         this.trackSelection = trackSelection;
         this.formatSelector = createFormatSelector(trackType, trackSelection);
+        manifest.applySabrIdentity(this.formatSelector);
         this.trackType = trackType;
         this.dataSource = dataSource;
         this.periodIndex = periodIndex;
@@ -214,6 +215,8 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     public void updateTrackSelection(TrackSelection trackSelection) {
         this.trackSelection = trackSelection;
         this.formatSelector = createFormatSelector(trackType, trackSelection);
+        manifest.applySabrIdentity(this.formatSelector);
+        sabrStream.setFormatSelector(this.formatSelector);
     }
 
     @Override
@@ -546,10 +549,9 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
             long seekTimeUs) {
         boolean isInit = nexChunkIdx == -1;
         FormatId formatId = formatSelector.getSelectedFormatId();
-        int iTag = formatId != null ? formatId.getItag() : -1;
 
         if (nexChunkIdx == -1) {
-            sabrStream.reset(iTag);
+            sabrStream.reset(formatId);
         }
 
         nexChunkIdx++;
@@ -558,8 +560,8 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
 
         //long startTimeMs = sabrStream.getSegmentStartTimeMs(trackType);
         //long durationMs = sabrStream.getSegmentDurationMs(trackType);
-        long startTimeMs = sabrStream.getSegmentStartTimeMs(iTag);
-        long durationMs = sabrStream.getSegmentDurationMs(iTag);
+        long startTimeMs = sabrStream.getSegmentStartTimeMs(formatId);
+        long durationMs = sabrStream.getSegmentDurationMs(formatId);
         boolean isSabrTimeSet = startTimeMs >= 0 && durationMs > 0;
 
         long startTimeUs = isSabrTimeSet ? startTimeMs * 1_000L : C.TIME_UNSET;

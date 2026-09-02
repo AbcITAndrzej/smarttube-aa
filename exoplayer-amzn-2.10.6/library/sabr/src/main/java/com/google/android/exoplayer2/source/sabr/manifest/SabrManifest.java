@@ -88,7 +88,8 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
     private final String poToken;
     private final ClientInfo clientInfo;
     private final Map<Integer, SabrStream> sabrStreams;
-    // V15 diagnostics: log protocol state only when the selected A/V identity changes.
+    private final Map<String, String> xtagsByFormat;
+    // V16 diagnostics: log protocol state only when the selected A/V identity changes.
     private final Map<Integer, String> requestDiagKeys;
     private int sabrRequestNumber = -1;
     private final FormatSelector emptySelector;
@@ -107,7 +108,8 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
             String videoPlaybackUstreamerConfig,
             String poToken,
             String videoId,
-            ClientInfo clientInfo) {
+            ClientInfo clientInfo,
+            Map<String, String> xtagsByFormat) {
         this.availabilityStartTimeMs = availabilityStartTimeMs;
         this.durationMs = durationMs;
         this.minBufferTimeMs = minBufferTimeMs;
@@ -123,6 +125,7 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
         this.clientInfo = clientInfo;
         this.poToken = poToken;
         this.sabrStreams = new HashMap<>();
+        this.xtagsByFormat = xtagsByFormat != null ? new HashMap<>(xtagsByFormat) : new HashMap<>();
         this.requestDiagKeys = new HashMap<>();
         this.emptySelector = new FormatSelector("ignored", true);
     }
@@ -152,6 +155,33 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
 
     public final String getVideoId() {
         return videoId;
+    }
+
+    static String formatIdentity(String id, long lastModified, String language) {
+        return (id != null ? id : "-") + "|" + lastModified + "|" + (language != null ? language : "-");
+    }
+
+    private static String formatIdentity(Format format) {
+        return formatIdentity(format != null ? format.id : null,
+                format != null ? format.lastModified : Format.NO_VALUE,
+                format != null ? format.language : null);
+    }
+
+    public void applySabrIdentity(FormatSelector selector) {
+        if (selector == null || selector.formats.isEmpty() || selector.formatIds.isEmpty()) return;
+        int count = Math.min(selector.formats.size(), selector.formatIds.size());
+        for (int i = 0; i < count; i++) {
+            Format format = selector.formats.get(i);
+            String xtags = xtagsByFormat.get(formatIdentity(format));
+            if (xtags == null || xtags.isEmpty()) continue;
+            FormatId enriched = selector.formatIds.get(i).toBuilder().setXtags(xtags).build();
+            selector.formatIds.set(i, enriched);
+            Log.d(TAG, "V16_FORMAT_ID_BIND selector=%s itag=%s lmt=%s language=%s xtagsHash=%s",
+                    selector.displayName, enriched.getItag(),
+                    enriched.hasLastModified() ? enriched.getLastModified() : -1,
+                    format != null ? valueOrDash(format.language) : "-",
+                    Integer.toHexString(xtags.hashCode()));
+        }
     }
 
     public SabrStream getSabrStream(int trackType) {
@@ -207,28 +237,22 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
 
         Format selectedVideoFormat = getFormatSelector(C.TRACK_TYPE_VIDEO).getSelectedFormat();
         Format selectedAudioFormat = getFormatSelector(C.TRACK_TYPE_AUDIO).getSelectedFormat();
-        // V15: both per-renderer requests describe the same full A/V session.
-        // Modern YouTube SABR no longer reliably serves AUDIO_ONLY/VIDEO_ONLY for
-        // multi-audio videos, so keep the video resolution identity even on the
-        // local audio lane. The companion format is still marked fully buffered
-        // later, which prevents the lane from consuming the other renderer's media.
-        int height = selectedVideoFormat != null ? selectedVideoFormat.height : -1;
-        int videoBitrate = selectedVideoFormat != null ? selectedVideoFormat.bitrate : 0;
-        int audioBitrate = selectedAudioFormat != null ? selectedAudioFormat.bitrate : 0;
-        int bandwidthEstimate = videoBitrate > 0 || audioBitrate > 0
-                ? Math.max(1, videoBitrate) + Math.max(0, audioBitrate) : -1;
-        // YouTube's audioTrack.id is carried in Format.language only when the
-        // corresponding audioTrack.displayName was present (stored as label).
-        // Ordinary language metadata must not be mistaken for a SABR track id.
-        String audioTrackId = selectedAudioFormat != null
+        int height = trackType == C.TRACK_TYPE_VIDEO && selectedVideoFormat != null
+                ? selectedVideoFormat.height : -1;
+        int bandwidthEstimate = trackType == C.TRACK_TYPE_VIDEO && selectedVideoFormat != null
+                ? selectedVideoFormat.bitrate
+                : trackType == C.TRACK_TYPE_AUDIO && selectedAudioFormat != null
+                ? selectedAudioFormat.bitrate : -1;
+        String audioTrackId = trackType == C.TRACK_TYPE_AUDIO && selectedAudioFormat != null
                 && selectedAudioFormat.label != null
                 && !selectedAudioFormat.label.isEmpty()
                 ? selectedAudioFormat.language : null;
-        boolean drcEnabled = selectedAudioFormat != null && selectedAudioFormat.isDrc;
+        boolean drcEnabled = trackType == C.TRACK_TYPE_AUDIO
+                && selectedAudioFormat != null && selectedAudioFormat.isDrc;
 
         FormatId formatId = getFormatSelector(trackType).getSelectedFormatId();
         long startTimeMs = isInit ? 0 : seekTimeUs != C.TIME_UNSET
-                ? seekTimeUs / 1_000 : activeStream.getSegmentStartTimeMs(formatId != null ? formatId.getItag() : -1);
+                ? seekTimeUs / 1_000 : activeStream.getSegmentStartTimeMs(formatId);
 
         ClientAbrState.Builder clientAbrStateBuilder = ClientAbrState.newBuilder()
                 .setSabrForceMaxNetworkInterruptionDurationMs(0)
@@ -237,10 +261,8 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
                 .setClientViewportIsFlexible(false)
                 .setBandwidthEstimate(bandwidthEstimate)
                 .setDrcEnabled(drcEnabled)
-                // V15: modern SABR expects a complete A/V session. We still mark the
-                // companion renderer as fully buffered below, so this per-renderer
-                // ExoPlayer port receives only the format it actually consumes.
-                .setEnabledTrackTypesBitfield(EnabledTrackTypes.VIDEO_AND_AUDIO);
+                .setEnabledTrackTypesBitfield(trackType == C.TRACK_TYPE_VIDEO
+                        ? EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY);
 
         if (audioTrackId != null && !audioTrackId.isEmpty()) {
             clientAbrStateBuilder.setAudioTrackId(audioTrackId);
@@ -317,16 +339,14 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
         List<BufferedRange> bufferedRanges = new ArrayList<>();
 
         FormatId currentFormat = trackType == C.TRACK_TYPE_VIDEO ? videoFormat : audioFormat;
-        int currentFormatKey = currentFormat != null ? currentFormat.getItag() : -1;
 
         for (FormatId activeFormat : new FormatId[]{videoFormat, audioFormat}) {
             if (activeFormat == null) {
                 continue;
             }
 
-            int activeFormatKey = activeFormat.getItag();
-            boolean shouldDiscard = currentFormatKey != activeFormatKey;
-            MediaHeader initializedFormat = getInitializedFormat(activeFormatKey);
+            boolean shouldDiscard = currentFormat == null || !currentFormat.equals(activeFormat);
+            MediaHeader initializedFormat = getInitializedFormat(activeFormat);
 
             BufferedRange bufferedRange = shouldDiscard ? createFullBufferRange(activeFormat) : createPartialBufferRange(initializedFormat);
 
@@ -342,11 +362,11 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
         return new Pair<>(bufferedRanges, formatToDiscard);
     }
 
-    private @Nullable MediaHeader getInitializedFormat(int iTag) {
+    private @Nullable MediaHeader getInitializedFormat(FormatId formatId) {
         MediaHeader initializedFormat = null;
 
         for (SabrStream sabrStream : sabrStreams.values()) {
-            MediaHeader mediaHeader = sabrStream.getInitializedFormat(iTag);
+            MediaHeader mediaHeader = sabrStream.getInitializedFormat(formatId);
 
             if (mediaHeader != null) {
                 initializedFormat = mediaHeader;
@@ -441,8 +461,8 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
         }
         requestDiagKeys.put(trackType, key);
 
-        Log.d(TAG, "V15_SABR_REQ lane=" + trackTypeName(trackType)
-                + " protocol=VIDEO_AND_AUDIO"
+        Log.d(TAG, "V16_SABR_REQ lane=" + trackTypeName(trackType)
+                + " protocol=" + (trackType == C.TRACK_TYPE_VIDEO ? "VIDEO_ONLY" : "AUDIO_ONLY")
                 + " init=" + isInit
                 + " rn=" + sabrRequestNumber
                 + " audioTrackId=" + valueOrDash(audioTrackId)

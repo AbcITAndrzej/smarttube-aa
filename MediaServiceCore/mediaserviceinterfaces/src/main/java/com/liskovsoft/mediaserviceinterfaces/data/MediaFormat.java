@@ -12,6 +12,11 @@ public interface MediaFormat extends Comparable<MediaFormat> {
     String getMimeType();
     String getITag();
     boolean isDrc();
+    default boolean isVb() { return false; }
+    default String getAudioTrackId() { return getLanguage(); }
+    default String getAudioTrackDisplayName() { return null; }
+    default boolean isAudioTrackDefault() { return false; }
+    default boolean isAudioTrackAutoDubbed() { return false; }
 
     // DASH
     String getClen();

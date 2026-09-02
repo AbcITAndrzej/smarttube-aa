@@ -5,12 +5,14 @@ import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.source.sabr.protos.misc.FormatId;
 import com.liskovsoft.sharedutils.helpers.Helpers;
+import com.liskovsoft.sharedutils.mylogger.Log;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class FormatSelector {
+    private static final String TAG = FormatSelector.class.getSimpleName();
     public final String displayName;
     public final List<FormatId> formatIds = new ArrayList<>();
     public final List<Format> formats = new ArrayList<>();
@@ -46,9 +48,32 @@ public class FormatSelector {
     }
 
     public boolean match(FormatId formatId, String mimeType) {
-        return formatIds.contains(formatId)
-                || (formatIds.isEmpty() && getMimePrefix() != null && mimeType != null && mimeType.toLowerCase().startsWith(getMimePrefix()))
-                || Helpers.findFirst(formatIds, fmt -> fmt.hasItag() && formatId.hasItag() && fmt.getItag() == formatId.getItag()) != null;
+        if (formatId == null) return false;
+        if (formatIds.contains(formatId)) return true;
+        if (formatIds.isEmpty()) {
+            return getMimePrefix() != null && mimeType != null
+                    && mimeType.toLowerCase().startsWith(getMimePrefix());
+        }
+
+        for (FormatId expected : formatIds) {
+            if (!expected.hasItag() || !formatId.hasItag() || expected.getItag() != formatId.getItag()) continue;
+
+            if (expected.hasXtags() && formatId.hasXtags()) {
+                if (expected.getXtags().equals(formatId.getXtags())) return true;
+                Log.w(TAG, "V16_FORMAT_ID_REJECT itag=%s expectedX=%s actualX=%s",
+                        expected.getItag(), Integer.toHexString(expected.getXtags().hashCode()),
+                        Integer.toHexString(formatId.getXtags().hashCode()));
+                continue;
+            }
+
+            if (expected.hasLastModified() && formatId.hasLastModified()) {
+                if (expected.getLastModified() == formatId.getLastModified()) return true;
+                continue;
+            }
+
+            return true;
+        }
+        return false;
     }
 
     public boolean isDiscardMedia() {

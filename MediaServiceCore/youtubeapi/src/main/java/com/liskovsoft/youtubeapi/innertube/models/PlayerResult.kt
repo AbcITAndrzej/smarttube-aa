@@ -114,6 +114,7 @@ internal data class StreamingFormat(
     val fps: Int?,
     val qualityLabel: String?,
     val projectionType: String?,
+    val xtags: String?,
     val averageBitrate: Int?,
     val approxDurationMs: String?,
     val targetDurationSec: Int?,
@@ -126,6 +127,8 @@ internal data class StreamingFormat(
     val loudnessDb: Float?,
     val trackAbsoluteLoudnessLkfs: Float?,
     val isDrc: Boolean?,
+    val isVb: Boolean?,
+    val audioTrack: AudioTrack?,
     /**
      * New format type FORMAT_STREAM_TYPE_OTF or null
      */
@@ -145,6 +148,13 @@ internal data class StreamingFormat(
     data class Range(
         val start: String?,
         val end: String?
+    )
+
+    data class AudioTrack(
+        val displayName: String?,
+        val id: String?,
+        val audioIsDefault: Boolean?,
+        val isAutoDubbed: Boolean?
     )
 }
 

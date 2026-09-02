@@ -17,6 +17,11 @@ public class YouTubeMediaFormat implements MediaFormat {
     private String mMimeType;
     private String mITag;
     private boolean mIsDrc;
+    private boolean mIsVb;
+    private String mAudioTrackId;
+    private String mAudioTrackDisplayName;
+    private boolean mAudioTrackDefault;
+    private boolean mAudioTrackAutoDubbed;
     private String mClen;
     private String mBitrate;
     private String mProjectionType;
@@ -75,6 +80,12 @@ public class YouTubeMediaFormat implements MediaFormat {
         String iTag = format.getITag() == 0 ? "" : String.valueOf(format.getITag());
         mediaFormat.mITag = iTag;
         mediaFormat.mIsDrc = format.isDrc();
+        mediaFormat.mIsVb = format.isVb();
+        mediaFormat.mAudioTrackId = format.getAudioTrackId();
+        mediaFormat.mAudioTrackDisplayName = format.getAudioTrackDisplayName();
+        mediaFormat.mAudioTrackDefault = format.isAudioTrackDefault();
+        mediaFormat.mAudioTrackAutoDubbed = format.isAudioTrackAutoDubbed();
+        mediaFormat.mXtags = format.getXtags();
         mediaFormat.mClen = format.getContentLength();
         String bitrate = format.getBitrate() == 0 ? "" : String.valueOf(format.getBitrate());
         mediaFormat.mBitrate = bitrate;
@@ -134,6 +145,31 @@ public class YouTubeMediaFormat implements MediaFormat {
     @Override
     public boolean isDrc() {
         return mIsDrc;
+    }
+
+    @Override
+    public boolean isVb() {
+        return mIsVb;
+    }
+
+    @Override
+    public String getAudioTrackId() {
+        return mAudioTrackId;
+    }
+
+    @Override
+    public String getAudioTrackDisplayName() {
+        return mAudioTrackDisplayName;
+    }
+
+    @Override
+    public boolean isAudioTrackDefault() {
+        return mAudioTrackDefault;
+    }
+
+    @Override
+    public boolean isAudioTrackAutoDubbed() {
+        return mAudioTrackAutoDubbed;
     }
 
     @Override

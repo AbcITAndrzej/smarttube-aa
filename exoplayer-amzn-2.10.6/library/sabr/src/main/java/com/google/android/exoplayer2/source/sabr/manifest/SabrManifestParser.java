@@ -27,6 +27,7 @@ import com.liskovsoft.youtubeapi.formatbuilders.utils.MediaFormatUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,7 @@ public class SabrManifestParser {
     private Set<MediaFormat> mWEBMVideos;
     private Map<String, Set<MediaFormat>> mMP4Audios;
     private Map<String, Set<MediaFormat>> mWEBMAudios;
+    private Map<String, String> mXtagsByFormat;
     private List<MediaSubtitle> mSubs;
 
     public SabrManifest parse(@NonNull MediaItemFormatInfo formatInfo) {
@@ -50,8 +52,9 @@ public class SabrManifestParser {
         MediaFormatComparator comp = new MediaFormatComparator();
         mMP4Videos = new TreeSet<>(comp);
         mWEBMVideos = new TreeSet<>(comp);
-        mMP4Audios = new HashMap<>();
-        mWEBMAudios = new HashMap<>();
+        mMP4Audios = new LinkedHashMap<>();
+        mWEBMAudios = new LinkedHashMap<>();
+        mXtagsByFormat = new HashMap<>();
         mSubs = new ArrayList<>();
         return parseSabrManifest(formatInfo);
     }
@@ -88,7 +91,8 @@ public class SabrManifestParser {
                 formatInfo.getVideoPlaybackUstreamerConfig(),
                 formatInfo.getPoToken(),
                 formatInfo.getVideoId(),
-                createClientInfo(formatInfo));
+                createClientInfo(formatInfo),
+                mXtagsByFormat);
     }
 
     private static long getDurationMs(MediaItemFormatInfo formatInfo) {
@@ -352,10 +356,13 @@ public class SabrManifestParser {
 
     private RepresentationInfo parseRepresentation(MediaFormat mediaFormat) {
         int roleFlags = C.ROLE_FLAG_MAIN;
-        int selectionFlags = C.SELECTION_FLAG_DEFAULT;
         String id = mediaFormat.getITag();
         int bandwidth = Helpers.parseInt(mediaFormat.getBitrate(), Format.NO_VALUE);
         String mimeType = MediaFormatUtils.extractMimeType(mediaFormat);
+        boolean isAudio = mimeType != null && mimeType.startsWith("audio/");
+        int selectionFlags = !isAudio || mediaFormat.getAudioTrackId() == null
+                ? C.SELECTION_FLAG_DEFAULT
+                : mediaFormat.isAudioTrackDefault() ? C.SELECTION_FLAG_DEFAULT : 0;
         String codecs = MediaFormatUtils.extractCodecs(mediaFormat);
         int width = mediaFormat.getWidth();
         int height = mediaFormat.getHeight();
@@ -387,6 +394,11 @@ public class SabrManifestParser {
                         codecs,
                         isDrc,
                         lastModified);
+
+        String xtags = mediaFormat.getXtags();
+        if (xtags != null && !xtags.isEmpty()) {
+            mXtagsByFormat.put(SabrManifest.formatIdentity(id, lastModified, language), xtags);
+        }
 
         SegmentBase segmentBase = null;
 

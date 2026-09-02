@@ -164,16 +164,19 @@ public abstract class VideoInfoServiceBase {
             StringBuilder details = new StringBuilder();
             for (AdaptiveVideoFormat variant : variants) {
                 if (details.length() > 0) details.append(',');
+                String xtags = variant.getXtags();
                 details.append(variant.getITag())
                         .append('@').append(valueOrDash(variant.getLmt()))
+                        .append("/x").append(xtags != null ? Integer.toHexString(xtags.hashCode()) : "-")
                         .append(variant.isDrc() ? "/DRC" : "")
                         .append(variant.isVb() ? "/VB" : "");
             }
-            Log.d(TAG, "V15_AUDIO_TRACK id=%s name=%s language=%s default=%s variants=[%s]",
+            Log.d(TAG, "V16_AUDIO_TRACK id=%s name=%s language=%s default=%s autoDubbed=%s variants=[%s]",
                     entry.getKey(),
                     first != null ? valueOrDash(first.getAudioTrackDisplayName()) : "-",
                     first != null ? valueOrDash(first.getLanguage()) : "-",
                     first != null && first.isAudioTrackDefault(),
+                    first != null && first.isAudioTrackAutoDubbed(),
                     details.toString());
         }
     }
