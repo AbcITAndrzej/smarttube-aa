@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "chatgpt-aa1.38-official-sabr-lanes"
+      - "chatgpt-aa1.39-cross-track-init"
 
 permissions:
   contents: read
@@ -19,12 +19,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply official 32.38 per-track SABR with auth, audio metadata and subtitles preserved
+      - name: Apply official 32.38 cross-track SABR init fix with audio, subtitles and auth preserved
         run: |
           set -euxo pipefail
           AUTH_FILE=MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/YouTubeSignInService.java
           AUTH_BEFORE=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
-          python3 .github/aa138_apply_official_sabr_lanes.py
+          python3 .github/aa139_apply_cross_track_init.py
           AUTH_AFTER=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
           test "$AUTH_BEFORE" = "$AUTH_AFTER"
           grep -n 'switchNextClientNow' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
@@ -36,6 +36,7 @@ jobs:
           grep -n 'EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           ! grep -n 'EnabledTrackTypes.VIDEO_AND_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           grep -n 'setXtags' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/models/FormatSelector.java
+          grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
           git diff --name-only
 
       - name: Set up Java 11
@@ -48,12 +49,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.38 test version
+      - name: Stamp aa1.39 test version
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode 2408/versionCode 2421/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.38-test13/' smarttubetv/build.gradle
-          grep -n 'versionCode\|mobile-p13-aa1.38-test13' smarttubetv/build.gradle
+          sed -i 's/versionCode 2408/versionCode 2422/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test14/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.39-test14' smarttubetv/build.gradle
 
       - name: Build SmartTube mobile AA APKs
         run: >-
