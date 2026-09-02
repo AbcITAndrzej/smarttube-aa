@@ -12,6 +12,23 @@ for path in \
   curl -fsSL "https://raw.githubusercontent.com/yuliskov/SmartTube/${UPSTREAM_SMARTTUBE_COMMIT}/${path}" -o "${path}"
 done
 
+# 32.38 ErrorFixer uses two Utils helpers added after the 32.04 application base.
+# Keep the 32.38 playback/error policy, but bridge those helpers with the equivalent
+# 32.04-compatible logic so the transplant remains minimal and testable.
+python3 - <<'PY'
+from pathlib import Path
+p = Path('common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java')
+s = p.read_text()
+s = s.replace('''        if (Utils.fixRetrofitErrors(getContext(), error)) {\n            return;\n        }\n\n''', '')
+s = s.replace('Utils.getFasterDataSource()', 'getFasterDataSource()')
+needle = '''    /**\n     * Bad idea. Faster source is different among devices\n     */\n    private boolean isFasterDataSourceEnabled() {'''
+helper = '''    private static int getFasterDataSource() {\n        return Utils.skipCronet() ? PlayerTweaksData.PLAYER_DATA_SOURCE_DEFAULT : PlayerTweaksData.PLAYER_DATA_SOURCE_CRONET;\n    }\n\n    /**\n     * Bad idea. Faster source is different among devices\n     */\n    private boolean isFasterDataSourceEnabled() {'''
+if needle not in s:
+    raise SystemExit('compatibility anchor not found')
+s = s.replace(needle, helper, 1)
+p.write_text(s)
+PY
+
 rm -rf SharedModules MediaServiceCore
 
 git clone https://github.com/yuliskov/SharedModules.git SharedModules
@@ -26,5 +43,5 @@ rm -rf MediaServiceCore/.git MediaServiceCore/SharedModules/.git
 echo "SmartTube=${UPSTREAM_SMARTTUBE_COMMIT}"
 echo "MediaServiceCore=${UPSTREAM_MEDIA_SERVICE_CORE}"
 echo "SharedModules=${UPSTREAM_SHARED_MODULES}"
-grep -n "switchNextClientNow\|PLAYER_DATA_SOURCE_OKHTTP" \
+grep -n "switchNextClientNow\|PLAYER_DATA_SOURCE_OKHTTP\|getFasterDataSource" \
   common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
