@@ -177,11 +177,11 @@ public class SabrManifest implements FilterableManifest<SabrManifest> {
             if (xtags == null || xtags.isEmpty()) continue;
             FormatId enriched = selector.formatIds.get(i).toBuilder().setXtags(xtags).build();
             selector.formatIds.set(i, enriched);
-            Log.d(TAG, "V16_FORMAT_ID_BIND selector=%s itag=%s lmt=%s language=%s xtagsHash=%s",
-                    selector.displayName, enriched.getItag(),
-                    enriched.hasLastModified() ? enriched.getLastModified() : -1,
-                    format != null ? valueOrDash(format.language) : "-",
-                    Integer.toHexString(xtags.hashCode()));
+            Log.d(TAG, "V16_FORMAT_ID_BIND selector=" + selector.displayName
+                    + " itag=" + enriched.getItag()
+                    + " lmt=" + (enriched.hasLastModified() ? enriched.getLastModified() : -1)
+                    + " language=" + (format != null ? valueOrDash(format.language) : "-")
+                    + " xtagsHash=" + Integer.toHexString(xtags.hashCode()));
         }
     }
 
