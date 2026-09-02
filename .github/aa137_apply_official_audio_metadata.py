@@ -37,6 +37,36 @@ core_files = [
 for rel in core_files:
     download("yuliskov/MediaServiceCore", CORE_SHA, rel, f"MediaServiceCore/{rel}")
 
+# Our AA diagnostics/grouping layer predates the final 32.38 model and still calls
+# four harmless accessors that aren't present in upstream's final VideoFormat.
+# Restore only those compatibility fields/methods; the actual audioTrack.id,
+# isAutoDubbed, xtags and language behavior remain upstream 32.38 code.
+video_format_path = Path("MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/videoinfo/models/formats/VideoFormat.java")
+video_format = video_format_path.read_text()
+video_format = replace_once(
+    video_format,
+    '    @JsonPath("$.audioTrack.id")\n    private String mAudioTrackId;\n',
+    '    @JsonPath("$.audioTrack.displayName")\n    private String mAudioTrackDisplayName;\n'
+    '    @JsonPath("$.audioTrack.id")\n    private String mAudioTrackId;\n',
+    "AA audio display name compatibility")
+video_format = replace_once(
+    video_format,
+    '    @JsonPath("$.isDrc")\n    private boolean mIsDrc;\n    private VideoUrlHolder mUrlHolder;\n',
+    '    @JsonPath("$.isDrc")\n    private boolean mIsDrc;\n'
+    '    @JsonPath("$.isVb")\n    private boolean mIsVb;\n'
+    '    private VideoUrlHolder mUrlHolder;\n',
+    "AA VB compatibility field")
+video_format = replace_once(
+    video_format,
+    '    public boolean isDrc() {\n        return mIsDrc;\n    }\n\n',
+    '    public boolean isDrc() {\n        return mIsDrc;\n    }\n\n'
+    '    public boolean isVb() {\n        return mIsVb;\n    }\n\n'
+    '    public String getAudioTrackDisplayName() {\n        return mAudioTrackDisplayName;\n    }\n\n'
+    '    public boolean isAudioTrackDefault() {\n        return mIsDefaultAudio;\n    }\n\n'
+    '    public boolean isAudioTrackAutoDubbed() {\n        return mIsAutoDubbed;\n    }\n\n',
+    "AA playback diagnostics compatibility accessors")
+video_format_path.write_text(video_format)
+
 # The old core already has exoNameFix(), but predates the official helper added in
 # Aug 2026. Add exactly the final 32.38 language semantics: audioTrack.id prefix is
 # the language, and isAutoDubbed distinguishes dubbed-auto from original.
@@ -149,4 +179,4 @@ manifest = replace_once(
     "official audioTrackId metadata reader")
 manifest_path.write_text(manifest)
 
-print("aa1.37 applied: official 32.38 WEB audioTrack/xtags pipeline + SABR metadata; auth and direct subtitles preserved")
+print("aa1.37 applied: official 32.38 WEB audioTrack/xtags pipeline + SABR metadata; AA compatibility + auth + direct subtitles preserved")
