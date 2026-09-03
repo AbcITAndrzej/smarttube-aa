@@ -1,0 +1,153 @@
+name: Build SmartTube AA Video EXP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "video-exp-aa139-scroll-fix"
+
+permissions:
+  contents: write
+
+jobs:
+  build-video-exp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout public monorepo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Prove stable Music sources are untouched
+        run: |
+          set -euxo pipefail
+          git fetch origin main
+          CHANGED="$(git diff --name-only origin/main...HEAD)"
+          printf '%s\n' "$CHANGED"
+          UNEXPECTED="$(printf '%s\n' "$CHANGED" | grep -Ev '^(smarttubetv/src/carvideo/|\.github/workflows/build-smarttube-aa-video-exp\.yml$)' || true)"
+          test -z "$UNEXPECTED"
+          test -f smarttubetv/src/carvideo/res/layout-land/mobile_native_fragment_settings.xml
+          grep -n 'NestedScrollView\|nestedScrollingEnabled="false"' smarttubetv/src/carvideo/res/layout-land/mobile_native_fragment_settings.xml
+
+      - name: Apply same aa1.39 playback fix used by Music
+        run: |
+          set -euxo pipefail
+          AUTH_FILE=MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/YouTubeSignInService.java
+          AUTH_BEFORE=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
+          python3 .github/aa139_apply_cross_track_init.py
+          AUTH_AFTER=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
+          test "$AUTH_BEFORE" = "$AUTH_AFTER"
+          grep -n 'switchNextClientNow' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
+          grep -n 'P19_SUBTITLE_DIRECT\|SingleSampleMediaChunk\|selected_caption_direct' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
+          grep -n 'audioTrack: AudioTrack\|val xtags' MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/models/PlayerResult.kt
+          grep -n 'getAudioTrackId' MediaServiceCore/mediaserviceinterfaces/src/main/java/com/liskovsoft/mediaserviceinterfaces/data/MediaFormat.java
+          grep -n 'SabrFormatMetadata' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifestParser.java
+          grep -n 'trackType == C.TRACK_TYPE_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
+          grep -n 'EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
+          ! grep -n 'EnabledTrackTypes.VIDEO_AND_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
+          grep -n 'setXtags' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/models/FormatSelector.java
+          grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
+
+      - name: Set up Java 11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: gradle
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Stamp aa1.39 Video EXP test version
+        run: |
+          set -euxo pipefail
+          sed -i 's/versionCode 2408/versionCode 2422/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test14/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.39-test14\|carvideo' smarttubetv/build.gradle
+
+      - name: Build SmartTube AA Video EXP APKs
+        run: >-
+          ./gradlew :smarttubetv:assembleStmobileCarvideo
+          --stacktrace
+          --console=plain
+          --no-daemon
+          --max-workers=1
+          --no-parallel
+
+      - name: Prepare direct-download Video EXP APK files
+        run: |
+          set -euxo pipefail
+          OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
+          mkdir -p release-video-exp
+          UNIVERSAL="$(find "$OUT" -maxdepth 1 -type f -name '*_universal.apk' -print -quit)"
+          ARM64="$(find "$OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)"
+          ARMV7="$(find "$OUT" -maxdepth 1 -type f -name '*_armeabi-v7a.apk' -print -quit)"
+          test -n "$UNIVERSAL"
+          test -n "$ARM64"
+          test -n "$ARMV7"
+          cp "$UNIVERSAL" release-video-exp/SmartTube-AA-Video-EXP-universal.apk
+          cp "$ARM64" release-video-exp/SmartTube-AA-Video-EXP-arm64-v8a.apk
+          cp "$ARMV7" release-video-exp/SmartTube-AA-Video-EXP-armeabi-v7a.apk
+          (cd release-video-exp && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh release-video-exp
+
+      - name: Publish direct Video EXP test APK downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="latest-video-exp"
+          TITLE="SmartTube AA Video EXP aa1.39-test14 - landscape scroll test"
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          Eksperymentalny SmartTube AA Video EXP z aktualnej bazy aa1.39-test14.
+
+          Ten wariant:
+          - korzysta z tej samej aktualnej bazy odtwarzania co Music aa1.39-test14,
+          - pozostaje osobnym pakietem app.smarttube.mobile.carvideo,
+          - nie modyfikuje stabilnego SmartTube AA Music,
+          - zawiera izolowaną poprawkę przewijania ekranu Ustawienia w układzie poziomym (issue #1).
+
+          To wydanie testowe Video EXP. Proszę sprawdzić przewijanie na ekranie Android Auto w poziomie przed uznaniem błędu za zamknięty.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F prerelease=true -f make_latest=false >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" \
+              -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+          fi
+
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release-video-exp/SmartTube-AA-Video-EXP-universal.apk \
+            release-video-exp/SmartTube-AA-Video-EXP-arm64-v8a.apk \
+            release-video-exp/SmartTube-AA-Video-EXP-armeabi-v7a.apk \
+            release-video-exp/SHA256SUMS.txt
+
+      - name: Upload Video EXP universal APK to Actions archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SmartTube-AA-Video-EXP-universal
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_universal.apk
+          if-no-files-found: error
+
+      - name: Upload Video EXP ARM64 APK to Actions archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SmartTube-AA-Video-EXP-arm64-v8a
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_arm64-v8a.apk
+          if-no-files-found: error
+
+      - name: Upload Video EXP ARMv7 APK to Actions archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SmartTube-AA-Video-EXP-armeabi-v7a
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_armeabi-v7a.apk
+          if-no-files-found: error
