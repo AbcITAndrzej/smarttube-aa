@@ -1,4 +1,4 @@
-name: Build SmartTube AA APK
+name: Build SmartTube AA Music APK
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           ! grep -n 'EnabledTrackTypes.VIDEO_AND_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           grep -n 'setXtags' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/models/FormatSelector.java
           grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
-          git diff --name-only
+          grep -n 'CUSTOM_PREFIX\|submitUnifiedSettings' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
 
       - name: Set up Java 11
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -49,14 +49,14 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.39 test version
+      - name: Stamp aa1.39-test15 version
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode 2408/versionCode 2422/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test14/' smarttubetv/build.gradle
-          grep -n 'versionCode\|mobile-p13-aa1.39-test14' smarttubetv/build.gradle
+          sed -i 's/versionCode 2408/versionCode 2423/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test15/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.39-test15' smarttubetv/build.gradle
 
-      - name: Build SmartTube mobile AA APKs
+      - name: Build SmartTube AA Music APKs
         run: >-
           ./gradlew :smarttubetv:assembleStmobileDebug
           --stacktrace
@@ -76,13 +76,13 @@ jobs:
           (cd release-apk && sha256sum *.apk > SHA256SUMS.txt)
           ls -lh release-apk
 
-      - name: Publish direct APK downloads
+      - name: Publish direct Music APK downloads
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
           TAG="latest-main"
-          TITLE="SmartTube AA Music aa1.39-test14 - latest main"
+          TITLE="SmartTube AA Music aa1.39-test15 - latest main"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
           Najnowszy automatyczny build SmartTube AA Music z gałęzi main.
@@ -92,7 +92,7 @@ jobs:
           - SmartTube-AA-Music-arm64-v8a.apk - urządzenia ARM64
           - SmartTube-AA-Music-armeabi-v7a.apk - starsze urządzenia ARMv7
 
-          Wariant Video EXP jest prowadzony osobno i nie jest jeszcze publikowany przez workflow aa1.39.
+          Video EXP jest publikowane osobno z tego samego main pod tagiem latest-video-exp.
           EOF
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -117,20 +117,20 @@ jobs:
       - name: Upload ARM64 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-${{ github.ref_name }}-arm64-v8a
+          name: SmartTube-AA-Music-${{ github.ref_name }}-arm64-v8a
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_arm64-v8a.apk
           if-no-files-found: error
 
       - name: Upload universal APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-${{ github.ref_name }}-universal
+          name: SmartTube-AA-Music-${{ github.ref_name }}-universal
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_universal.apk
           if-no-files-found: error
 
       - name: Upload ARMv7 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-${{ github.ref_name }}-armeabi-v7a
+          name: SmartTube-AA-Music-${{ github.ref_name }}-armeabi-v7a
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_armeabi-v7a.apk
           if-no-files-found: error
