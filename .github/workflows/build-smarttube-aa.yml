@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - "chatgpt-aa1.39-cross-track-init"
+      - "main"
 
 permissions:
   contents: read
