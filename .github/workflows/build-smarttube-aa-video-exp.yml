@@ -1,16 +1,16 @@
-name: Build SmartTube AA Music + Video EXP test
+name: Build SmartTube AA Video EXP APK
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - "video-exp-aa139-scroll-fix"
+      - "main"
 
 permissions:
   contents: write
 
 jobs:
-  build-music-and-video:
+  build-video-exp:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,19 +19,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify branch scope
+      - name: Verify unified settings and aa1.39 multi-audio prerequisites
         run: |
           set -euxo pipefail
-          git fetch origin main
-          CHANGED="$(git diff --name-only origin/main...HEAD)"
-          printf '%s\n' "$CHANGED"
-          UNEXPECTED="$(printf '%s\n' "$CHANGED" | grep -Ev '^(.github/workflows/build-smarttube-aa-video-exp.yml|smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java|smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml)$' || true)"
-          test -z "$UNEXPECTED"
           grep -n 'CUSTOM_PREFIX\|submitUnifiedSettings' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
           test "$(grep -c '<androidx.recyclerview.widget.RecyclerView' smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml)" -eq 1
           ! grep -q 'mobile_android_auto_button' smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml
 
-      - name: Apply same aa1.39 playback and multi-audio fix to both variants
+      - name: Apply same aa1.39 playback and multi-audio fix used by Music
         run: |
           set -euxo pipefail
           AUTH_FILE=MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/YouTubeSignInService.java
@@ -40,18 +35,14 @@ jobs:
           AUTH_AFTER=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
           test "$AUTH_BEFORE" = "$AUTH_AFTER"
 
-          # Multi-audio / dubbed track metadata must be present before either APK is built.
           grep -n 'audioTrack: AudioTrack\|val xtags' MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/models/PlayerResult.kt
           grep -n 'getAudioTrackId' MediaServiceCore/mediaserviceinterfaces/src/main/java/com/liskovsoft/mediaserviceinterfaces/data/MediaFormat.java
           grep -n 'SabrFormatMetadata' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifestParser.java
           grep -n 'getAudioTrackId(selectedAudioFormat)' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           grep -n 'audioLogicalKey\|displayLanguage' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyTrackMapper.java
-
-          # Preserve the already-tested aa1.39 recovery/subtitle behavior.
-          grep -n 'switchNextClientNow' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/app/models/playback/controllers/ErrorFixerController.java
-          grep -n 'P19_SUBTITLE_DIRECT\|SingleSampleMediaChunk\|selected_caption_direct' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
           grep -n 'EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           ! grep -n 'EnabledTrackTypes.VIDEO_AND_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
+          grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
 
       - name: Set up Java 11
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -63,66 +54,51 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.39 test15 version
+      - name: Stamp aa1.39-test15 Video EXP version
         run: |
           set -euxo pipefail
           sed -i 's/versionCode 2408/versionCode 2423/' smarttubetv/build.gradle
           sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test15/' smarttubetv/build.gradle
           grep -n 'versionCode\|mobile-p13-aa1.39-test15\|carvideo' smarttubetv/build.gradle
 
-      - name: Build Music and Video EXP from the same patched tree
+      - name: Build SmartTube AA Video EXP APKs
         run: >-
-          ./gradlew
-          :smarttubetv:assembleStmobileDebug
-          :smarttubetv:assembleStmobileCarvideo
+          ./gradlew :smarttubetv:assembleStmobileCarvideo
           --stacktrace
           --console=plain
           --no-daemon
           --max-workers=1
           --no-parallel
 
-      - name: Prepare direct-download APK files
+      - name: Prepare direct-download Video EXP APK files
         run: |
           set -euxo pipefail
-          MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
-          VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
-          mkdir -p release-test15
+          OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
+          mkdir -p release-video-exp
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_universal.apk' -print -quit)" release-video-exp/SmartTube-AA-Video-EXP-universal.apk
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" release-video-exp/SmartTube-AA-Video-EXP-arm64-v8a.apk
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_armeabi-v7a.apk' -print -quit)" release-video-exp/SmartTube-AA-Video-EXP-armeabi-v7a.apk
+          (cd release-video-exp && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh release-video-exp
 
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_universal.apk' -print -quit)" release-test15/SmartTube-AA-Music-aa1.39-test15-universal.apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" release-test15/SmartTube-AA-Music-aa1.39-test15-arm64-v8a.apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_armeabi-v7a.apk' -print -quit)" release-test15/SmartTube-AA-Music-aa1.39-test15-armeabi-v7a.apk
-
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_universal.apk' -print -quit)" release-test15/SmartTube-AA-Video-EXP-aa1.39-test15-universal.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" release-test15/SmartTube-AA-Video-EXP-aa1.39-test15-arm64-v8a.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_armeabi-v7a.apk' -print -quit)" release-test15/SmartTube-AA-Video-EXP-aa1.39-test15-armeabi-v7a.apk
-
-          (cd release-test15 && sha256sum *.apk > SHA256SUMS.txt)
-          ls -lh release-test15
-
-      - name: Publish aa1.39-test15 prerelease
+      - name: Publish direct Video EXP APK downloads
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          TAG="aa139-test15-settings-audio"
-          TITLE="SmartTube AA aa1.39-test15 - unified settings + Video multi-audio"
+          TAG="latest-video-exp"
+          TITLE="SmartTube AA Video EXP aa1.39-test15 - latest main"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          Test obu wariantów z jednego, identycznie przygotowanego drzewa aa1.39.
+          Najnowszy automatyczny build SmartTube AA Video EXP z gałęzi main.
 
-          Wspólne dla Music i Video EXP:
-          - jeden spójny, przewijany ekran Ustawień;
-          - KONTA na samej górze;
-          - następnie pozycje mobile/Android Auto;
-          - niżej pozostałe oryginalne kategorie SmartTube;
-          - wszystkie pozycje korzystają z jednego stylu listy.
+          Pobieraj pliki APK bezpośrednio z Assets - bez ZIP-a:
+          - SmartTube-AA-Video-EXP-universal.apk - zalecany dla większości użytkowników
+          - SmartTube-AA-Video-EXP-arm64-v8a.apk - urządzenia ARM64
+          - SmartTube-AA-Video-EXP-armeabi-v7a.apk - starsze urządzenia ARMv7
 
-          Video EXP dodatkowo korzysta z tego samego aa1.39 multi-audio/SABR pipeline co Music,
-          w tym audioTrack.id / isAutoDubbed / xtags wymaganych do rozróżnienia lektora/dubbingu.
-
-          Pakiety pozostają osobne:
-          - Music: app.smarttube.mobile
-          - Video EXP: app.smarttube.mobile.carvideo
+          Video EXP używa tej samej bazy aa1.39 i tego samego multi-audio/SABR pipeline co Music,
+          ale pozostaje osobnym eksperymentalnym pakietem app.smarttube.mobile.carvideo.
           EOF
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -138,25 +114,29 @@ jobs:
               -F draft=false -F prerelease=true -f make_latest=false >/dev/null
           fi
 
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber release-test15/*
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release-video-exp/SmartTube-AA-Video-EXP-universal.apk \
+            release-video-exp/SmartTube-AA-Video-EXP-arm64-v8a.apk \
+            release-video-exp/SmartTube-AA-Video-EXP-armeabi-v7a.apk \
+            release-video-exp/SHA256SUMS.txt
 
-      - name: Upload Music universal APK
+      - name: Upload Video EXP universal APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-Music-aa1.39-test15-universal
-          path: release-test15/SmartTube-AA-Music-aa1.39-test15-universal.apk
+          name: SmartTube-AA-Video-EXP-${{ github.ref_name }}-universal
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_universal.apk
           if-no-files-found: error
 
-      - name: Upload Video EXP universal APK
+      - name: Upload Video EXP ARM64 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-Video-EXP-aa1.39-test15-universal
-          path: release-test15/SmartTube-AA-Video-EXP-aa1.39-test15-universal.apk
+          name: SmartTube-AA-Video-EXP-${{ github.ref_name }}-arm64-v8a
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_arm64-v8a.apk
           if-no-files-found: error
 
-      - name: Upload checksums
+      - name: Upload Video EXP ARMv7 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: SmartTube-AA-aa1.39-test15-SHA256SUMS
-          path: release-test15/SHA256SUMS.txt
+          name: SmartTube-AA-Video-EXP-${{ github.ref_name }}-armeabi-v7a
+          path: smarttubetv/build/outputs/apk/stmobile/carvideo/*_armeabi-v7a.apk
           if-no-files-found: error
