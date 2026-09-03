@@ -19,7 +19,11 @@ import com.liskovsoft.youtubeapi.videoinfo.models.formats.AdaptiveVideoFormat;
 import com.liskovsoft.youtubeapi.videoinfo.models.formats.VideoFormat;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import kotlin.Pair;
 
@@ -40,6 +44,13 @@ public abstract class VideoInfoServiceBase {
             return;
         }
 
+        // V14: YouTube now emits normal + DRC + voice-boost representations with
+        // the same itag. Legacy SABR cannot safely treat those as independent
+        // representations of one adaptive group. Keep the normal variant when it
+        // exists and retain DRC/VB only when it is the sole available variant.
+        normalizeAdaptiveAudioVariants(videoInfo);
+        logAdaptiveAudioCatalog(videoInfo);
+
         decipherFormats(videoInfo);
 
         if (videoInfo.isLive()) {
@@ -48,6 +59,132 @@ public abstract class VideoInfoServiceBase {
         }
 
         videoInfo.setVisitorCookie(getData().getVisitorCookie());
+    }
+
+
+    private void normalizeAdaptiveAudioVariants(VideoInfo videoInfo) {
+        List<AdaptiveVideoFormat> formats = videoInfo.getAdaptiveFormats();
+        if (formats == null || formats.isEmpty()) {
+            return;
+        }
+
+        Set<String> baseAudioKeys = new HashSet<>();
+        Set<String> logicalTracks = new HashSet<>();
+        int audioBefore = 0;
+
+        for (AdaptiveVideoFormat format : formats) {
+            if (!isAudioFormat(format)) {
+                continue;
+            }
+
+            audioBefore++;
+            String logicalTrack = audioLogicalTrackKey(format);
+            logicalTracks.add(logicalTrack);
+            if (!format.isDrc() && !format.isVb()) {
+                baseAudioKeys.add(audioVariantKey(format));
+            }
+        }
+
+        int removed = 0;
+        List<AdaptiveVideoFormat> normalized = new ArrayList<>(formats.size());
+        for (AdaptiveVideoFormat format : formats) {
+            boolean removableVariant = isAudioFormat(format)
+                    && (format.isDrc() || format.isVb())
+                    && baseAudioKeys.contains(audioVariantKey(format));
+            if (removableVariant) {
+                removed++;
+            } else {
+                normalized.add(format);
+            }
+        }
+
+        if (removed > 0) {
+            videoInfo.setAdaptiveFormats(normalized);
+        }
+
+        if (audioBefore > 0) {
+            Log.d(TAG,
+                    "V14_AUDIO_NORMALIZE audioBefore=%s audioAfter=%s removedVariants=%s logicalTracks=%s",
+                    audioBefore, audioBefore - removed, removed, logicalTracks.size());
+        }
+    }
+
+    private static boolean isAudioFormat(VideoFormat format) {
+        String mimeType = format != null ? format.getMimeType() : null;
+        return mimeType != null && mimeType.startsWith("audio/");
+    }
+
+    private static String audioVariantKey(VideoFormat format) {
+        return audioLogicalTrackKey(format) + "|" + format.getITag() + "|"
+                + (format.getMimeType() != null ? format.getMimeType() : "");
+    }
+
+    private static String audioLogicalTrackKey(VideoFormat format) {
+        if (format == null) {
+            return "default";
+        }
+
+        String trackId = format.getAudioTrackId();
+        if (trackId != null && !trackId.isEmpty()) {
+            return trackId;
+        }
+
+        String language = format.getLanguage();
+        return language != null && !language.isEmpty() ? language : "default";
+    }
+
+    private void logAdaptiveAudioCatalog(VideoInfo videoInfo) {
+        List<AdaptiveVideoFormat> formats = videoInfo.getAdaptiveFormats();
+        if (formats == null || formats.isEmpty()) {
+            return;
+        }
+
+        Map<String, List<AdaptiveVideoFormat>> tracks = new LinkedHashMap<>();
+        for (AdaptiveVideoFormat format : formats) {
+            if (!isAudioFormat(format)) {
+                continue;
+            }
+            String key = audioLogicalTrackKey(format);
+            List<AdaptiveVideoFormat> trackFormats = tracks.get(key);
+            if (trackFormats == null) {
+                trackFormats = new ArrayList<>();
+                tracks.put(key, trackFormats);
+            }
+            trackFormats.add(format);
+        }
+
+        String videoId = videoInfo.getVideoDetails() != null
+                ? videoInfo.getVideoDetails().getVideoId() : "-";
+        Log.d(TAG, "V15_AUDIO_CATALOG video=%s logicalTracks=%s representations=%s",
+                videoId, tracks.size(), countAudioFormats(formats));
+
+        for (Map.Entry<String, List<AdaptiveVideoFormat>> entry : tracks.entrySet()) {
+            List<AdaptiveVideoFormat> variants = entry.getValue();
+            AdaptiveVideoFormat first = variants.isEmpty() ? null : variants.get(0);
+            StringBuilder details = new StringBuilder();
+            for (AdaptiveVideoFormat variant : variants) {
+                if (details.length() > 0) details.append(',');
+                details.append(variant.getITag())
+                        .append('@').append(valueOrDash(variant.getLmt()))
+                        .append(variant.isDrc() ? "/DRC" : "")
+                        .append(variant.isVb() ? "/VB" : "");
+            }
+            Log.d(TAG, "V16_AUDIO_TRACK id=%s name=%s language=%s default=%s autoDubbed=%s variants=[%s]",
+                    entry.getKey(),
+                    first != null ? valueOrDash(first.getAudioTrackDisplayName()) : "-",
+                    first != null ? valueOrDash(first.getLanguage()) : "-",
+                    first != null && first.isAudioTrackDefault(),
+                    first != null && first.isAudioTrackAutoDubbed(),
+                    details.toString());
+        }
+    }
+
+    private static int countAudioFormats(List<AdaptiveVideoFormat> formats) {
+        int count = 0;
+        for (AdaptiveVideoFormat format : formats) {
+            if (isAudioFormat(format)) count++;
+        }
+        return count;
     }
 
     private void decipherFormats(VideoInfo videoInfo) {

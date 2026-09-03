@@ -23,7 +23,11 @@ import java.util.List;
 public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
     private static final String TAG = ErrorFixerController.class.getSimpleName();
     private static final long STREAM_END_THRESHOLD_MS = 180_000;
+    // V13: recover a silent startup stall before the mobile-only 8s watchdog blindly reloads SABR.
+    // This controller is shared by TV/mobile, so the policy applies globally rather than by language.
+    private static final long STARTUP_PROGRESSIVE_FALLBACK_MS = 7_000;
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
+    private final Runnable mStartupProgressiveFallback = this::runStartupProgressiveFallback;
     private VideoLoaderController mVideoLoaderController;
 
     @Override
@@ -57,8 +61,27 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             // Long loading subtitles cause hangs
             disableSubtitles();
             mVideoLoaderController.reloadVideo();
+        } else if (!mBufferingDetector.isPlayable()
+                && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+            // The one-shot muxed recovery also stalled. Disable it before client rotation,
+            // otherwise the sticky fallback flag would select the same URL again.
+            Log.d(TAG, "V13_GLOBAL_FALLBACK progressive long-buffer failed; rotate client");
+            MobileDiagnostics.session("V13_GLOBAL_FALLBACK", "progressive long-buffer failed");
+            mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
+            YouTubeServiceManager.instance().applyNoPlaybackFix();
+            mVideoLoaderController.reloadVideo();
+        } else if (!mBufferingDetector.isPlayable()
+                && mVideoLoaderController.tryPreserveMultiAudioRecovery("long-buffer")) {
+            Log.d(TAG, "V16_MULTI_AUDIO long buffering -> preserve adaptive audio");
+            MobileDiagnostics.session("V16_MULTI_AUDIO", "long-buffer -> adaptive-client-rotation");
+        } else if (!mBufferingDetector.isPlayable()
+                && mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("long-buffer")) {
+            // V14: replace the stalled source from cached format info immediately.
+            // Do not issue another /player request or start the same SABR twice.
+            Log.d(TAG, "V14_FAST_START long buffering -> cached progressive");
+            MobileDiagnostics.session("V14_FAST_START", "long-buffer -> cached-progressive");
         } else if (!mBufferingDetector.isPlayable()) {
-            // Current upstream recovery for a client that never became playable.
+            // No muxed survival URL exists: continue with upstream rotation.
             MessageHelpers.showLongMessage(getContext(), "Fixing stalled client...");
             YouTubeServiceManager.instance().applyNoPlaybackFix();
             mVideoLoaderController.reloadVideo();
@@ -72,38 +95,75 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onBuffering() {
         mBufferingDetector.onStartBuffering();
+        if (!mBufferingDetector.isPlayable()) {
+            Utils.removeCallbacks(mStartupProgressiveFallback);
+            Utils.postDelayed(mStartupProgressiveFallback, STARTUP_PROGRESSIVE_FALLBACK_MS);
+        }
     }
 
     @Override
     public void onSeekEnd() {
         mBufferingDetector.reset();
+        Utils.removeCallbacks(mStartupProgressiveFallback);
         // Detect a stall that starts immediately after a seek.
         mBufferingDetector.onStartBuffering();
     }
 
     @Override
     public void onPlay() {
+        Utils.removeCallbacks(mStartupProgressiveFallback);
         mBufferingDetector.onStopBuffering();
     }
 
     @Override
     public void onPause() {
+        // A user/app pause can happen while the source is still BUFFERING.
+        // Keep the startup recovery armed until the engine is no longer loading.
+        if (getPlayer() == null || !getPlayer().isLoading()) {
+            Utils.removeCallbacks(mStartupProgressiveFallback);
+        }
         mBufferingDetector.onStopBuffering();
     }
 
     @Override
     public void onNewVideo(Video item) {
+        Utils.removeCallbacks(mStartupProgressiveFallback);
         mBufferingDetector.start();
+        // Arm recovery from the media lifecycle itself, not only from a buffering
+        // callback. Some legacy ExoPlayer/SABR stalls never deliver that callback
+        // reliably, which is exactly what the aa1.28 diagnostic log exposed.
+        Utils.postDelayed(mStartupProgressiveFallback, STARTUP_PROGRESSIVE_FALLBACK_MS);
     }
 
     @Override
     public void onFinish() {
+        Utils.removeCallbacks(mStartupProgressiveFallback);
         mBufferingDetector.reset();
     }
 
     @Override
     public void onEngineReleased() {
+        Utils.removeCallbacks(mStartupProgressiveFallback);
         mBufferingDetector.reset();
+    }
+
+    private void runStartupProgressiveFallback() {
+        if (getPlayer() == null || !getPlayer().isLoading()
+                || mVideoLoaderController == null
+                || mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+            return;
+        }
+
+        if (mVideoLoaderController.tryPreserveMultiAudioRecovery("startup-stall")) {
+            Log.d(TAG, "V16_MULTI_AUDIO startup stall -> preserve adaptive audio");
+            MobileDiagnostics.session("V16_MULTI_AUDIO", "startup-stall -> adaptive-client-rotation");
+            return;
+        }
+
+        if (mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("startup-stall")) {
+            Log.d(TAG, "V14_FAST_START startup stall -> cached progressive");
+            MobileDiagnostics.session("V14_FAST_START", "startup-stall -> cached-progressive");
+        }
     }
 
     private void runEngineErrorAction(int type, int rendererIndex, Throwable error) {
@@ -189,15 +249,23 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 disableSubtitles(); // Response code: 429
             } else if (isGeneralError && getPlayerTweaksData().isHighBitrateFormatsEnabled()) {
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
-            } else if (!mBufferingDetector.isPlayable()) { // Response code: 403
-                if (forbiddenStream && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
-                    // The muxed fallback itself was rejected before becoming playable. Do not loop it.
-                    Log.d(TAG, "V10_PROGRESSIVE fallback rejected before play; return to client rotation");
-                    MobileDiagnostics.session("V10_PROGRESSIVE", "fallback rejected before play");
+            } else if (!mBufferingDetector.isPlayable()) {
+                if (mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+                    // The muxed fallback itself failed before becoming playable. Do not loop it,
+                    // regardless of whether the failure surfaced as 403, 404, parser error, etc.
+                    Log.d(TAG, "V13_GLOBAL_FALLBACK progressive rejected before play; rotate client");
+                    MobileDiagnostics.session("V13_GLOBAL_FALLBACK", "progressive rejected before play");
                     mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
                     YouTubeServiceManager.instance().applyNoPlaybackFix();
+                } else if (mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("source-error")) {
+                    // Any startup source failure gets one direct/muxed attempt before engine/client
+                    // rotation. Open it from cached metadata immediately and stop this error action
+                    // so the generic reload below cannot undo the source switch.
+                    Log.d(TAG, "V14_FAST_START startup source error -> cached progressive");
+                    MobileDiagnostics.session("V14_FAST_START", "source-error -> cached-progressive");
+                    return;
                 } else {
-                    // Current upstream behavior: rotate to another engine/client when this one never worked.
+                    // No direct survival URL exists: preserve upstream recovery.
                     switchNextEngine();
                     restartEngine = true;
                     showMessage = true;
@@ -208,11 +276,13 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 MobileDiagnostics.session("V10_PROGRESSIVE", "fallback got mid-stream 403; disabling");
                 mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
                 YouTubeServiceManager.instance().applyNoPlaybackFix();
-            } else if (forbiddenStream && mVideoLoaderController.enableProgressiveFallbackForCurrentVideo()) {
-                // V10: the high-quality DASH source played and then GVS rejected a later range.
-                // Keep the client/session intact and reload the same item through its muxed URL.
-                Log.d(TAG, "V10_PROGRESSIVE mid-stream 403: progressive fallback armed");
-                MobileDiagnostics.session("V10_PROGRESSIVE", "mid-stream 403 fallback armed");
+            } else if (forbiddenStream
+                    && mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("midstream-403")) {
+                // The high-quality source played and then GVS rejected a later range.
+                // Switch to the already-deciphered muxed URL without a second /player request.
+                Log.d(TAG, "V14_FAST_START mid-stream 403 -> cached progressive");
+                MobileDiagnostics.session("V14_FAST_START", "midstream-403 -> cached-progressive");
+                return;
             } else {
                 YouTubeServiceManager.instance().applyNoPlaybackFix(); // Response code: 403
             }

@@ -116,6 +116,10 @@ public class VideoInfo {
         return mAdaptiveFormats;
     }
 
+    public void setAdaptiveFormats(List<AdaptiveVideoFormat> adaptiveFormats) {
+        mAdaptiveFormats = adaptiveFormats;
+    }
+
     public List<RegularVideoFormat> getRegularFormats() {
         return mRegularFormats;
     }

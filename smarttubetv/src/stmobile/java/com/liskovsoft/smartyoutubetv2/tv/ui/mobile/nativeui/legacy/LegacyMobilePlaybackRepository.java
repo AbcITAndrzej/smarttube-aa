@@ -147,6 +147,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     private final Runnable applyPendingScopedSkip = this::applyPendingScopedSkip;
     private String preferredAudioAppliedMediaId;
     private String preferredAudioAttemptSignature;
+    private String lastAudioCatalogDiagSignature;
 
     private Player.EventListener stateListener;
 
@@ -273,10 +274,25 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         if (loader != null) loader.reloadVideoAfterStreamRefresh();
                     }
 
-                    @Override public void reloadForStartupWatchdog() {
+                    @Override public boolean recoverStartupWatchdog() {
                         VideoLoaderController loader = presenter == null ? null
                                 : presenter.getController(VideoLoaderController.class);
-                        if (loader != null) loader.reloadVideo();
+                        if (loader == null) return false;
+
+                        // Common ErrorFixer may have switched sources at 7 s already.
+                        // Do not undo that recovery with another metadata/SABR reload.
+                        if (loader.isProgressiveFallbackActiveForCurrentVideo()) return true;
+                        if (loader.tryPreserveMultiAudioRecovery("mobile-watchdog")) {
+                            MobileDiagnostics.info("V16-MultiAudio",
+                                    "mobile watchdog preserved adaptive multi-audio");
+                            return true;
+                        }
+                        if (loader.activateProgressiveFallbackForCurrentVideo("mobile-watchdog")) {
+                            return true;
+                        }
+
+                        loader.reloadVideo();
+                        return false;
                     }
 
                     @Override public void onStartupTimeout() {
@@ -1197,10 +1213,14 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         }
         List<MobileTrack> videoTracks = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getVideoFormats(), MobileTrack.Type.VIDEO);
-        List<FormatItem> audioFormats = controller == null ? Collections.emptyList()
+        List<FormatItem> rawAudioFormats = controller == null ? Collections.emptyList()
                 : controller.getAudioFormats();
+        // Do not expose codec/bitrate/DRC representations as fake languages.
+        // Preferred-language selection and the picker operate on the same logical rows.
+        List<FormatItem> audioFormats = trackMapper.logicalAudioFormats(rawAudioFormats);
         if (applyLegacyPreferredAudio) applyPreferredAudio(audioFormats);
         List<MobileTrack> audio = trackMapper.map(audioFormats, MobileTrack.Type.AUDIO);
+        logAudioCatalogIfChanged(rawAudioFormats, audio);
         List<MobileTrack> subtitles = controller == null ? Collections.emptyList()
                 : trackMapper.map(controller.getSubtitleFormats(), MobileTrack.Type.SUBTITLE);
         String id = radioPlayback ? radioMediaId
@@ -1223,6 +1243,42 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
+    }
+
+    private void logAudioCatalogIfChanged(List<FormatItem> rawFormats, List<MobileTrack> logicalTracks) {
+        StringBuilder signature = new StringBuilder();
+        if (logicalTracks != null) {
+            for (MobileTrack track : logicalTracks) {
+                if (track == null) continue;
+                signature.append(track.getId()).append('|')
+                        .append(track.getLanguage()).append('|')
+                        .append(track.isSelected()).append(';');
+            }
+        }
+        String value = signature.toString();
+        if (value.equals(lastAudioCatalogDiagSignature)) {
+            return;
+        }
+        lastAudioCatalogDiagSignature = value;
+
+        VideoLoaderController loader = presenter == null ? null
+                : presenter.getController(VideoLoaderController.class);
+        boolean progressive = loader != null && loader.isProgressiveFallbackActiveForCurrentVideo();
+        MobileDiagnostics.info("V15-AudioMap",
+                "catalog changed raw=" + (rawFormats == null ? 0 : rawFormats.size())
+                        + " logical=" + (logicalTracks == null ? 0 : logicalTracks.size())
+                        + " progressive=" + progressive);
+
+        if (logicalTracks != null) {
+            for (MobileTrack track : logicalTracks) {
+                if (track == null) continue;
+                MobileDiagnostics.info("V15-AudioMap",
+                        "track id=" + track.getId()
+                                + " label=" + track.getLabel()
+                                + " language=" + track.getLanguage()
+                                + " selected=" + track.isSelected());
+            }
+        }
     }
 
     private void applyPreferredAudio(List<FormatItem> formats) {

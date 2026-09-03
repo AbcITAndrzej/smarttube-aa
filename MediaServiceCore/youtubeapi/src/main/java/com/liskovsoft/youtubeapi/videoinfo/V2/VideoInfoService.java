@@ -110,7 +110,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
         VideoInfo result = firstInfoWith(videoId, clickTrackingParams,
                 info -> isUsablePlaybackResult(info, videoId));
 
-        return result != null ? result : firstInfoWith(videoId, clickTrackingParams, info -> true);
+        // Do not feed a nominally "OK" but media-empty response to the player.
+        // Keep an unplayable response only so the UI can still show YouTube's reason.
+        return result != null ? result : firstInfoWith(videoId, clickTrackingParams,
+                info -> info != null && info.isUnplayable());
     }
 
     private boolean isUsablePlaybackResult(VideoInfo info, String videoId) {
@@ -119,17 +122,27 @@ public class VideoInfoService extends VideoInfoServiceBase {
         }
 
         AppClient client = info.getClient();
-        if (client == null || !client.isWebPotRequired()) {
-            return true;
+        if (client == null) {
+            return false;
         }
 
+        boolean directMedia = hasDirectPlaybackMedia(info);
         boolean completeSabr = info.getAdaptiveFormats() != null
                 && !info.getAdaptiveFormats().isEmpty()
                 && hasText(info.getServerAbrStreamingUrl())
                 && hasText(info.getVideoPlaybackUstreamerConfig());
-        String poToken = null;
 
-        if (completeSabr) {
+        // The legacy SABR implementation in this app is validated only for the
+        // WEB-family PoToken path. URL-less SABR returned by another client can
+        // look playable to the model and still produce "Empty format info".
+        if (!client.isWebPotRequired()) {
+            Log.d(TAG, "V13_GLOBAL_FALLBACK candidate client=%s direct=%s sabr=%s usable=%s",
+                    client.getClientName(), directMedia, completeSabr, directMedia);
+            return directMedia;
+        }
+
+        String poToken = null;
+        if (directMedia || completeSabr) {
             try {
                 poToken = PoTokenGate.getPoToken(client, videoId);
             } catch (RuntimeException error) {
@@ -138,9 +151,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
             }
         }
 
-        boolean usable = completeSabr && hasText(poToken);
-        Log.d(TAG, "V11_SABR_POT candidate client=%s completeSabr=%s pot=%s potLen=%s usable=%s",
-                client.getClientName(), completeSabr, hasText(poToken), poToken != null ? poToken.length() : 0, usable);
+        boolean usable = (directMedia || completeSabr) && hasText(poToken);
+        Log.d(TAG, "V13_GLOBAL_FALLBACK candidate client=%s direct=%s completeSabr=%s pot=%s potLen=%s usable=%s",
+                client.getClientName(), directMedia, completeSabr, hasText(poToken),
+                poToken != null ? poToken.length() : 0, usable);
 
         if (usable) {
             // Reused by transformFormats; PoTokenGate also keeps the matching
@@ -149,6 +163,34 @@ public class VideoInfoService extends VideoInfoServiceBase {
         }
 
         return usable;
+    }
+
+    private static boolean hasDirectPlaybackMedia(VideoInfo info) {
+        if (info == null) {
+            return false;
+        }
+
+        if (hasText(info.getDashManifestUrl()) || hasText(info.getHlsManifestUrl())) {
+            return true;
+        }
+
+        if (info.getRegularFormats() != null) {
+            for (com.liskovsoft.youtubeapi.videoinfo.models.formats.RegularVideoFormat format : info.getRegularFormats()) {
+                if (format != null && !format.isBroken() && hasText(format.getMimeType())) {
+                    return true;
+                }
+            }
+        }
+
+        if (info.getAdaptiveFormats() != null) {
+            for (com.liskovsoft.youtubeapi.videoinfo.models.formats.AdaptiveVideoFormat format : info.getAdaptiveFormats()) {
+                if (format != null && !format.isBroken() && hasText(format.getMimeType())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private static boolean hasText(String value) {

@@ -27,7 +27,9 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import io.reactivex.disposables.Disposable;
 
@@ -45,6 +47,8 @@ public class VideoLoaderController extends BasePlayerController {
     // V10: one-video survival fallback. Armed only after a real mid-stream 403.
     private String mProgressiveFallbackVideoId;
     private long mProgressiveFallbackPositionMs;
+    private String mMultiAudioRecoveryVideoId;
+    private int mMultiAudioRecoveryAttempts;
     private MediaItemFormatInfo mLastFormatInfo;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
@@ -449,6 +453,28 @@ public class VideoLoaderController extends BasePlayerController {
         return true;
     }
 
+    /**
+     * Switch the current item to the already-deciphered muxed URL without another
+     * /player request. This is the fast recovery path for silent SABR startup stalls.
+     */
+    public boolean activateProgressiveFallbackForCurrentVideo(String reason) {
+        if (getPlayer() == null || mLastFormatInfo == null
+                || isProgressiveFallbackActiveForCurrentVideo()
+                || !enableProgressiveFallbackForCurrentVideo()) {
+            return false;
+        }
+
+        MediaItemFormatInfo cachedInfo = mLastFormatInfo;
+        String why = reason != null ? reason : "unknown";
+        Log.d(TAG, "V14_FAST_START cached progressive reason=%s", why);
+        MobileDiagnostics.session("V14_FAST_START", "cached-progressive reason=" + why);
+
+        // processFormatInfo sees the armed flag and opens the URL list directly.
+        // No network call, no second PoToken generation, no repeated SABR startup.
+        processFormatInfo(cachedInfo);
+        return true;
+    }
+
     public boolean isProgressiveFallbackActiveForCurrentVideo() {
         Video video = getVideo();
         return video != null && Helpers.equals(mProgressiveFallbackVideoId, video.videoId);
@@ -461,6 +487,39 @@ public class VideoLoaderController extends BasePlayerController {
         }
         mProgressiveFallbackVideoId = null;
         mProgressiveFallbackPositionMs = 0;
+    }
+
+    public int getLogicalAdaptiveAudioTrackCount() {
+        MediaItemFormatInfo info = mLastFormatInfo;
+        if (info == null || info.getAdaptiveFormats() == null) return 0;
+        Set<String> tracks = new HashSet<>();
+        for (MediaFormat format : info.getAdaptiveFormats()) {
+            if (format == null || format.getMimeType() == null
+                    || !format.getMimeType().toLowerCase().startsWith("audio/")) continue;
+            String language = format.getLanguage();
+            if (language != null && !language.trim().isEmpty()) tracks.add(language.trim());
+        }
+        return tracks.size();
+    }
+
+    public boolean tryPreserveMultiAudioRecovery(String reason) {
+        Video video = getVideo();
+        int tracks = getLogicalAdaptiveAudioTrackCount();
+        if (video == null || video.isLive || tracks <= 1) return false;
+        if (!Helpers.equals(mMultiAudioRecoveryVideoId, video.videoId)) {
+            mMultiAudioRecoveryVideoId = video.videoId;
+            mMultiAudioRecoveryAttempts = 0;
+        }
+        if (mMultiAudioRecoveryAttempts >= 1) return false;
+        mMultiAudioRecoveryAttempts++;
+        String why = reason != null ? reason : "unknown";
+        Log.d(TAG, "V16_MULTI_AUDIO preserve tracks=%s attempt=%s reason=%s",
+                tracks, mMultiAudioRecoveryAttempts, why);
+        MobileDiagnostics.session("V16_MULTI_AUDIO", "preserve tracks=" + tracks
+                + " attempt=" + mMultiAudioRecoveryAttempts + " reason=" + why);
+        YouTubeServiceManager.instance().applyNoPlaybackFix();
+        reloadVideo(250);
+        return true;
     }
 
     private boolean shouldUseProgressiveFallback(MediaItemFormatInfo formatInfo) {
@@ -536,6 +595,14 @@ public class VideoLoaderController extends BasePlayerController {
     }
 
     public void reloadVideo() {
+        if (isProgressiveFallbackActiveForCurrentVideo()) {
+            // Mobile's 8 s watchdog and other generic recovery callbacks may arrive
+            // just after the 7 s cached source switch. Do not undo it by fetching
+            // /player again and restarting SABR.
+            Log.d(TAG, "V14_FAST_START suppress generic reload while progressive is active");
+            MobileDiagnostics.session("V14_FAST_START", "suppress-reload progressive-active");
+            return;
+        }
         reloadVideo(1_000);
     }
 
