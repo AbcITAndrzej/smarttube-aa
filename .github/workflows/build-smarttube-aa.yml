@@ -7,7 +7,7 @@ on:
       - "main"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-stmobile:
@@ -65,21 +65,70 @@ jobs:
           --max-workers=1
           --no-parallel
 
-      - name: Upload ARM64 APK
+      - name: Prepare direct-download APK files
+        run: |
+          set -euxo pipefail
+          OUT=smarttubetv/build/outputs/apk/stmobile/debug
+          mkdir -p release-apk
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_universal.apk' -print -quit)" release-apk/SmartTube-AA-Music-universal.apk
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" release-apk/SmartTube-AA-Music-arm64-v8a.apk
+          cp "$(find "$OUT" -maxdepth 1 -type f -name '*_armeabi-v7a.apk' -print -quit)" release-apk/SmartTube-AA-Music-armeabi-v7a.apk
+          (cd release-apk && sha256sum *.apk > SHA256SUMS.txt)
+          ls -lh release-apk
+
+      - name: Publish direct APK downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="latest-main"
+          TITLE="SmartTube AA Music aa1.39-test14 - latest main"
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          Najnowszy automatyczny build SmartTube AA Music z gałęzi main.
+
+          Pobieraj pliki APK bezpośrednio z Assets - bez ZIP-a:
+          - SmartTube-AA-Music-universal.apk - zalecany dla większości użytkowników
+          - SmartTube-AA-Music-arm64-v8a.apk - urządzenia ARM64
+          - SmartTube-AA-Music-armeabi-v7a.apk - starsze urządzenia ARMv7
+
+          Wariant Video EXP jest prowadzony osobno i nie jest jeszcze publikowany przez workflow aa1.39.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -f make_latest=false >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" \
+              -F draft=false -F prerelease=false -f make_latest=false >/dev/null
+          fi
+
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            release-apk/SmartTube-AA-Music-universal.apk \
+            release-apk/SmartTube-AA-Music-arm64-v8a.apk \
+            release-apk/SmartTube-AA-Music-armeabi-v7a.apk \
+            release-apk/SHA256SUMS.txt
+
+      - name: Upload ARM64 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SmartTube-AA-${{ github.ref_name }}-arm64-v8a
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_arm64-v8a.apk
           if-no-files-found: error
 
-      - name: Upload universal APK
+      - name: Upload universal APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SmartTube-AA-${{ github.ref_name }}-universal
           path: smarttubetv/build/outputs/apk/stmobile/debug/*_universal.apk
           if-no-files-found: error
 
-      - name: Upload ARMv7 APK
+      - name: Upload ARMv7 APK to Actions archive
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SmartTube-AA-${{ github.ref_name }}-armeabi-v7a
