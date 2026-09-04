@@ -1,0 +1,170 @@
+name: Build production aa1.41.1 update fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "updates/**"
+      - "smarttubetv/src/stmobile/res/values/update_urls.xml"
+      - "smarttubetv/src/carvideo/res/values/update_urls.xml"
+      - ".github/workflows/build-production-update-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout production source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Validate update manifests
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          expected = {
+              "updates/music.json": (2427, "SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk"),
+              "updates/video-exp.json": (2427, "SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk"),
+          }
+
+          for path, (expected_code, expected_asset) in expected.items():
+              data = json.loads(Path(path).read_text(encoding="utf-8"))
+              assert isinstance(data, dict) and isinstance(data.get("package"), dict), path
+              versions = [(name, value) for name, value in data.items() if name != "package"]
+              assert versions, path
+              for name, value in versions:
+                  assert isinstance(value, dict), f"{path}: {name} must be an object"
+                  assert isinstance(value.get("versionCode"), int), f"{path}: invalid versionCode"
+              assert max(value["versionCode"] for _, value in versions) == expected_code, path
+              package = data["package"]
+              assert expected_asset in package.get("downloadUrl", ""), path
+              abi_urls = package.get("downloadUrlList_arm64-v8a")
+              assert isinstance(abi_urls, list) and abi_urls and expected_asset in abi_urls[0], path
+              print(f"OK: {path}")
+          PY
+
+      - name: Apply aa1.41 production patches
+        run: |
+          set -euxo pipefail
+          python3 .github/aa140_apply_vod_eos_guard.py
+          python3 .github/aa141_apply_lockscreen_media_controls.py
+          grep -n 'ACTION_SKIP_TO_PREVIOUS\|ACTION_SKIP_TO_NEXT' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/background/MobileMediaSessionManager.java
+          grep -n 'if (periodEnded && loadPositionUs >= periodDurationUs)' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
+
+      - name: Set up Java 11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: gradle
+
+      - name: Restore stable SmartTube AA signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SMARTTUBE_AA_SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${SIGNING_KEYSTORE_B64:-}"
+          KEYSTORE="$RUNNER_TEMP/smarttube-aa-signing.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          ACTUAL_FP="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+          echo "Signing certificate SHA-256: $ACTUAL_FP"
+          test "$ACTUAL_FP" = "$EXPECTED_FP"
+
+          cat > keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          chmod 600 keystore.properties
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Stamp aa1.41.1 update-fix version
+        run: |
+          set -euxo pipefail
+          sed -i 's/versionCode 2408/versionCode 2427/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.41.1-update-fix/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.41.1-update-fix\|carvideo' smarttubetv/build.gradle
+
+      - name: Build Music and Video EXP production APKs
+        run: >-
+          ./gradlew :smarttubetv:assembleStmobileDebug :smarttubetv:assembleStmobileCarvideo
+          --stacktrace
+          --console=plain
+          --no-daemon
+          --max-workers=1
+          --no-parallel
+
+      - name: Prepare production ARM64 APKs
+        run: |
+          set -euxo pipefail
+          MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
+          VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
+          mkdir -p production-apk
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk
+          ls -lh production-apk
+
+      - name: Verify production signing certificate
+        run: |
+          set -euo pipefail
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          for APK in production-apk/*.apk; do
+            ACTUAL_FP="$(keytool -printcert -jarfile "$APK" | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+            echo "$APK -> $ACTUAL_FP"
+            test "$ACTUAL_FP" = "$EXPECTED_FP"
+          done
+
+      - name: Publish production update-fix release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="aa1.41.1-update-fix"
+          TITLE="SmartTube AA aa1.41.1 - production (update checker fix)"
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          Produkcyjna poprawka aa1.41.1 dla SmartTube AA Music i Video EXP.
+
+          Zmiany:
+          - naprawiony przycisk „Sprawdź aktualizacje” — oba warianty korzystają z manifestów utrzymywanych w tym repozytorium zamiast z upstreamowego feedu SmartTube,
+          - osobny kanał aktualizacji dla Music i osobny dla Video EXP,
+          - zachowane poprawki aa1.41 do kontrolek ekranu blokady,
+          - versionCode 2427,
+          - ten sam stabilny certyfikat podpisu SHA-256 co poprzednie wydania SmartTube AA.
+
+          Użytkownicy aa1.41-lockscreen-test1 muszą tę wersję zainstalować ręcznie jeden raz, ponieważ stary APK ma zaszyty upstreamowy adres aktualizacji. Od aa1.41.1 kolejne aktualizacje mogą być wykrywane przez przycisk „Sprawdź aktualizacje”.
+          EOF
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+              production-apk/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F draft=false -F prerelease=false -f make_latest=true >/dev/null
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "$TITLE" --notes-file "$NOTES_FILE" --draft
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
+              production-apk/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -F draft=false -F prerelease=false -f make_latest=true >/dev/null
+          fi

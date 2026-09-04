@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="update_urls">
-        <item>https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/music.json</item>
+        <item>https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/video-exp.json</item>
     </string-array>
 </resources>

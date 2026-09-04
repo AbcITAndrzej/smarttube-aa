@@ -1,0 +1,16 @@
+{
+  "package": {
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk",
+    "downloadUrlList_arm64-v8a": [
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk"
+    ]
+  },
+  "aa1.41.1-update-fix-video-exp": {
+    "versionCode": 2427,
+    "changelog": [
+      "Naprawiono przycisk Sprawdź aktualizacje: Video EXP korzysta teraz z własnego manifestu SmartTube AA.",
+      "Oddzielono kanały aktualizacji Video EXP i Music, aby warianty nie mogły się pomylić.",
+      "Zachowano poprawki aa1.41 do sterowania z ekranu blokady oraz ten sam produkcyjny certyfikat podpisu."
+    ]
+  }
+}
