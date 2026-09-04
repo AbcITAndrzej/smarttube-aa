@@ -129,42 +129,54 @@ jobs:
             test "$ACTUAL_FP" = "$EXPECTED_FP"
           done
 
-      - name: Publish production update-fix release
+      - name: Publish stable production release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
           TAG="aa1.41.1-update-fix"
-          TITLE="SmartTube AA aa1.41.1 - production (update checker fix)"
+          TITLE="SmartTube AA aa1.41.1 — wersja stabilna"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          Produkcyjna poprawka aa1.41.1 dla SmartTube AA Music i Video EXP.
+          Stabilne wydanie produkcyjne SmartTube AA aa1.41.1 dla dwóch wariantów: Music oraz Video EXP.
 
-          Zmiany:
-          - naprawiony przycisk „Sprawdź aktualizacje” — oba warianty korzystają z manifestów utrzymywanych w tym repozytorium zamiast z upstreamowego feedu SmartTube,
-          - osobny kanał aktualizacji dla Music i osobny dla Video EXP,
-          - zachowane poprawki aa1.41 do kontrolek ekranu blokady,
+          Do pobrania:
+          - SmartTube AA Music — podstawowy wariant do telefonu i Android Auto,
+          - SmartTube AA Video EXP — osobny wariant z eksperymentalnym obrazem w Android Auto podczas postoju.
+
+          Najważniejsze poprawki w tej wersji:
+          - naprawiony przycisk „Sprawdź aktualizacje” — Music i Video EXP mają własne manifesty aktualizacji utrzymywane w tym repozytorium,
+          - poprawione otwieranie playlist i linków sekcji w mobilnym interfejsie,
+          - poprawka crasha Shorts związanego z ponownym pobieraniem końcowego segmentu SABR i wzrostem użycia pamięci,
+          - sterowanie z ekranu blokady: poprzedni / play-pause / następny oraz metadane i grafika,
+          - zachowane logowanie do YouTube, napisy, multi-audio / polski lektor i poprawki SABR,
           - versionCode 2427,
-          - ten sam stabilny certyfikat podpisu SHA-256 co poprzednie wydania SmartTube AA.
+          - oba APK są podpisane tym samym stabilnym certyfikatem SmartTube AA co poprzednie wydania.
 
-          Użytkownicy aa1.41-lockscreen-test1 muszą tę wersję zainstalować ręcznie jeden raz, ponieważ stary APK ma zaszyty upstreamowy adres aktualizacji. Od aa1.41.1 kolejne aktualizacje mogą być wykrywane przez przycisk „Sprawdź aktualizacje”.
+          Ważne dla użytkowników aa1.41-lockscreen-test1:
+          tę wersję trzeba zainstalować ręcznie jeden raz, ponieważ poprzedni APK ma błędny adres feedu aktualizacji. Po przejściu na aa1.41.1 przycisk „Sprawdź aktualizacje” korzysta już z właściwego kanału SmartTube AA.
           EOF
 
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1 || true)"
+
+          if [ -n "$RELEASE_ID" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
               production-apk/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk \
               production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F draft=false -F prerelease=false -f make_latest=true >/dev/null
+              -f name="$TITLE" \
+              -f body="$(cat "$NOTES_FILE")" \
+              -f target_commitish="$GITHUB_SHA" \
+              -F draft=false \
+              -F prerelease=false \
+              -f make_latest=true >/dev/null
           else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-              --title "$TITLE" --notes-file "$NOTES_FILE" --draft
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" \
+            gh release create "$TAG" \
               production-apk/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk
-            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-              -F draft=false -F prerelease=false -f make_latest=true >/dev/null
+              production-apk/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes-file "$NOTES_FILE" \
+              --latest
           fi
