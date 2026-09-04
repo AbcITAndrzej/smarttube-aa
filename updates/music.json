@@ -9,6 +9,7 @@
     "versionCode": 2427,
     "changelog": [
       "Naprawiono przycisk Sprawdź aktualizacje: aplikacja korzysta teraz z własnego manifestu SmartTube AA.",
+      "Kanał aktualizacji: Music.",
       "Oddzielono kanały aktualizacji Music i Video EXP, aby warianty nie mogły się pomylić.",
       "Zachowano poprawki aa1.41 do sterowania z ekranu blokady oraz ten sam produkcyjny certyfikat podpisu."
     ]
