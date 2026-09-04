@@ -1,4 +1,5 @@
 name: Build Video EXP aa1.43 backoff + screen test
+# Trigger build after workflow registration.
 
 on:
   workflow_dispatch:
