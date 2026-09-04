@@ -1,0 +1,160 @@
+name: Build Video EXP aa1.43.1 screen-only test
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-video-exp-aa1431-test.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-video-exp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Apply aa1.42 stack plus keep-screen-only fix
+        run: |
+          set -euxo pipefail
+          python3 .github/aa140_apply_vod_eos_guard.py
+          python3 .github/aa141_apply_lockscreen_media_controls.py
+          python3 .github/aa142_apply_sabr_seek_reset.py
+          python3 .github/aa1431_apply_keep_screen_only.py
+
+          grep -n 'AA142 SABR seek reset' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
+          grep -n 'view.setKeepScreenOn(keepScreenOn)' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+          grep -n 'playbackView.setKeepScreenOn(false)' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobilePlaybackFragment.java
+
+          ! grep -R -q 'AA143 SABR backoff' \
+            exoplayer-amzn-2.10.6/library/sabr/src/main/java \
+            common/src/main/java
+          ! grep -R -q 'BACKOFF_MARKER' \
+            exoplayer-amzn-2.10.6/library/sabr/src/main/java \
+            common/src/main/java
+
+      - name: Set up Java 11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: gradle
+
+      - name: Restore stable SmartTube AA signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SMARTTUBE_AA_SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${SIGNING_KEYSTORE_B64:-}"
+          KEYSTORE="$RUNNER_TEMP/smarttube-aa-signing.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          ACTUAL_FP="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+          echo "Signing certificate SHA-256: $ACTUAL_FP"
+          test "$ACTUAL_FP" = "$EXPECTED_FP"
+
+          cat > keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          chmod 600 keystore.properties
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Stamp aa1.43.1 test version
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('smarttubetv/build.gradle')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('versionCode 2408', 'versionCode 2430', 1)
+          text = text.replace('-mobile-p13-aa1.24', '-mobile-p13-aa1.43.1-screen-only-test1', 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          grep -n 'versionCode\|aa1.43.1-screen-only-test1\|carvideo' smarttubetv/build.gradle
+
+      - name: Build SmartTube AA Video EXP ARM64
+        run: >-
+          ./gradlew :smarttubetv:assembleStmobileCarvideo
+          --stacktrace
+          --console=plain
+          --no-daemon
+          --max-workers=1
+          --no-parallel
+
+      - name: Prepare ARM64 APK
+        run: |
+          set -euxo pipefail
+          OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
+          mkdir -p test-apk
+          APK="$(find "$OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" test-apk/SmartTube-AA-Video-EXP-aa1.43.1-screen-only-test1-arm64-v8a.apk
+          ls -lh test-apk
+
+      - name: Verify APK signing certificate
+        run: |
+          set -euo pipefail
+          APK=test-apk/SmartTube-AA-Video-EXP-aa1.43.1-screen-only-test1-arm64-v8a.apk
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          ACTUAL_FP="$(keytool -printcert -jarfile "$APK" | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+          echo "$APK -> $ACTUAL_FP"
+          test "$ACTUAL_FP" = "$EXPECTED_FP"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SmartTube-AA-Video-EXP-aa1.43.1-screen-only-test1-arm64-v8a
+          path: test-apk/SmartTube-AA-Video-EXP-aa1.43.1-screen-only-test1-arm64-v8a.apk
+          if-no-files-found: error
+
+      - name: Publish test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="aa1.43.1-screen-only-test1"
+          APK="test-apk/SmartTube-AA-Video-EXP-aa1.43.1-screen-only-test1-arm64-v8a.apk"
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          SmartTube AA Video EXP — test aa1.43.1.
+
+          Zakres względem aa1.42:
+          - zachowany aa1.42 SABR seek reset,
+          - dodany wyłącznie KEEP_SCREEN_ON podczas PLAYING/BUFFERING,
+          - po pauzie/wyjściu ekran wraca do normalnego timeoutu,
+          - brak jakiejkolwiek obsługi AA143 SABR backoff / BACKOFF_MARKER.
+
+          To jest wersja testowa przed produkcją.
+          EOF
+
+          RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1 || true)"
+          if [ -n "$RELEASE_ID" ]; then
+            gh release upload "$TAG" "$APK" --repo "$GITHUB_REPOSITORY" --clobber
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="SmartTube AA Video EXP aa1.43.1 — aa1.42 + keep screen only" \
+              -f body="$(cat "$NOTES_FILE")" \
+              -f target_commitish="$GITHUB_SHA" \
+              -F draft=false \
+              -F prerelease=true >/dev/null
+          else
+            gh release create "$TAG" "$APK" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "SmartTube AA Video EXP aa1.43.1 — aa1.42 + keep screen only" \
+              --notes-file "$NOTES_FILE" \
+              --prerelease
+          fi
