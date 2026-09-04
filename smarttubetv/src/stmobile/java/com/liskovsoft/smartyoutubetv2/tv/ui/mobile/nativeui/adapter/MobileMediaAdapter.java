@@ -226,8 +226,12 @@ public final class MobileMediaAdapter extends RecyclerView.Adapter<RecyclerView.
             duration.setText(item.getDurationText());
             duration.setVisibility(item.getDurationText().isEmpty() ? View.GONE : View.VISIBLE);
             imageLoader.load(thumbnail, item.getThumbnailUrl());
-            itemView.setEnabled(item.isPlayable() || item.getKind() == MobileMediaItem.Kind.CHANNEL);
-            itemView.setAlpha(itemView.isEnabled() ? 1f : 0.5f);
+            boolean enabled = item.isPlayable()
+                    || item.getKind() == MobileMediaItem.Kind.CHANNEL
+                    || item.getKind() == MobileMediaItem.Kind.PLAYLIST
+                    || item.getKind() == MobileMediaItem.Kind.SECTION_LINK;
+            itemView.setEnabled(enabled);
+            itemView.setAlpha(enabled ? 1f : 0.5f);
             itemView.setOnClickListener(v -> listener.onMediaClicked(item));
         }
     }
