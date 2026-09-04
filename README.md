@@ -7,47 +7,48 @@ SmartTube AA to eksperymentalny fork SmartTube przygotowany do wygodnej obsługi
 
 Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do testów i celów badawczych.
 
-## Aktualna wersja produkcyjna
+## Aktualna wersja stabilna
 
-Aktualnie jako **wersję produkcyjną** projektu wskazujemy build `aa1.41-lockscreen-test1` dla architektury **ARM64-v8a**. Oba warianty zostały zbudowane z tej samej bazy kodu i mogą być zainstalowane jednocześnie, ponieważ mają różne identyfikatory pakietów.
+Aktualna **stabilna wersja produkcyjna** projektu to `aa1.41.1` dla architektury **ARM64-v8a**. Oba warianty zostały zbudowane z tej samej bazy kodu i mogą być zainstalowane jednocześnie, ponieważ mają różne identyfikatory pakietów.
 
-### SmartTube AA Music — produkcyjny
+### SmartTube AA Music — stabilny
 
 Pakiet: `app.smarttube.mobile`
 
 Gałąź produkcyjna: [`production/music`](https://github.com/AbcITAndrzej/smarttube-aa/tree/production/music)
 
-**[⬇ Pobierz aktualny produkcyjny APK — SmartTube AA Music aa1.41](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41-lockscreen-test1/SmartTube-AA-Music-aa1.41-lockscreen-test1-arm64-v8a.apk)**
+**[⬇ Pobierz stabilny APK — SmartTube AA Music aa1.41.1](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Music-aa1.41.1-update-fix-arm64-v8a.apk)**
 
 Music jest podstawowym wariantem projektu. Obsługuje muzykę, playlisty i radio w Android Auto przez `SmartTubeAutoMusicService`.
 
-### SmartTube AA Video EXP — produkcyjny wariant Video
+### SmartTube AA Video EXP — stabilny wariant Video
 
 Pakiet: `app.smarttube.mobile.carvideo`
 
 Gałąź produkcyjna: [`production/video-exp`](https://github.com/AbcITAndrzej/smarttube-aa/tree/production/video-exp)
 
-**[⬇ Pobierz aktualny produkcyjny APK — SmartTube AA Video EXP aa1.41](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41-lockscreen-test1/SmartTube-AA-Video-EXP-aa1.41-lockscreen-test1-arm64-v8a.apk)**
+**[⬇ Pobierz stabilny APK — SmartTube AA Video EXP aa1.41.1](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk)**
 
 Video EXP jest osobnym wariantem przeznaczonym do eksperymentalnego wyświetlania interfejsu i obrazu na ekranie Android Auto podczas postoju. Może być zainstalowany jednocześnie z Music.
 
-Pełna strona wydania: [`aa1.41-lockscreen-test1`](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.41-lockscreen-test1).
+Pełna strona stabilnego wydania: [`aa1.41.1`](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.41.1-update-fix).
 
-> Nazwa pliku i tagu nadal zawiera `lockscreen-test1`, ponieważ dokładnie ten sprawdzony build został wskazany jako obecna wersja produkcyjna. Linki powyżej prowadzą bezpośrednio do aktualnych plików `.apk` — nie trzeba pobierać ani rozpakowywać ZIP-a.
+> Techniczny tag i nazwy plików zawierają końcówkę `update-fix`, ponieważ aa1.41.1 naprawia kanał aktualizacji po aa1.41. Samo wydanie aa1.41.1 jest obecnie oznaczone jako stabilne i produkcyjne.
 
 ## Stan projektu
 
-| Wariant | Pakiet | Gałąź produkcyjna | Aktualny APK |
+| Wariant | Pakiet | Gałąź produkcyjna | Aktualny stabilny APK |
 | --- | --- | --- | --- |
-| **SmartTube AA Music** | `app.smarttube.mobile` | `production/music` | **aa1.41-lockscreen-test1 ARM64-v8a** |
-| **SmartTube AA Video EXP** | `app.smarttube.mobile.carvideo` | `production/video-exp` | **aa1.41-lockscreen-test1 ARM64-v8a** |
+| **SmartTube AA Music** | `app.smarttube.mobile` | `production/music` | **aa1.41.1 ARM64-v8a** |
+| **SmartTube AA Video EXP** | `app.smarttube.mobile.carvideo` | `production/video-exp` | **aa1.41.1 ARM64-v8a** |
 
-Obie gałęzie produkcyjne wskazują ten sam commit źródłowy `368c6db1f39577fe6b7ba1b1235e8571539ade1f`, z którego powstały powyższe dwa APK. To jest **jedno repozytorium i jedna wspólna baza kodu**, z której powstają dwa osobno instalowane warianty. Szczegóły: [Music i Video EXP](docs/MUSIC-AND-VIDEO.md).
+Oba warianty korzystają z jednej wspólnej bazy kodu, ale mają osobne identyfikatory pakietów oraz osobne kanały aktualizacji. Szczegóły: [Music i Video EXP](docs/MUSIC-AND-VIDEO.md).
 
-## Co zawiera obecny build produkcyjny
+## Co zawiera obecny stabilny build
 
 Wspólne dla Music i Video EXP:
 
+- naprawiony przycisk **„Sprawdź aktualizacje”** i osobne manifesty aktualizacji dla Music oraz Video EXP,
 - poprawka crasha Shorts po dojściu do końca filmu: SABR prawidłowo zgłasza `endOfStream` zamiast ponownie pobierać ostatni segment aż do `OutOfMemoryError`,
 - poprawione otwieranie playlist i linków sekcji w mobilnym interfejsie,
 - polski lektor i multi-audio,
@@ -64,6 +65,12 @@ Wspólne dla Music i Video EXP:
 - sterowanie z ekranu blokady: poprzedni / play-pause / następny oraz metadane i grafika utworu/filmu.
 
 Video EXP korzysta z tej samej warstwy `audioTrack.id` / dubbing / SABR co Music i zawiera tę samą poprawkę Shorts.
+
+### Aktualizacja z aa1.41
+
+Jeżeli masz zainstalowaną wersję `aa1.41-lockscreen-test1`, aa1.41.1 trzeba zainstalować ręcznie **jeden raz**, ponieważ stary APK ma błędny adres feedu aktualizacji. Od aa1.41.1 przycisk **„Sprawdź aktualizacje”** korzysta już z właściwego kanału SmartTube AA.
+
+Oba stabilne APK są podpisane tym samym certyfikatem SmartTube AA co wcześniejsze wydania, dzięki czemu mogą zastąpić poprzednią wersję odpowiedniego wariantu.
 
 ## Najważniejsze funkcje
 
@@ -83,11 +90,11 @@ Gałąź `main` pozostaje miejscem dalszego rozwoju. Każda zmiana na `main` mo�
 - **[Build SmartTube AA Music APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa.yml)** → aktualizuje `latest-main`,
 - **[Build SmartTube AA Video EXP APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa-video-exp.yml)** → aktualizuje `latest-video-exp`.
 
-Te automatyczne wydania z `main` są buildami rozwojowymi. **Do zwykłej instalacji zalecane są pliki wskazane wyżej w sekcji „Aktualna wersja produkcyjna”.**
+Te automatyczne wydania z `main` są buildami rozwojowymi. **Do zwykłej instalacji zalecane są stabilne pliki aa1.41.1 wskazane wyżej.**
 
 ## Jak uruchomić w Android Auto
 
-1. Pobierz odpowiedni plik APK z sekcji **Aktualna wersja produkcyjna**.
+1. Pobierz odpowiedni plik APK z sekcji **Aktualna wersja stabilna**.
 2. Zainstaluj APK ręcznie na telefonie.
 3. W SmartTube otwórz `Ustawienia → Android Auto` i wykonaj instrukcję na ekranie.
 4. Włącz tryb programisty oraz opcję „Nieznane źródła” w ustawieniach Android Auto.
