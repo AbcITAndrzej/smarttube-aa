@@ -1,5 +1,5 @@
 name: Build Video EXP aa1.43 backoff + screen test
-# Trigger build after workflow registration.
+# Trigger build after workflow registration; v2 uses robust patch anchors.
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
           python3 .github/aa140_apply_vod_eos_guard.py
           python3 .github/aa141_apply_lockscreen_media_controls.py
           python3 .github/aa142_apply_sabr_seek_reset.py
-          python3 .github/aa143_apply_sabr_backoff_keep_screen.py
+          python3 .github/aa143_apply_sabr_backoff_keep_screen_v2.py
           grep -n 'AA142 SABR seek reset' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
           grep -n 'AA143 SABR backoff wait' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/misc/SabrExtractorInput.java
           grep -n 'AA143 honouring SABR backoff' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/errors/SabrDefaultLoadErrorHandlingPolicy.java
