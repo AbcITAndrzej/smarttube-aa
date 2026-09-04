@@ -19,29 +19,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify unified settings and aa1.39 multi-audio prerequisites
+      - name: Verify unified settings prerequisites
         run: |
           set -euxo pipefail
           grep -n 'CUSTOM_PREFIX\|submitUnifiedSettings' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/fragment/MobileSettingsFragment.java
           test "$(grep -c '<androidx.recyclerview.widget.RecyclerView' smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml)" -eq 1
           ! grep -q 'mobile_android_auto_button' smarttubetv/src/stmobile/res/layout/mobile_native_fragment_settings.xml
 
-      - name: Apply same aa1.39 playback and multi-audio fix used by Music
+      - name: Apply aa1.40 playback stack with Shorts VOD EOS fix
         run: |
           set -euxo pipefail
           AUTH_FILE=MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/service/YouTubeSignInService.java
           AUTH_BEFORE=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
-          python3 .github/aa139_apply_cross_track_init.py
+          python3 .github/aa140_apply_vod_eos_guard.py
           AUTH_AFTER=$(sha256sum "$AUTH_FILE" | awk '{print $1}')
           test "$AUTH_BEFORE" = "$AUTH_AFTER"
-
+          grep -n 'if (periodEnded && loadPositionUs >= periodDurationUs)' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
+          grep -n 'out.endOfStream = true' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
           grep -n 'audioTrack: AudioTrack\|val xtags' MediaServiceCore/youtubeapi/src/main/java/com/liskovsoft/youtubeapi/innertube/models/PlayerResult.kt
-          grep -n 'getAudioTrackId' MediaServiceCore/mediaserviceinterfaces/src/main/java/com/liskovsoft/mediaserviceinterfaces/data/MediaFormat.java
-          grep -n 'SabrFormatMetadata' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifestParser.java
-          grep -n 'getAudioTrackId(selectedAudioFormat)' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
-          grep -n 'audioLogicalKey\|displayLanguage' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/legacy/LegacyTrackMapper.java
-          grep -n 'EnabledTrackTypes.VIDEO_ONLY : EnabledTrackTypes.AUDIO_ONLY' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
-          ! grep -n 'EnabledTrackTypes.VIDEO_AND_AUDIO' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/manifest/SabrManifest.java
           grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
 
       - name: Set up Java 11
@@ -77,12 +72,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.39-test15 Video EXP version
+      - name: Stamp aa1.40 Video EXP production version
         run: |
           set -euxo pipefail
-          sed -i 's/versionCode 2408/versionCode 2423/' smarttubetv/build.gradle
-          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.39-test15/' smarttubetv/build.gradle
-          grep -n 'versionCode\|mobile-p13-aa1.39-test15\|carvideo' smarttubetv/build.gradle
+          sed -i 's/versionCode 2408/versionCode 2425/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.40/' smarttubetv/build.gradle
+          grep -n 'versionCode\|mobile-p13-aa1.40\|carvideo' smarttubetv/build.gradle
 
       - name: Build SmartTube AA Video EXP APKs
         run: >-
@@ -120,32 +115,31 @@ jobs:
         run: |
           set -euxo pipefail
           TAG="latest-video-exp"
-          TITLE="SmartTube AA Video EXP aa1.39-test15 - latest main"
+          TITLE="SmartTube AA Video EXP aa1.40 - latest main"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          Najnowszy automatyczny build SmartTube AA Video EXP z gałęzi main.
+          Najnowszy automatyczny build SmartTube AA Video EXP z gałęzi main — aa1.40.
 
-          Pobieraj pliki APK bezpośrednio z Assets - bez ZIP-a:
-          - SmartTube-AA-Video-EXP-universal.apk - zalecany dla większości użytkowników
-          - SmartTube-AA-Video-EXP-arm64-v8a.apk - urządzenia ARM64
-          - SmartTube-AA-Video-EXP-armeabi-v7a.apk - starsze urządzenia ARMv7
+          Najważniejsze zmiany:
+          - naprawiony crash Shorts po dojściu do końca filmu: SABR zgłasza end-of-stream zamiast ponownie pobierać ostatni segment aż do OutOfMemoryError,
+          - naprawione otwieranie playlist i linków sekcji w mobilnym interfejsie,
+          - zachowany multi-audio, polski lektor, napisy, logowanie i wspólny pipeline SABR.
 
-          APK jest podpisane tym samym certyfikatem co publiczne aa1.23, aby zachować aktualizacje bez odinstalowywania.
-          Video EXP używa tej samej bazy aa1.39 i tego samego multi-audio/SABR pipeline co Music,
-          ale pozostaje osobnym eksperymentalnym pakietem app.smarttube.mobile.carvideo.
+          Pobieraj pliki APK bezpośrednio z Assets — bez ZIP-a:
+          - SmartTube-AA-Video-EXP-universal.apk — zalecany dla większości użytkowników,
+          - SmartTube-AA-Video-EXP-arm64-v8a.apk — urządzenia ARM64,
+          - SmartTube-AA-Video-EXP-armeabi-v7a.apk — starsze urządzenia ARMv7.
+
+          APK ma versionCode 2425 i jest podpisane stabilnym certyfikatem SmartTube AA, więc aktualizuje wcześniejsze wydania bez odinstalowywania.
+          Video EXP pozostaje osobnym eksperymentalnym pakietem app.smarttube.mobile.carvideo i używa tej samej bazy aa1.40 co Music.
           EOF
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" \
-              -f sha="$GITHUB_SHA" -F force=true >/dev/null
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F prerelease=true -f make_latest=false >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F prerelease=true -f make_latest=false >/dev/null
           else
-            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
-              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
-              -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" \
-              -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" -f name="$TITLE" -f body="$(cat "$NOTES_FILE")" -F draft=false -F prerelease=true -f make_latest=false >/dev/null
           fi
 
           gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
