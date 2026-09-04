@@ -9,7 +9,7 @@ Projekt nie jest oficjalną aplikacją Google ani YouTube. Jest rozwijany do tes
 
 ## Pobierz APK bez ZIP-a
 
-Repozytorium publikuje **dwa osobno instalowane warianty** z tej samej bazy kodu aa1.39-test15.
+Repozytorium publikuje **dwa osobno instalowane warianty** z tej samej bazy kodu aa1.40.
 
 ### SmartTube AA Music — zalecany
 
@@ -35,21 +35,23 @@ Pakiet: `app.smarttube.mobile.carvideo`
 
 Video EXP jest osobnym wariantem przeznaczonym do eksperymentalnego wyświetlania interfejsu i obrazu na ekranie Android Auto podczas postoju. Może być zainstalowany jednocześnie z Music.
 
-Pliki są publikowane jako zwykłe `.apk` w GitHub Releases — użytkownik nie musi pobierać ani rozpakowywać ZIP-a.
+Pliki są publikowane jako zwykłe `.apk` w GitHub Releases — użytkownik nie musi pobierać ani rozpakowywać ZIP-a. Stałe linki powyżej pozostają takie same przy kolejnych aktualizacjach.
 
 ## Stan projektu
 
 | Wariant | Pakiet | Stan |
 | --- | --- | --- |
-| **SmartTube AA Music** | `app.smarttube.mobile` | **aa1.39-test15 — aktywnie publikowany z `main`** |
-| **SmartTube AA Video EXP** | `app.smarttube.mobile.carvideo` | **aa1.39-test15 — aktywnie publikowany z `main` jako wariant eksperymentalny** |
+| **SmartTube AA Music** | `app.smarttube.mobile` | **aa1.40 — aktywnie publikowany z `main`** |
+| **SmartTube AA Video EXP** | `app.smarttube.mobile.carvideo` | **aa1.40 — aktywnie publikowany z `main` jako wariant eksperymentalny** |
 
 To jest **jedno repozytorium i jedna wspólna baza kodu**, z której powstają dwa osobno instalowane APK. Szczegóły: [Music i Video EXP](docs/MUSIC-AND-VIDEO.md).
 
-## Co zawiera aa1.39-test15
+## Co zawiera aa1.40
 
 Wspólne dla Music i Video EXP:
 
+- poprawka crasha Shorts po dojściu do końca filmu: SABR prawidłowo zgłasza `endOfStream` zamiast ponownie pobierać ostatni segment aż do `OutOfMemoryError`,
+- poprawione otwieranie playlist i linków sekcji w mobilnym interfejsie,
 - polski lektor i multi-audio,
 - obsługa `audioTrackId`, `isAutoDubbed` i `xtags`,
 - poprawiony pipeline SABR z osobnymi torami audio/video,
@@ -62,7 +64,7 @@ Wspólne dla Music i Video EXP:
 - następnie ustawienia mobile/Android Auto,
 - niżej pozostałe oryginalne kategorie SmartTube w tym samym stylu.
 
-Stary Video EXP aa1.23 nie miał kompletnego współczesnego pipeline multi-audio. Aktualny Video EXP aa1.39-test15 korzysta z tej samej warstwy `audioTrack.id` / dubbing / SABR co Music.
+Video EXP aa1.40 korzysta z tej samej warstwy `audioTrack.id` / dubbing / SABR co Music i zawiera tę samą poprawkę Shorts.
 
 ## Najważniejsze funkcje
 
@@ -82,7 +84,7 @@ Każda zmiana na gałęzi `main` uruchamia osobne workflowy:
 - **[Build SmartTube AA Music APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa.yml)** → aktualizuje `latest-main`,
 - **[Build SmartTube AA Video EXP APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa-video-exp.yml)** → aktualizuje `latest-video-exp`.
 
-Dzięki temu stałe linki do APK nie zmieniają się przy kolejnych buildach.
+Dzięki temu stałe bezpośrednie linki do APK nie zmieniają się przy kolejnych buildach i mogą być używane do ręcznej aktualizacji.
 
 ## Jak uruchomić w Android Auto
 
