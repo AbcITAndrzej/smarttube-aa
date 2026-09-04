@@ -31,8 +31,72 @@ jobs:
           grep -n 'out.endOfStream = true' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
           grep -n 'return emptySelector;' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/SabrProcessor.java
 
+      - name: Restore stable SmartTube AA signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SMARTTUBE_AA_SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${SIGNING_KEYSTORE_B64:-}"
+          KEYSTORE="$RUNNER_TEMP/smarttube-aa-signing.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          ACTUAL_FP="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+          echo "Signing certificate SHA-256: $ACTUAL_FP"
+          test "$ACTUAL_FP" = "$EXPECTED_FP"
+
+          cat > keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          chmod 600 keystore.properties
+
+      - name: Stamp aa1.40-test1 version
+        run: |
+          set -euxo pipefail
+          sed -i 's/versionCode 2408/versionCode 2424/' smarttubetv/build.gradle
+          sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.40-test1/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.40-test1' smarttubetv/build.gradle
+
       - name: Build Music and Video EXP without publishing
         run: |
           chmod +x gradlew
           ./gradlew :smarttubetv:assembleStmobileDebug :smarttubetv:assembleStmobileCarvideo \
             --stacktrace --console=plain --no-daemon --max-workers=1 --no-parallel
+
+      - name: Prepare signed test APKs
+        run: |
+          set -euxo pipefail
+          mkdir -p test-apk
+          MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
+          VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" test-apk/SmartTube-AA-Music-aa1.40-test1-arm64-v8a.apk
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" test-apk/SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a.apk
+          ls -lh test-apk
+
+      - name: Verify test APK signing certificate
+        run: |
+          set -euo pipefail
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          for APK in test-apk/*.apk; do
+            ACTUAL_FP="$(keytool -printcert -jarfile "$APK" | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+            echo "$APK -> $ACTUAL_FP"
+            test "$ACTUAL_FP" = "$EXPECTED_FP"
+          done
+
+      - name: Upload Music aa1.40 test APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SmartTube-AA-Music-aa1.40-test1-arm64-v8a
+          path: test-apk/SmartTube-AA-Music-aa1.40-test1-arm64-v8a.apk
+          if-no-files-found: error
+
+      - name: Upload Video EXP aa1.40 test APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a
+          path: test-apk/SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a.apk
+          if-no-files-found: error
