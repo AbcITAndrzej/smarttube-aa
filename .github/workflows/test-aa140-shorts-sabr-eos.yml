@@ -7,7 +7,7 @@ on:
       - "fix/shorts-sabr-vod-eos"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -61,7 +61,7 @@ jobs:
           sed -i 's/-mobile-p13-aa1.24/-mobile-p13-aa1.40-test1/' smarttubetv/build.gradle
           grep -n 'versionCode\|aa1.40-test1' smarttubetv/build.gradle
 
-      - name: Build Music and Video EXP without publishing
+      - name: Build Music and Video EXP
         run: |
           chmod +x gradlew
           ./gradlew :smarttubetv:assembleStmobileDebug :smarttubetv:assembleStmobileCarvideo \
@@ -87,16 +87,42 @@ jobs:
             test "$ACTUAL_FP" = "$EXPECTED_FP"
           done
 
-      - name: Upload Music aa1.40 test APK
+      - name: Upload Music aa1.40 test APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SmartTube-AA-Music-aa1.40-test1-arm64-v8a
           path: test-apk/SmartTube-AA-Music-aa1.40-test1-arm64-v8a.apk
           if-no-files-found: error
 
-      - name: Upload Video EXP aa1.40 test APK
+      - name: Upload Video EXP aa1.40 test APK artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a
           path: test-apk/SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a.apk
           if-no-files-found: error
+
+      - name: Publish direct aa1.40-test1 APK links
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          TAG="aa1.40-test1"
+          TITLE="SmartTube AA aa1.40-test1 - Shorts EOS fix"
+          NOTES="Test build for Shorts SABR end-of-stream / OOM crash fix. Signed with the stable SmartTube AA certificate."
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            RELEASE_ID="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq .id)"
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/${TAG}" \
+              -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -f name="$TITLE" -f body="$NOTES" -F prerelease=true -f make_latest=false >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="$TITLE" -f body="$NOTES" \
+              -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+          fi
+
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            test-apk/SmartTube-AA-Music-aa1.40-test1-arm64-v8a.apk \
+            test-apk/SmartTube-AA-Video-EXP-aa1.40-test1-arm64-v8a.apk
