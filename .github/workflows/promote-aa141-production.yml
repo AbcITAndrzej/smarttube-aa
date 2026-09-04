@@ -1,0 +1,47 @@
+name: Promote aa1.41 production release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/promote-aa141-production.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark aa1.41 as production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID=382634687
+          NOTES=$(cat <<'EOF'
+## Aktualna wersja produkcyjna SmartTube AA
+
+To wydanie jest obecnie wskazane jako produkcyjne dla obu wariantów ARM64-v8a.
+
+### SmartTube AA Music
+- Pakiet: `app.smarttube.mobile`
+- Gałąź produkcyjna: `production/music`
+- APK: `SmartTube-AA-Music-aa1.41-lockscreen-test1-arm64-v8a.apk`
+- Bezpośredni plik: https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41-lockscreen-test1/SmartTube-AA-Music-aa1.41-lockscreen-test1-arm64-v8a.apk
+
+### SmartTube AA Video EXP
+- Pakiet: `app.smarttube.mobile.carvideo`
+- Gałąź produkcyjna: `production/video-exp`
+- APK: `SmartTube-AA-Video-EXP-aa1.41-lockscreen-test1-arm64-v8a.apk`
+- Bezpośredni plik: https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41-lockscreen-test1/SmartTube-AA-Video-EXP-aa1.41-lockscreen-test1-arm64-v8a.apk
+
+Oba APK zostały zbudowane z tej samej bazy kodu i mogą być instalowane jednocześnie. Nazwa tagu zawiera `lockscreen-test1`, ponieważ dokładnie ten sprawdzony build został awansowany do obecnej wersji produkcyjnej.
+EOF
+          )
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -f name="SmartTube AA aa1.41 - production" \
+            -f body="$NOTES" \
+            -F prerelease=false \
+            -f make_latest=true >/dev/null
