@@ -175,7 +175,8 @@ public final class LegacyTrackMapper {
 
         Locale locale = Locale.forLanguageTag(tag);
         String display = locale.getDisplayLanguage(Locale.getDefault());
-        return display == null || display.trim().isEmpty() ? tag : display;
+        if (display == null || display.trim().isEmpty()) return tag;
+        return Character.toUpperCase(display.charAt(0)) + display.substring(1);
     }
 
     private static int subtitleRank(FormatItem item) {

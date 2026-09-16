@@ -481,6 +481,17 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
             MobilePlaybackSnapshot current = value.getData();
             boolean loading = value.getStatus() == MobileLoadState.Status.LOADING
                     || current != null && current.isBuffering();
+            boolean keepScreenOn = !radioMode && (loading || (current != null && current.isPlaying()));
+            view.setKeepScreenOn(keepScreenOn);
+            try {
+                if (getActivity() != null && getActivity().getWindow() != null) {
+                    if (keepScreenOn) {
+                        getActivity().getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    } else {
+                        getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    }
+                }
+            } catch (Throwable ignored) {}
             progress.setVisibility(loading ? View.VISIBLE : View.GONE);
             if (value.getError() != null) {
                 Toast.makeText(requireContext(), value.getError().getMessage(), Toast.LENGTH_LONG).show();
@@ -594,6 +605,13 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
     }
 
     @Override public void onDestroyView() {
+        View playbackView = getView();
+        if (playbackView != null) playbackView.setKeepScreenOn(false);
+        try {
+            if (getActivity() != null && getActivity().getWindow() != null) {
+                getActivity().getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            }
+        } catch (Throwable ignored) {}
         ui.removeCallbacks(hideControls);
         ui.removeCallbacks(hideGestureFeedback);
         ui.removeCallbacks(hideUnlockPrompt);

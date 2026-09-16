@@ -39,6 +39,8 @@ public final class MobileMediaSessionManager {
     public interface PlaybackControl {
         void playFromSystem();
         void pauseFromSystem();
+        void playPreviousFromSystem();
+        void playNextFromSystem();
         void seekToFromSystem(long positionMs);
         void setVolumeMultiplier(float multiplier);
     }
@@ -46,6 +48,8 @@ public final class MobileMediaSessionManager {
     static final String ACTION_REFRESH = "app.smarttube.mobile.action.MEDIA_REFRESH";
     static final String ACTION_PLAY = "app.smarttube.mobile.action.MEDIA_PLAY";
     static final String ACTION_PAUSE = "app.smarttube.mobile.action.MEDIA_PAUSE";
+    static final String ACTION_PREVIOUS = "app.smarttube.mobile.action.MEDIA_PREVIOUS";
+    static final String ACTION_NEXT = "app.smarttube.mobile.action.MEDIA_NEXT";
     static final String ACTION_REWIND = "app.smarttube.mobile.action.MEDIA_REWIND";
     static final String ACTION_FORWARD = "app.smarttube.mobile.action.MEDIA_FORWARD";
     static final String ACTION_STOP = "app.smarttube.mobile.action.MEDIA_STOP";
@@ -106,6 +110,8 @@ public final class MobileMediaSessionManager {
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override public void onPlay() { requestPlay(); }
             @Override public void onPause() { pauseByUser(); }
+            @Override public void onSkipToPrevious() { playback.playPreviousFromSystem(); }
+            @Override public void onSkipToNext() { playback.playNextFromSystem(); }
             @Override public void onStop() { stopAndDismiss(); }
             @Override public void onSeekTo(long pos) { seekTo(pos); }
             @Override public void onRewind() { seekBy(-SEEK_STEP_MS); }
@@ -223,6 +229,8 @@ public final class MobileMediaSessionManager {
     void handleServiceAction(String action) {
         if (ACTION_PLAY.equals(action)) requestPlay();
         else if (ACTION_PAUSE.equals(action)) pauseByUser();
+        else if (ACTION_PREVIOUS.equals(action)) playback.playPreviousFromSystem();
+        else if (ACTION_NEXT.equals(action)) playback.playNextFromSystem();
         else if (ACTION_REWIND.equals(action)) seekBy(-SEEK_STEP_MS);
         else if (ACTION_FORWARD.equals(action)) seekBy(SEEK_STEP_MS);
         else if (ACTION_STOP.equals(action)) stopAndDismiss();
@@ -253,16 +261,16 @@ public final class MobileMediaSessionManager {
                 .setSilent(true)
                 .setOngoing(playing || commandCoordinator.shouldKeepForegroundService())
                 .setShowWhen(false)
-                .addAction(R.drawable.mobile_ic_rewind,
-                        appContext.getString(R.string.mobile_background_rewind),
-                        servicePendingIntent(ACTION_REWIND, 2))
+                .addAction(android.R.drawable.ic_media_previous,
+                        "Poprzedni",
+                        servicePendingIntent(ACTION_PREVIOUS, 2))
                 .addAction(playing ? R.drawable.mobile_ic_pause : R.drawable.mobile_ic_play,
                         appContext.getString(playing
                                 ? R.string.mobile_background_pause : R.string.mobile_background_play),
                         servicePendingIntent(playing ? ACTION_PAUSE : ACTION_PLAY, 3))
-                .addAction(R.drawable.mobile_ic_forward,
-                        appContext.getString(R.string.mobile_background_forward),
-                        servicePendingIntent(ACTION_FORWARD, 4))
+                .addAction(android.R.drawable.ic_media_next,
+                        "Następny",
+                        servicePendingIntent(ACTION_NEXT, 4))
                 .addAction(R.drawable.mobile_ic_stop,
                         appContext.getString(R.string.mobile_background_stop),
                         stopIntent)
@@ -396,6 +404,9 @@ public final class MobileMediaSessionManager {
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, snapshot.getMediaId())
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, snapshot.getTitle())
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, snapshot.getSubtitle())
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON_URI, snapshot.getArtworkUrl())
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, snapshot.getArtworkUrl())
+                .putString(MediaMetadataCompat.METADATA_KEY_ART_URI, snapshot.getArtworkUrl())
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, snapshot.getDurationMs())
                 .build();
         mediaSession.setMetadata(metadata);
@@ -418,6 +429,8 @@ public final class MobileMediaSessionManager {
                 | PlaybackStateCompat.ACTION_PAUSE
                 | PlaybackStateCompat.ACTION_PLAY_PAUSE
                 | PlaybackStateCompat.ACTION_SEEK_TO
+                | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
                 | PlaybackStateCompat.ACTION_REWIND
                 | PlaybackStateCompat.ACTION_FAST_FORWARD
                 | PlaybackStateCompat.ACTION_STOP;

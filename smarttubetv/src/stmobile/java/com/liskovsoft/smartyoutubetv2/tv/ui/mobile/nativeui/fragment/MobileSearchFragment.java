@@ -87,6 +87,7 @@ public final class MobileSearchFragment extends Fragment {
             results.setLayoutManager(new LinearLayoutManager(requireContext()));
         }
         results.setHasFixedSize(true);
+        results.setItemAnimator(null);
         results.setAdapter(resultAdapter);
         results.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {

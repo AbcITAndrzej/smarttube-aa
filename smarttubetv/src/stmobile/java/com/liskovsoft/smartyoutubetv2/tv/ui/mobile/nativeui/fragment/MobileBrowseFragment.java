@@ -107,6 +107,7 @@ public final class MobileBrowseFragment extends Fragment {
         });
         list.setLayoutManager(grid);
         list.setHasFixedSize(false);
+        list.setItemAnimator(null);
         list.setAdapter(adapter);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView recyclerView,

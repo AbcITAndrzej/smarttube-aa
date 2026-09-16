@@ -320,6 +320,12 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                     new MobileMediaSessionManager.PlaybackControl() {
                         @Override public void playFromSystem() { setPlayWhenReady(true); }
                         @Override public void pauseFromSystem() { setPlayWhenReady(false); }
+                        @Override public void playPreviousFromSystem() {
+                            LegacyMobilePlaybackRepository.this.playPrevious();
+                        }
+                        @Override public void playNextFromSystem() {
+                            LegacyMobilePlaybackRepository.this.playNext();
+                        }
                         @Override public void seekToFromSystem(long positionMs) {
                             seekTo(positionMs);
                         }
@@ -1234,7 +1240,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                 containsMedia(), isPlaying(), buffering || (!radioPlayback && isLoading()),
                 isPlaybackEnded(),
                 position, duration, buffered, getSpeed(), videoTracks, audio, subtitles,
-                seekBarSegments);
+                seekBarSegments, currentArtworkUrl());
         diagnostics.onSnapshot(snapshot, getVideoFormat(), getAudioFormat(), getSubtitleFormat(),
                 radioPlayback, radioTimeShift);
         listenSaveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback,
@@ -1243,6 +1249,14 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
+    }
+
+    private String currentArtworkUrl() {
+        if (video == null) return "";
+        String card = video.getCardImageUrl();
+        if (card != null && !card.trim().isEmpty()) return card.trim();
+        String background = video.bgImageUrl;
+        return background == null ? "" : background.trim();
     }
 
     private void logAudioCatalogIfChanged(List<FormatItem> rawFormats, List<MobileTrack> logicalTracks) {

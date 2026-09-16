@@ -229,7 +229,17 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         //                        : firstSyncUs;
         //        return Util.resolveSeekPositionUs(positionUs, seekParameters, firstSyncUs, secondSyncUs);
         //    }
-        //}
+        // Clamp a seek target that lands at/past the end of the video. Without this, seeking to
+        // exactly periodDurationUs (e.g. the app's "pause on end" logic parking the player at
+        // getDurationMs()) leaves nothing left to buffer, so getNextChunk() immediately re-signals
+        // endOfStream, which re-triggers STATE_ENDED, which re-triggers that same seek-to-end logic
+        // again - an infinite onTracksChanged()/STATE_ENDED loop every time playback reaches the end.
+        for (RepresentationHolder representationHolder : representationHolders) {
+            long periodDurationUs = representationHolder.periodDurationUs;
+            if (periodDurationUs != C.TIME_UNSET && positionUs >= periodDurationUs) {
+                return Math.max(0, periodDurationUs - 500_000L);
+            }
+        }
         // We don't have a segment index to adjust the seek position with yet.
         return positionUs;
     }
@@ -328,6 +338,16 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
 
         long periodDurationUs = representationHolder.periodDurationUs;
         boolean periodEnded = periodDurationUs != C.TIME_UNSET;
+
+        // FIX: fire ending event on a video end
+        if (periodEnded && loadPositionUs >= periodDurationUs) {
+            // No segment index in SABR, so we can't compare per-segment boundaries like stock
+            // DASH does — comparing loadPositionUs directly against periodDurationUs is the
+            // SABR equivalent. Without this, getNextChunk() keeps firing "next chunk" requests
+            // past the real end of the video forever, and the player never reaches STATE_ENDED.
+            out.endOfStream = true;
+            return;
+        }
 
         //if (representationHolder.getSegmentCount() == 0) {
         //    // The index doesn't define any segments.
@@ -548,8 +568,11 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
         FormatId formatId = formatSelector.getSelectedFormatId();
         int iTag = formatId != null ? formatId.getItag() : -1;
 
-        if (nexChunkIdx == -1) {
+        // FIX: seek backwards does infinite loading after 60 second but the buffer is full
+        boolean isSeek = seekTimeUs != C.TIME_UNSET; // same condition used for seekTimeUs
+        if (isSeek) {
             sabrStream.reset(iTag);
+            nexChunkIdx = -1; // or whatever "post-init" value newMediaChunk expects
         }
 
         nexChunkIdx++;

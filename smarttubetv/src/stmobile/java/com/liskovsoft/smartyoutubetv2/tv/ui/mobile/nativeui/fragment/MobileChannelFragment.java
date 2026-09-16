@@ -68,6 +68,7 @@ public final class MobileChannelFragment extends Fragment {
         });
         list.setLayoutManager(grid);
         list.setHasFixedSize(true);
+        list.setItemAnimator(null);
         list.setAdapter(adapter);
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {

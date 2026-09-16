@@ -1,8 +1,19 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.44/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.41.1-update-fix/SmartTube-AA-Video-EXP-aa1.41.1-update-fix-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.44/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk"
+    ]
+  },
+  "aa1.44-video-exp": {
+    "versionCode": 2428,
+    "changelog": [
+      "Wyeliminowano ostrzeżenie systemowe Android 14/15 Knox o zgodności aplikacji (16 KB page-size).",
+      "Wyeliminowano migotanie (flickering) miniatur i kafelków podczas uruchamiania i przewijania.",
+      "Optymalizacja szybkiego startu i odtwarzania wideo (brak zbędnych wywołań sieciowych, reset bufora SABR po przewijaniu).",
+      "Eksperymentalny obraz wideo w Android Auto podczas postoju pojazdu.",
+      "Sterowanie z ekranu blokady (poprzedni / play-pause / następny) wraz z okładką i metadanymi.",
+      "Stabilne wydanie produkcyjne z zachowaną zgodnością certyfikatu podpisu."
     ]
   },
   "aa1.41.1-update-fix-video-exp": {

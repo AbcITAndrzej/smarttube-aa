@@ -192,20 +192,27 @@ public abstract class VideoInfoServiceBase {
         List<? extends VideoFormat> regularFormats = videoInfo.getRegularFormats();
 
         List<VideoUrlHolder> urlHolders = new ArrayList<>();
-        if (adaptiveFormats != null)
+        boolean isSabr = videoInfo.getServerAbrStreamingUrl() != null && !videoInfo.getServerAbrStreamingUrl().isEmpty();
+
+        // When SABR streaming is active, adaptive video and audio chunks are fetched via protobuf
+        // POST to serverAbrStreamingUrl using poToken; their individual URLs are never accessed.
+        // Skipping deciphering on 50+ adaptive formats saves seconds of startup delay.
+        if (!isSabr && adaptiveFormats != null) {
             for (VideoFormat videoFormat : adaptiveFormats) {
                 urlHolders.add(videoFormat.getUrlHolder());
             }
-        if (regularFormats != null)
+        }
+        if (regularFormats != null) {
             for (VideoFormat videoFormat : regularFormats) {
                 urlHolders.add(videoFormat.getUrlHolder());
             }
+        }
         urlHolders.add(videoInfo.getUrlHolder());
 
         List<String> inputN = extractNParams(urlHolders);
         List<String> inputS = extractSParams(urlHolders);
-        Log.d(TAG, "V7_AUTH V2 decipher holders=%s nValues=%s sValues=%s",
-                urlHolders.size(), countNonNull(inputN), countNonNull(inputS));
+        Log.d(TAG, "V7_AUTH V2 decipher isSabr=%s holders=%s nValues=%s sValues=%s",
+                isSabr, urlHolders.size(), countNonNull(inputN), countNonNull(inputS));
         logAuthState("before", urlHolders);
 
         Pair<List<String>, List<String>> result = mAppService.bulkSigExtract(inputN, inputS);

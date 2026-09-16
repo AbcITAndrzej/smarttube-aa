@@ -10,6 +10,7 @@ public final class MobilePlaybackSnapshot {
     private final String mediaId;
     private final String title;
     private final String subtitle;
+    private final String artworkUrl;
     private final boolean prepared;
     private final boolean playing;
     private final boolean buffering;
@@ -64,9 +65,24 @@ public final class MobilePlaybackSnapshot {
                                   List<MobileTrack> audioTracks,
                                   List<MobileTrack> subtitleTracks,
                                   List<SeekBarSegment> seekBarSegments) {
+        this(mediaId, title, subtitle, prepared, playing, buffering, ended,
+                positionMs, durationMs, bufferedPositionMs, speed, videoTracks, audioTracks,
+                subtitleTracks, seekBarSegments, "");
+    }
+
+    public MobilePlaybackSnapshot(String mediaId, String title, String subtitle,
+                                  boolean prepared, boolean playing, boolean buffering,
+                                  boolean ended, long positionMs, long durationMs,
+                                  long bufferedPositionMs, float speed,
+                                  List<MobileTrack> videoTracks,
+                                  List<MobileTrack> audioTracks,
+                                  List<MobileTrack> subtitleTracks,
+                                  List<SeekBarSegment> seekBarSegments,
+                                  String artworkUrl) {
         this.mediaId = mediaId;
         this.title = title == null ? "" : title;
         this.subtitle = subtitle == null ? "" : subtitle;
+        this.artworkUrl = artworkUrl == null ? "" : artworkUrl;
         this.prepared = prepared;
         this.playing = playing;
         this.buffering = buffering;
@@ -103,6 +119,7 @@ public final class MobilePlaybackSnapshot {
     public String getMediaId() { return mediaId; }
     public String getTitle() { return title; }
     public String getSubtitle() { return subtitle; }
+    public String getArtworkUrl() { return artworkUrl; }
     public boolean isPrepared() { return prepared; }
     public boolean isPlaying() { return playing; }
     public boolean isBuffering() { return buffering; }

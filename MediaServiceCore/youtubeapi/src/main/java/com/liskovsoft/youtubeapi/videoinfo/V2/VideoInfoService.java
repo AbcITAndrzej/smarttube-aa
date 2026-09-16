@@ -358,37 +358,36 @@ public class VideoInfoService extends VideoInfoServiceBase {
             return;
         }
 
-        if (shouldObtainExtendedFormats(result) || result.isStoryboardBroken()) {
+        if (shouldObtainExtendedFormats(result)) {
             Log.d(TAG, "Enable high bitrate formats...");
             mAuthBlock = false;
             VideoInfoHls videoInfoHls = getVideoInfoIOSHls(videoId, clickTrackingParams);
-            if (videoInfoHls != null && shouldObtainExtendedFormats(result)) {
+            if (videoInfoHls != null) {
                 result.setHlsManifestUrl(videoInfoHls.getHlsManifestUrl());
-            }
-            if (videoInfoHls != null && result.isStoryboardBroken()) {
-                result.setStoryboardSpec(videoInfoHls.getStoryboardSpec());
+                if (result.isStoryboardBroken()) {
+                    result.setStoryboardSpec(videoInfoHls.getStoryboardSpec());
+                }
             }
         }
 
-        // TV and others has a limited number of auto generated subtitles
-        if (needMoreSubtitles(result)) {
-            Log.d(TAG, "Enable full list of auto generated subtitles...");
-
-            if (mCachedTranslationLanguages == null || mCachedTranslationLanguages.size() < 100) {
-                mAuthBlock = false;
-                VideoInfo webInfo = null;
-                try {
-                    webInfo = getVideoInfo(AppClient.WEB, videoId, clickTrackingParams);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                if (webInfo != null) {
-                    mCachedTranslationLanguages = webInfo.getTranslationLanguages();
-                }
-            }
-
-            if (mCachedTranslationLanguages != null) {
+        // Translation languages for auto-generated subtitles:
+        // Cache them once and do not block startup on redundant duplicate WEB calls.
+        if (result.hasSubtitles()) {
+            if (result.getTranslationLanguages() != null && result.getTranslationLanguages().size() >= 100) {
+                mCachedTranslationLanguages = result.getTranslationLanguages();
+            } else if (mCachedTranslationLanguages != null) {
                 result.setTranslationLanguages(mCachedTranslationLanguages);
+            } else if (result.getClient() != AppClient.WEB) {
+                mAuthBlock = false;
+                try {
+                    VideoInfo webInfo = getVideoInfo(AppClient.WEB, videoId, clickTrackingParams);
+                    if (webInfo != null && webInfo.getTranslationLanguages() != null) {
+                        mCachedTranslationLanguages = webInfo.getTranslationLanguages();
+                        result.setTranslationLanguages(mCachedTranslationLanguages);
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "Subtitles cache fetch failed: %s", e.getMessage());
+                }
             }
         }
     }
