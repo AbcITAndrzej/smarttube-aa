@@ -2,9 +2,6 @@ name: Build SmartTube AA Music APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
 
 permissions:
   contents: write
