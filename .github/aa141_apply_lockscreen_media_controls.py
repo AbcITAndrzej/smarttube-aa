@@ -4,10 +4,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def replace_once(path: str, old: str, new: str) -> None:
+def replace_once(path: str, old: str, new: str, already_applied_marker: str = "") -> None:
     target = ROOT / path
     text = target.read_text(encoding="utf-8")
-    if new in text:
+    if new in text or (already_applied_marker and already_applied_marker in text):
         return
     if old not in text:
         raise SystemExit(f"Expected block not found in {path}: {old[:120]!r}")
@@ -54,12 +54,16 @@ replace_once(
     MANAGER,
     '''            @Override public void onPause() { pauseByUser(); }\n            @Override public void onStop() { stopAndDismiss(); }\n            @Override public void onSeekTo(long pos) { seekTo(pos); }''',
     '''            @Override public void onPause() { pauseByUser(); }\n            @Override public void onSkipToPrevious() { playback.playPreviousFromSystem(); }\n            @Override public void onSkipToNext() { playback.playNextFromSystem(); }\n            @Override public void onStop() { stopAndDismiss(); }\n            @Override public void onSeekTo(long pos) { seekTo(pos); }'''
+    ,
+    already_applied_marker='''            @Override public void onSkipToNext() {\n                preserveSurfaceForTrackSwitch();'''
 )
 
 replace_once(
     MANAGER,
     '''        if (ACTION_PLAY.equals(action)) requestPlay();\n        else if (ACTION_PAUSE.equals(action)) pauseByUser();\n        else if (ACTION_REWIND.equals(action)) seekBy(-SEEK_STEP_MS);''',
     '''        if (ACTION_PLAY.equals(action)) requestPlay();\n        else if (ACTION_PAUSE.equals(action)) pauseByUser();\n        else if (ACTION_PREVIOUS.equals(action)) playback.playPreviousFromSystem();\n        else if (ACTION_NEXT.equals(action)) playback.playNextFromSystem();\n        else if (ACTION_REWIND.equals(action)) seekBy(-SEEK_STEP_MS);'''
+    ,
+    already_applied_marker='''else if (ACTION_NEXT.equals(action)) {\n            preserveSurfaceForTrackSwitch();'''
 )
 
 replace_once(

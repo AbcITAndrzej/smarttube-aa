@@ -64,6 +64,7 @@ public final class MobileMediaSessionManager {
     static final int NOTIFICATION_ID = 28041;
     private static final String CHANNEL_ID = "smarttube_mobile_playback";
     private static final long SEEK_STEP_MS = 10_000L;
+    private static final long TRACK_SWITCH_GRACE_MS = 20_000L;
     private static volatile WeakReference<MobileMediaSessionManager> sActive =
             new WeakReference<>(null);
 
@@ -78,6 +79,8 @@ public final class MobileMediaSessionManager {
     private final BroadcastReceiver noisyReceiver;
     private AudioFocusRequest audioFocusRequest;
     private MobilePlaybackSnapshot snapshot;
+    private MobilePlaybackSnapshot pendingTrackSnapshot;
+    private boolean preservingSurfaceForTrackSwitch;
     private Bitmap artworkBitmap;
     private String requestedArtworkUrl = "";
     private CustomTarget<Bitmap> artworkTarget;
@@ -120,8 +123,14 @@ public final class MobileMediaSessionManager {
         mediaSession.setCallback(new MediaSessionCompat.Callback() {
             @Override public void onPlay() { requestPlay(); }
             @Override public void onPause() { pauseByUser(); }
-            @Override public void onSkipToPrevious() { playback.playPreviousFromSystem(); }
-            @Override public void onSkipToNext() { playback.playNextFromSystem(); }
+            @Override public void onSkipToPrevious() {
+                preserveSurfaceForTrackSwitch();
+                playback.playPreviousFromSystem();
+            }
+            @Override public void onSkipToNext() {
+                preserveSurfaceForTrackSwitch();
+                playback.playNextFromSystem();
+            }
             @Override public void onStop() { stopAndDismiss(); }
             @Override public void onSeekTo(long pos) { seekTo(pos); }
             @Override public void onRewind() { seekBy(-SEEK_STEP_MS); }
@@ -194,7 +203,21 @@ public final class MobileMediaSessionManager {
     public void updatePlayback(MobilePlaybackSnapshot value) {
         runOnMain(() -> {
             if (released) return;
+            if (preservingSurfaceForTrackSwitch && (value == null || !value.isPrepared())) {
+                // Keep the same notification/session visible while the next item's metadata and
+                // stream are loading. Removing and reposting the notification collapses Android's
+                // expanded lock-screen player on several OEM System UI builds.
+                pendingTrackSnapshot = value;
+                updateSessionState();
+                synchronizeSystemSurface();
+                return;
+            }
             snapshot = value;
+            if (value != null && value.isPrepared()) {
+                preservingSurfaceForTrackSwitch = false;
+                pendingTrackSnapshot = null;
+                mainHandler.removeCallbacks(finishTrackSwitchGrace);
+            }
             updateArtwork(value == null ? "" : value.getArtworkUrl());
             if (!playerHandlesAudioFocus && value != null && value.isPlaying()
                     && !focusRequestOutstanding) {
@@ -228,6 +251,9 @@ public final class MobileMediaSessionManager {
             mediaSession.setActive(false);
             mediaSession.setCallback(null);
             mediaSession.release();
+            mainHandler.removeCallbacks(finishTrackSwitchGrace);
+            preservingSurfaceForTrackSwitch = false;
+            pendingTrackSnapshot = null;
             if (artworkTarget != null) {
                 Glide.with(appContext).clear(artworkTarget);
                 artworkTarget = null;
@@ -245,8 +271,14 @@ public final class MobileMediaSessionManager {
     void handleServiceAction(String action) {
         if (ACTION_PLAY.equals(action)) requestPlay();
         else if (ACTION_PAUSE.equals(action)) pauseByUser();
-        else if (ACTION_PREVIOUS.equals(action)) playback.playPreviousFromSystem();
-        else if (ACTION_NEXT.equals(action)) playback.playNextFromSystem();
+        else if (ACTION_PREVIOUS.equals(action)) {
+            preserveSurfaceForTrackSwitch();
+            playback.playPreviousFromSystem();
+        }
+        else if (ACTION_NEXT.equals(action)) {
+            preserveSurfaceForTrackSwitch();
+            playback.playNextFromSystem();
+        }
         else if (ACTION_REWIND.equals(action)) seekBy(-SEEK_STEP_MS);
         else if (ACTION_FORWARD.equals(action)) seekBy(SEEK_STEP_MS);
         else if (ACTION_STOP.equals(action)) stopAndDismiss();
@@ -255,6 +287,28 @@ public final class MobileMediaSessionManager {
 
     void handleMediaButtonIntent(Intent intent) {
         MediaButtonReceiver.handleIntent(mediaSession, intent);
+    }
+
+    private final Runnable finishTrackSwitchGrace = () -> {
+        if (released || !preservingSurfaceForTrackSwitch) return;
+        preservingSurfaceForTrackSwitch = false;
+        snapshot = pendingTrackSnapshot;
+        pendingTrackSnapshot = null;
+        updateArtwork(snapshot == null ? "" : snapshot.getArtworkUrl());
+        updateSessionMetadata();
+        synchronizeSystemSurface();
+    };
+
+    private void preserveSurfaceForTrackSwitch() {
+        runOnMain(() -> {
+            if (released || snapshot == null || !snapshot.isPrepared()) return;
+            pendingTrackSnapshot = null;
+            preservingSurfaceForTrackSwitch = true;
+            mainHandler.removeCallbacks(finishTrackSwitchGrace);
+            mainHandler.postDelayed(finishTrackSwitchGrace, TRACK_SWITCH_GRACE_MS);
+            updateSessionState();
+            synchronizeSystemSurface();
+        });
     }
 
     Notification buildNotification() {
@@ -483,8 +537,11 @@ public final class MobileMediaSessionManager {
         if (snapshot != null) {
             position = snapshot.getPositionMs();
             buffered = snapshot.getBufferedPositionMs();
-            speed = snapshot.isPlaying() ? snapshot.getSpeed() : 0f;
-            if (snapshot.isBuffering()) state = PlaybackStateCompat.STATE_BUFFERING;
+            speed = snapshot.isPlaying() && !preservingSurfaceForTrackSwitch
+                    ? snapshot.getSpeed() : 0f;
+            if (preservingSurfaceForTrackSwitch || snapshot.isBuffering()) {
+                state = PlaybackStateCompat.STATE_BUFFERING;
+            }
             else if (snapshot.isPlaying()) state = PlaybackStateCompat.STATE_PLAYING;
             else if (snapshot.isPrepared()) state = PlaybackStateCompat.STATE_PAUSED;
         }
