@@ -1,8 +1,21 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.46/SmartTube-AA-Music-aa1.46-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.47/SmartTube-AA-Music-aa1.47-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.46/SmartTube-AA-Music-aa1.46-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.47/SmartTube-AA-Music-aa1.47-arm64-v8a.apk"
+    ]
+  },
+  "aa1.47": {
+    "versionCode": 2431,
+    "changelog": [
+      "VOD playback now resumes automatically after a recovered network timeout.",
+      "Lock-screen artwork, title/artist metadata, and media-session seeking are retained.",
+      "Android Auto Music and radio behavior are retained."
+    ],
+    "changelog_pl": [
+      "Po odzyskaniu strumienia po timeoutcie sieciowym VOD wznawia si\u0119 automatycznie.",
+      "Zachowano ok\u0142adk\u0119, metadane tytu\u0142u i wykonawcy oraz przewijanie z sesji multimedialnej.",
+      "Zachowano Android Auto Music i radio."
     ]
   },
   "aa1.46": {

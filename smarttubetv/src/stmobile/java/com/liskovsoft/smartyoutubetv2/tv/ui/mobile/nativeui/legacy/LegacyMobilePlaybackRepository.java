@@ -54,6 +54,7 @@ import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.radio.RadioTimeShift
 import java.io.File;
 import java.io.InputStream;
 import java.lang.ref.WeakReference;
+import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -69,6 +70,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         com.liskovsoft.smartyoutubetv2.common.exoplayer.controller.PlayerView {
     private static final long SNAPSHOT_INTERVAL_MS = 500;
     private static final long RAPID_SKIP_COALESCE_MS = 200L;
+    private static final long RECOVERED_VOD_RESUME_DELAY_MS = 400L;
     private final Context applicationContext;
     private final LegacyMediaIndex index;
     private final LegacyErrorMapper errors;
@@ -128,6 +130,12 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     // When AA switches tracks, do not let PlaybackPresenter restore the previous YouTube item
     // while the headless engine is being recreated for the newly selected media id.
     private boolean suppressPresenterResume;
+    /** The user's requested VOD playback state, preserved across transient source retries. */
+    private boolean vodPlaybackRequested;
+    private boolean pendingVodRecoveryResume;
+    private long vodRecoveryGeneration;
+    private long scheduledVodRecoveryGeneration;
+    private long scheduledVodEngineGeneration;
     private boolean engineBlocked;
     private boolean overlayShown;
     private boolean suggestionsShown;
@@ -165,6 +173,12 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
             if (playbackState == Player.STATE_READY) {
                 diagnostics.onPlayerReady(playWhenReady);
                 instantPlay.onReady();
+                if (playWhenReady) {
+                    pendingVodRecoveryResume = false;
+                    main.removeCallbacks(resumeVodAfterRecovery);
+                } else {
+                    scheduleVodRecoveryResume(generation);
+                }
                 if (radioPlayback && radioFailoverAwaitingReady) {
                     radioFailoverAwaitingReady = false;
                     diagnostics.onRadioFailoverSuccess(radioDirectStreamUrl);
@@ -203,6 +217,13 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                         "engine error; common recovery remains active: "
                                 + (cause == null ? error : cause));
             }
+            if (!radioPlayback && !offlinePlayback && vodPlaybackRequested
+                    && isSocketTimeout(error)) {
+                pendingVodRecoveryResume = true;
+                vodRecoveryGeneration++;
+                MobileDiagnostics.info("P23-PlaybackRecovery",
+                        "keep VOD autoplay intent after network timeout");
+            }
             if (fallbackFromRadioDvr()) return;
             if (tryRadioStreamFailover(error)) return;
             if (isTransientForbiddenStream(error)) {
@@ -231,6 +252,47 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
             main.postDelayed(this, SNAPSHOT_INTERVAL_MS);
         }
     };
+
+    private final Runnable resumeVodAfterRecovery = new Runnable() {
+        @Override public void run() {
+            if (!pendingVodRecoveryResume || !vodPlaybackRequested || radioPlayback
+                    || offlinePlayback || player == null
+                    || scheduledVodRecoveryGeneration != vodRecoveryGeneration
+                    || scheduledVodEngineGeneration != engineGeneration
+                    || player.getPlaybackState() != Player.STATE_READY) {
+                return;
+            }
+            if (player.getPlayWhenReady()) {
+                pendingVodRecoveryResume = false;
+                return;
+            }
+            pendingVodRecoveryResume = false;
+            MobileDiagnostics.info("P23-PlaybackRecovery",
+                    "resume VOD after recovered source became ready");
+            player.setPlayWhenReady(true);
+        }
+    };
+
+    private void scheduleVodRecoveryResume(long generation) {
+        if (!pendingVodRecoveryResume || !vodPlaybackRequested || radioPlayback || offlinePlayback) {
+            return;
+        }
+        scheduledVodRecoveryGeneration = vodRecoveryGeneration;
+        scheduledVodEngineGeneration = generation;
+        main.removeCallbacks(resumeVodAfterRecovery);
+        main.postDelayed(resumeVodAfterRecovery, RECOVERED_VOD_RESUME_DELAY_MS);
+    }
+
+    private static boolean isSocketTimeout(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < 12; depth++, current = current.getCause()) {
+            if (current instanceof SocketTimeoutException
+                    || current.getClass().getName().contains("SocketTimeoutException")) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public LegacyMobilePlaybackRepository(Context context, LegacyMediaIndex index, LegacyErrorMapper errors) {
         // The touch player applies its own mobile preferred language once audio tracks arrive.
@@ -437,6 +499,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
             }
             boolean preparingRadio = RadioStationRepository.isRadioMediaId(mediaId);
             boolean preparingOffline = OfflineMediaRepository.isOfflinePlaybackId(mediaId);
+            vodRecoveryGeneration++;
+            pendingVodRecoveryResume = false;
+            main.removeCallbacks(resumeVodAfterRecovery);
+            vodPlaybackRequested = !preparingRadio && !preparingOffline;
             diagnostics.onPrepare(headlessPlaybackAllowed ? "ANDROID_AUTO" : "MOBILE", mediaId,
                     preparingRadio);
             if (!preparingOffline) instantPlay.begin(mediaId, preparingRadio, headlessPlaybackAllowed);
@@ -590,6 +656,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     @Override public void play() {
+        vodPlaybackRequested = !radioPlayback && !offlinePlayback;
+        pendingVodRecoveryResume = false;
+        vodRecoveryGeneration++;
+        main.removeCallbacks(resumeVodAfterRecovery);
         MobilePlaybackEngine engine = activeEngine();
         if (radioPlayback && engine != null && engine.getState() != MobilePlaybackEngine.State.READY) {
             radioAutoplayPending = true;
@@ -604,6 +674,10 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
     }
 
     @Override public void pause() {
+        vodPlaybackRequested = false;
+        pendingVodRecoveryResume = false;
+        vodRecoveryGeneration++;
+        main.removeCallbacks(resumeVodAfterRecovery);
         radioAutoplayPending = false;
         if (mediaSessionManager != null) {
             mediaSessionManager.pauseByUser();
@@ -1394,6 +1468,14 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         return engine == null ? 0L : engine.getDurationMs();
     }
     @Override public void setPlayWhenReady(boolean play) {
+        if (!radioPlayback && !offlinePlayback) {
+            vodPlaybackRequested = play;
+            if (!play) {
+                pendingVodRecoveryResume = false;
+                vodRecoveryGeneration++;
+                main.removeCallbacks(resumeVodAfterRecovery);
+            }
+        }
         MobilePlaybackEngine engine = activeEngine();
         if (engine != null) engine.setPlayWhenReady(play);
     }
