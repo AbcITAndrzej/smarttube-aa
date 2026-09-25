@@ -15,6 +15,7 @@
         <item name="android:navigationBarColor">@color/mobile_surface</item>
         <item name="android:statusBarColor">@color/mobile_surface</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 
     <style name="Widget.SmartTube.Mobile.Toolbar" parent="Widget.MaterialComponents.Toolbar.Surface">

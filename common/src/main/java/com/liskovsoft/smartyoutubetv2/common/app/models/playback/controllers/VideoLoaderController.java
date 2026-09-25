@@ -1,9 +1,11 @@
 package com.liskovsoft.smartyoutubetv2.common.app.models.playback.controllers;
 
+import android.app.Activity;
 import android.os.Build.VERSION;
 
 import com.liskovsoft.mediaserviceinterfaces.MediaItemService;
 import com.liskovsoft.mediaserviceinterfaces.ServiceManager;
+import com.liskovsoft.mediaserviceinterfaces.SignInService;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaFormat;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemFormatInfo;
 import com.liskovsoft.mediaserviceinterfaces.data.MediaItemMetadata;
@@ -19,6 +21,7 @@ import com.liskovsoft.smartyoutubetv2.common.app.models.data.VideoGroup;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.BasePlayerController;
 import com.liskovsoft.smartyoutubetv2.common.app.models.playback.manager.PlayerConstants;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.AppDialogPresenter;
+import com.liskovsoft.smartyoutubetv2.common.app.presenters.YTSignInPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.presenters.dialogs.VideoActionPresenter;
 import com.liskovsoft.smartyoutubetv2.common.app.views.PlaybackView;
 import com.liskovsoft.smartyoutubetv2.common.misc.MediaServiceManager;
@@ -26,6 +29,8 @@ import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
+
+import androidx.appcompat.app.AlertDialog;
 
 import java.util.HashSet;
 import java.util.List;
@@ -50,6 +55,9 @@ public class VideoLoaderController extends BasePlayerController {
     private String mMultiAudioRecoveryVideoId;
     private int mMultiAudioRecoveryAttempts;
     private MediaItemFormatInfo mLastFormatInfo;
+    private AlertDialog mAgeGateDialog;
+    private String mAgeGateVideoId;
+    private boolean mAgeGateReloadHooked;
     private final Runnable mReloadVideo = () -> {
         getMainController().onNewVideo(getVideo());
     };
@@ -366,7 +374,12 @@ public class VideoLoaderController extends BasePlayerController {
 
             // 18+ video or the video is hidden/removed
             player.showOverlay(true);
-            loadNextVideo(5_000);
+            if (formatInfo.isAgeRestricted()) {
+                // Official sign-in. Do not skip to the next film while the dialog is up.
+                showAgeGateLogin(formatInfo.getPlayabilityReason());
+            } else {
+                loadNextVideo(5_000);
+            }
 
             //if (formatInfo.isUnknownError()) { // the bot error or the video not available
             //    scheduleRebootAppTimer(5_000);
@@ -531,6 +544,59 @@ public class VideoLoaderController extends BasePlayerController {
         }
         List<String> urls = formatInfo.createUrlList();
         return urls != null && !urls.isEmpty();
+    }
+
+    /**
+     * YouTube itself asked for a signed-in account. Show that on the phone
+     * and open the app's normal sign-in. No token or cookie workaround.
+     */
+    private void showAgeGateLogin(String youtubeReason) {
+        Video video = getVideo();
+        mAgeGateVideoId = video != null ? video.videoId : null;
+        hookAgeGateReloadOnce();
+        Utils.post(() -> {
+            android.content.Context context = getContext();
+            if (!(context instanceof Activity) || ((Activity) context).isFinishing()) {
+                return;
+            }
+            if (mAgeGateDialog != null && mAgeGateDialog.isShowing()) {
+                return;
+            }
+            String message = context.getString(R.string.age_gate_message);
+            if (youtubeReason != null && !youtubeReason.isEmpty()) {
+                message = youtubeReason + "\n\n" + message;
+            }
+            mAgeGateDialog = new AlertDialog.Builder(context, R.style.AppDialog)
+                    .setTitle(R.string.age_gate_title)
+                    .setMessage(message)
+                    .setPositiveButton(R.string.dialog_add_account, (dialog, which) ->
+                            YTSignInPresenter.instance(context).start())
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .create();
+            mAgeGateDialog.show();
+        });
+    }
+
+    private void hookAgeGateReloadOnce() {
+        if (mAgeGateReloadHooked) {
+            return;
+        }
+        mAgeGateReloadHooked = true;
+        SignInService signIn = YouTubeServiceManager.instance().getSignInService();
+        signIn.addOnAccountChange(account -> {
+            if (account == null) {
+                return;
+            }
+            Utils.post(() -> {
+                Video current = getVideo();
+                if (current != null && Helpers.equals(current.videoId, mAgeGateVideoId) && getPlayer() != null) {
+                    if (mAgeGateDialog != null && mAgeGateDialog.isShowing()) {
+                        mAgeGateDialog.dismiss();
+                    }
+                    reloadVideo(300);
+                }
+            });
+        });
     }
 
     private void reloadVideo(int delayMs) {

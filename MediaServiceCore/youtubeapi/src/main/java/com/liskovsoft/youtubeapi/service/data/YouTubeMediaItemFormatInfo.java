@@ -49,6 +49,7 @@ public class YouTubeMediaItemFormatInfo implements MediaItemFormatInfo {
     private String mOfParam; // used in tracking
     private String mStoryboardSpec;
     private boolean mIsUnplayable;
+    private boolean mIsAgeRestricted;
     private String mPlayabilityStatus;
     private String mStartTimestamp;
     private String mUploadDate;
@@ -124,6 +125,7 @@ public class YouTubeMediaItemFormatInfo implements MediaItemFormatInfo {
         // END Tracking params
         formatInfo.mStoryboardSpec = videoInfo.getStoryboardSpec();
         formatInfo.mIsUnplayable = videoInfo.isUnplayable() && !formatInfo.containsUrlFormats();
+        formatInfo.mIsAgeRestricted = videoInfo.isAgeRestricted();
         formatInfo.mIsAuth = videoInfo.isAuth();
         formatInfo.mIsUnknownError = videoInfo.isUnknownRestricted();
         formatInfo.mPlayabilityStatus = videoInfo.getPlayabilityStatus();
@@ -353,6 +355,11 @@ public class YouTubeMediaItemFormatInfo implements MediaItemFormatInfo {
     @Override
     public boolean isUnplayable() {
         return mIsUnplayable;
+    }
+
+    @Override
+    public boolean isAgeRestricted() {
+        return mIsAgeRestricted;
     }
 
     @Override

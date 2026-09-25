@@ -11,6 +11,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
+import android.view.Window;
+import android.graphics.Color;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -57,6 +59,13 @@ public class MobileNativeActivity extends AppCompatActivity implements MobileNav
     private boolean startupFlowHandled;
     private boolean waitingForSignInReturn;
     private boolean startupUpdateStarted;
+    private View mobileRoot;
+    private int originalSystemUiVisibility;
+    private int originalStatusBarColor;
+    private int originalNavigationBarColor;
+    private int originalNavigationBarDividerColor;
+    private boolean originalStatusBarContrastEnforced = true;
+    private boolean originalNavigationBarContrastEnforced = true;
 
     @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -77,6 +86,18 @@ public class MobileNativeActivity extends AppCompatActivity implements MobileNav
         startupUpdateController = new MobileUpdateController(this,
                 this::requestStartupInstallPermission);
         setContentView(R.layout.mobile_native_activity);
+        mobileRoot = findViewById(R.id.mobile_native_root);
+        Window window = getWindow();
+        originalSystemUiVisibility = window.getDecorView().getSystemUiVisibility();
+        originalStatusBarColor = window.getStatusBarColor();
+        originalNavigationBarColor = window.getNavigationBarColor();
+        if (Build.VERSION.SDK_INT >= 28) {
+            originalNavigationBarDividerColor = window.getNavigationBarDividerColor();
+        }
+        if (Build.VERSION.SDK_INT >= 29) {
+            originalStatusBarContrastEnforced = window.isStatusBarContrastEnforced();
+            originalNavigationBarContrastEnforced = window.isNavigationBarContrastEnforced();
+        }
         bottomNavigation = findViewById(R.id.mobile_bottom_navigation);
         navigator = new MobileFragmentNavigator(this);
         bottomNavigation.setOnItemSelectedListener(item -> {
@@ -275,6 +296,42 @@ public class MobileNativeActivity extends AppCompatActivity implements MobileNav
             bottomNavigation.setSelectedItemId(selectedItemId);
             syncingBottomNavigation = false;
         }
+    }
+
+    /** Extends only playback behind the system bars while keeping navigation visible. */
+    void setPlaybackWindowMode(boolean playback) {
+        if (mobileRoot == null) return;
+        Window window = getWindow();
+        View decor = window.getDecorView();
+        mobileRoot.setFitsSystemWindows(!playback);
+        if (playback) {
+            window.setStatusBarColor(Color.TRANSPARENT);
+            window.setNavigationBarColor(Color.TRANSPARENT);
+            if (Build.VERSION.SDK_INT >= 28) window.setNavigationBarDividerColor(Color.TRANSPARENT);
+            if (Build.VERSION.SDK_INT >= 29) {
+                window.setStatusBarContrastEnforced(false);
+                window.setNavigationBarContrastEnforced(false);
+            }
+            int layoutBehindVisibleNavigation = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN;
+            int flags = originalSystemUiVisibility | layoutBehindVisibleNavigation;
+            // Keep the navigation controls legible over video, regardless of the app's light theme.
+            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            decor.setSystemUiVisibility(flags);
+        } else {
+            decor.setSystemUiVisibility(originalSystemUiVisibility);
+            window.setStatusBarColor(originalStatusBarColor);
+            window.setNavigationBarColor(originalNavigationBarColor);
+            if (Build.VERSION.SDK_INT >= 28) {
+                window.setNavigationBarDividerColor(originalNavigationBarDividerColor);
+            }
+            if (Build.VERSION.SDK_INT >= 29) {
+                window.setStatusBarContrastEnforced(originalStatusBarContrastEnforced);
+                window.setNavigationBarContrastEnforced(originalNavigationBarContrastEnforced);
+            }
+        }
+        mobileRoot.requestApplyInsets();
     }
 
     int destinationFor(Fragment fragment) {

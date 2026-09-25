@@ -35,6 +35,7 @@ public interface MediaItemFormatInfo extends FormatInfoProvision {
     MediaItemStoryboard createStoryboard();
     boolean isUnplayable();
     boolean isUnknownError();
+    boolean isAgeRestricted();
     String getPlayabilityReason();
     boolean isStreamSeekable();
     /**

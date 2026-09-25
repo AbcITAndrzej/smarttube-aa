@@ -538,7 +538,7 @@ public final class Video {
     }
 
     public boolean isChannel() {
-        return videoId == null && playlistId == null && channelId != null;
+        return videoId == null && playlistId == null && channelId != null && !isMovie && !channelId.startsWith("MV");
     }
 
     /**

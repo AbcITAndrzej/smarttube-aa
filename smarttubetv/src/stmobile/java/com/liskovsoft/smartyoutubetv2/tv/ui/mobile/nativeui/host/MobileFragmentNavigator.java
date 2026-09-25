@@ -19,6 +19,7 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     private void showTopLevel(Fragment fragment, int selectedItemId) {
+        host.setPlaybackWindowMode(false);
         Fragment current = manager.findFragmentById(R.id.mobile_native_fragment_container);
         if (isSameBrowseDestination(current, fragment)) {
             host.updateChrome(selectedItemId, true);
@@ -42,6 +43,7 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     private void showDetail(Fragment fragment) {
+        host.setPlaybackWindowMode(fragment instanceof MobilePlaybackFragment);
         manager.beginTransaction()
                 .replace(R.id.mobile_native_fragment_container, fragment, fragment.getClass().getSimpleName())
                 .addToBackStack(fragment.getClass().getSimpleName())
@@ -128,6 +130,7 @@ public final class MobileFragmentNavigator implements MobileNavigator {
 
     void syncChromeWithCurrentFragment() {
         Fragment fragment = manager.findFragmentById(R.id.mobile_native_fragment_container);
+        host.setPlaybackWindowMode(fragment instanceof MobilePlaybackFragment);
         int destination = host.destinationFor(fragment);
         host.updateChrome(destination, destination != View.NO_ID);
     }

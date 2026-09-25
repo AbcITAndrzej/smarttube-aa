@@ -1,8 +1,27 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.44/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.45/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.44/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.45/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk"
+    ]
+  },
+  "aa1.45-video-exp": {
+    "versionCode": 2429,
+    "changelog": [
+      "Improved handling of videos where YouTube requires a normal sign-in because of age restrictions; playback is retried after sign-in.",
+      "Fixed restoration of a saved account when the sign-in service starts.",
+      "Improved edge-to-edge playback and adaptation to system bars and display cutouts across phones.",
+      "Improved icon contrast on light system bars and corrected the notifications icon.",
+      "Video EXP remains a separate variant. Android Auto Music and radio continue to use the Music variant.",
+      "The Video EXP variant retains experimental Android Auto video while the vehicle is parked; Music and radio remain in the Music variant."
+    ],
+    "changelog_pl": [
+      "Poprawiono obs?ug? film?w, dla kt?rych YouTube wymaga zwyk?ego logowania z powodu ogranicze? wieku; po zalogowaniu aplikacja ponawia odtwarzanie.",
+      "Poprawiono przywracanie zapisanego konta przy starcie us?ugi logowania.",
+      "Poprawiono pe?noekranowy uk?ad odtwarzacza oraz dopasowanie do pask?w systemowych i wyci?? ekranu na r??nych telefonach.",
+      "Poprawiono kontrast ikon na jasnym pasku systemowym i ikon? powiadomie?.",
+      "Video EXP pozostaje osobnym wariantem. Android Auto Music i radio nadal obs?uguje wariant Music.",
+      "Wariant Video EXP zachowuje eksperymentalne wideo w Android Auto podczas postoju; Music i radio pozostaj? w wariancie Music."
     ]
   },
   "aa1.44-video-exp": {

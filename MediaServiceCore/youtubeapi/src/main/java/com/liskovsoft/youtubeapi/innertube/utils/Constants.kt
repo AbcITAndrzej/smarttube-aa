@@ -1,5 +1,7 @@
 package com.liskovsoft.youtubeapi.innertube.utils
 
+import com.liskovsoft.googlecommon.common.helpers.DefaultHeaders
+
 internal object URLS {
     const val YT_BASE = "https://www.youtube.com"
     const val YT_MUSIC_BASE = "https://music.youtube.com"
@@ -104,7 +106,7 @@ internal object CLIENTS {
     val TV = CLIENT(
         NAME = "TVHTML5",
         VERSION = "7.20260311.12.00",
-        USER_AGENT = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
+        USER_AGENT = DefaultHeaders.USER_AGENT_TV_DOWNGRADED
     )
 
     val TV_SIMPLY = CLIENT(

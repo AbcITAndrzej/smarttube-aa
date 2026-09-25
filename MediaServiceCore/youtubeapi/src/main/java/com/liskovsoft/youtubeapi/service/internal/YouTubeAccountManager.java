@@ -28,6 +28,7 @@ public class YouTubeAccountManager {
     private static final String TAG = YouTubeAccountManager.class.getSimpleName();
     private static YouTubeAccountManager sInstance;
     private boolean mStorageSynced;
+    private boolean mAccountsRestored;
     private final YouTubeSignInService mSignInService;
     private final WeakHashSet<OnAccountChange> mListeners = new WeakHashSet<>();
     /**
@@ -225,8 +226,16 @@ public class YouTubeAccountManager {
         return GlobalPreferences.sInstance.getMediaServiceAccountData();
     }
 
-    public void init() {
+    public synchronized void init() {
+        if (mAccountsRestored || GlobalPreferences.sInstance == null) {
+            return;
+        }
+
         restoreAccounts();
+        if (getSelectedAccount() == null && !mAccounts.isEmpty()) {
+            ((YouTubeAccount) mAccounts.get(0)).setSelected(true);
+        }
+        mAccountsRestored = true;
     }
 
     public void addOnAccountChange(OnAccountChange listener) {

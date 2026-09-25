@@ -53,6 +53,8 @@ public class VideoInfoService extends VideoInfoServiceBase {
     private boolean mAuthBlock;
     private List<TranslationLanguage> mCachedTranslationLanguages;
     private boolean mIsUnplayable;
+    /** Age-gate playback must not move the client used by ordinary videos. */
+    private boolean mAgeGateSticky;
 
     private VideoInfoService() {
         mVideoInfoApi = RetrofitHelper.create(VideoInfoApi.class);
@@ -205,6 +207,8 @@ public class VideoInfoService extends VideoInfoServiceBase {
         //final AppClient beginType = getDefaultClient();
         final AppClient beginType = mNextInfoType != null ? mNextInfoType : VIDEO_INFO_TYPE_LIST[0];
         AppClient nextType = beginType;
+        boolean sawAgeGate = false;
+        boolean triedAgeGateFallback = false;
 
         do {
             VideoInfo result = null;
@@ -215,7 +219,33 @@ public class VideoInfoService extends VideoInfoServiceBase {
                         nextType.getClientName(), error.getClass().getSimpleName());
             }
 
+            if (result != null && result.isAgeRestricted()) {
+                sawAgeGate = true;
+            }
+
+            // Current YouTube TV player identities can return stream URLs that
+            // the CDN rejects. Retry only age-gated videos with the known
+            // WEB_EMBED and legacy Cobalt TV identities from SmartTube 32.45.
+            if (sawAgeGate && !triedAgeGateFallback) {
+                triedAgeGateFallback = true;
+                for (AppClient fallbackClient : new AppClient[]{AppClient.WEB_EMBED, AppClient.TV_DOWNGRADED}) {
+                    try {
+                        VideoInfo fallback = getVideoInfoWithRentFix(fallbackClient, videoId, clickTrackingParams);
+                        if (fallback != null && infoTester.test(fallback)) {
+                            mAgeGateSticky = true;
+                            return fallback;
+                        }
+                    } catch (RuntimeException error) {
+                        Log.w(TAG, "V18_AGE_GATE fallback client=%s error=%s",
+                                fallbackClient.getClientName(), error.getClass().getSimpleName());
+                    }
+                }
+            }
+
             if (result != null && infoTester.test(result)) {
+                if (sawAgeGate) {
+                    mAgeGateSticky = true;
+                }
                 return result;
             }
 
@@ -234,6 +264,14 @@ public class VideoInfoService extends VideoInfoServiceBase {
     //}
 
     public void switchNextFormat() {
+        // An age-restricted failure must not drag the next ordinary video onto another client.
+        if (mAgeGateSticky) {
+            mAgeGateSticky = false;
+            mNextInfoType = null;
+            Log.d(TAG, "V18_AGE_GATE keep ordinary client");
+            return;
+        }
+
         //initInfoTypeIfNeeded();
 
         // Try to reset pot cache for the last video
@@ -419,6 +457,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
     }
 
     private void persistRecentTypeIfNeeded(VideoInfo videoInfo) {
+        if (mAgeGateSticky) {
+            mNextInfoType = null;
+            return;
+        }
         if (videoInfo == null || videoInfo.isUnplayable() || videoInfo.getClient() == mActualInfoType) {
             return;
         }

@@ -60,6 +60,8 @@
     <string name="dialog_account_none">None</string>
     <string name="dialog_remove_account">Sign out</string>
     <string name="dialog_add_account">Sign in</string>
+    <string name="age_gate_title">Confirm your age</string>
+    <string name="age_gate_message">YouTube asks for a normal sign-in before this film can play. It is not a workaround. After you sign in, come back and the film will open again. Enter the code at youtube.com/activate.</string>
     <string name="default_lang">Default</string>
     <string name="original_lang">Original</string>
     <string name="dialog_select_language">Language</string>

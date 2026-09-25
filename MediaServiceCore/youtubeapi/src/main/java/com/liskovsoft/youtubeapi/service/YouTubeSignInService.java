@@ -53,6 +53,11 @@ public class YouTubeSignInService implements SignInService {
     }
 
     public void checkAuth() {
+        // The prefs callback that restores accounts can be dropped if this service
+        // is created while GlobalPreferences is still initializing. Load them here.
+        if (getSelectedAccount() == null && GlobalPreferences.isInitialized()) {
+            mAccountManager.init();
+        }
         updateAuthHeadersIfNeeded();
     }
 

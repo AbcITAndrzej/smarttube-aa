@@ -70,12 +70,9 @@ internal class QueryBuilder(private val client: AppClient) {
             if (cpn == null)
                 cpn = appService.clientPlaybackNonce // get it somewhere else?
 
-            // Web and TV signature timestamps now differ. TV expects a 001 suffix
-            // when a five-digit web timestamp is used (e.g. 20522 -> 20522001).
+            // The downgraded legacy TV player uses the same five-digit timestamp as WEB.
             if (signatureTimestamp == null || signatureTimestamp == -1)
-                signatureTimestamp = Helpers.parseInt(appService.signatureTimestamp?.let {
-                    if (client.isTVClient && it.length == 5) it + "001" else it
-                }) // get it somewhere else?
+                signatureTimestamp = Helpers.parseInt(appService.signatureTimestamp) // get it somewhere else?
         }
 
         val json = """

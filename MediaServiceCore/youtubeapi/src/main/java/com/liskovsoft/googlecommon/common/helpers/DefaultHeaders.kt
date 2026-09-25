@@ -38,6 +38,7 @@ object DefaultHeaders {
     // See: https://github.com/youtube/cobalt/blob/main/cobalt/browser/user_agent/user_agent_platform_info.cc#L506
     private const val USER_AGENT_COBALT_3 = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold (unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)"
     const val USER_AGENT_COBALT_DOWNGRADED = "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version"
+    const val USER_AGENT_TV_DOWNGRADED = USER_AGENT_COBALT_1
 
     // OK
     private const val USER_AGENT_WEBOS =
@@ -69,7 +70,7 @@ object DefaultHeaders {
     //const val USER_AGENT_TV = USER_AGENT_COBALT_3
     //const val USER_AGENT_TV = USER_AGENT_SAMSUNG_3 // no buffering (only 320x180 thumbs)
     //const val USER_AGENT_TV = USER_AGENT_ATV_COMBINED // buffering badly even with protobuf params (see videoinfo)
-    const val USER_AGENT_TV = USER_AGENT_FIRE_TV // buffering?
+    const val USER_AGENT_TV = USER_AGENT_TV_DOWNGRADED
     const val USER_AGENT_WEB = USER_AGENT_CHROME
     const val USER_AGENT_MOBILE_WEB = USER_AGENT_MOBILE_CHROME_2
     const val USER_AGENT_ANDROID = USER_AGENT_ANDROID_20

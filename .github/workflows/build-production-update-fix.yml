@@ -1,4 +1,4 @@
-name: Build production aa1.44
+name: Build production aa1.45
 
 on:
   workflow_dispatch:
@@ -33,8 +33,8 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "updates/music.json": (2428, "SmartTube-AA-Music-aa1.44-arm64-v8a.apk"),
-              "updates/video-exp.json": (2428, "SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk"),
+              "updates/music.json": (2429, "SmartTube-AA-Music-aa1.45-arm64-v8a.apk"),
+              "updates/video-exp.json": (2429, "SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk"),
           }
 
           for path, (expected_code, expected_asset) in expected.items():
@@ -94,12 +94,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.44 version
+      - name: Stamp aa1.45 version
         run: |
           set -euxo pipefail
-          sed -i -E 's/versionCode [0-9]+/versionCode 2428/' smarttubetv/build.gradle
-          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.44"/' smarttubetv/build.gradle
-          grep -n 'versionCode\|aa1.44\|carvideo' smarttubetv/build.gradle
+          sed -i -E 's/versionCode [0-9]+/versionCode 2429/' smarttubetv/build.gradle
+          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.45"/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.45\|carvideo' smarttubetv/build.gradle
 
       - name: Build Music and Video EXP production APKs
         run: >-
@@ -116,8 +116,8 @@ jobs:
           MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
           VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
           mkdir -p production-apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.44-arm64-v8a.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.45-arm64-v8a.apk
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk
           ls -lh production-apk
 
       - name: Verify production signing certificate
@@ -135,23 +135,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          TAG="aa1.44"
-          TITLE="SmartTube AA aa1.44 — wersja stabilna"
+          TAG="aa1.45"
+          TITLE="SmartTube AA aa1.45 — wersja stabilna"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          Stabilne wydanie produkcyjne SmartTube AA aa1.44 dla dwóch wariantów: Music oraz Video EXP.
+          Stabilne wydanie produkcyjne SmartTube AA aa1.45 dla dwóch wariantów: Music oraz Video EXP.
 
           Do pobrania:
           - SmartTube AA Music — podstawowy wariant do telefonu i Android Auto,
           - SmartTube AA Video EXP — osobny wariant z eksperymentalnym obrazem w Android Auto podczas postoju.
 
           Najważniejsze poprawki w tej wersji:
-          - wyeliminowano ostrzeżenie systemowe Android 14/15 Knox o zgodności aplikacji (16 KB page-size),
-          - wyeliminowano migotanie (flickering) miniatur i kafelków podczas uruchamiania i przewijania,
-          - optymalizacja szybkiego startu i odtwarzania wideo (brak zbędnych wywołań sieciowych, reset bufora SABR po przewijaniu),
-          - pełne sterowanie multimediami z ekranu blokady (poprzedni / play-pause / następny) wraz z okładką i metadanymi,
-          - obsługa automatycznych aktualizacji przez przycisk „Sprawdź aktualizacje” w aplikacji,
-          - versionCode 2428,
+          - poprawiono obsługę filmów, dla których YouTube wymaga zwykłego logowania z powodu ograniczeń wieku; po zalogowaniu aplikacja ponawia odtwarzanie,
+          - poprawiono przywracanie zapisanego konta przy starcie usługi logowania,
+          - poprawiono pełnoekranowy układ odtwarzacza i obsługę systemowych pasków oraz wycięć ekranu na różnych telefonach,
+          - poprawiono kontrast ikon na jasnym pasku systemowym i ikonę powiadomień,
+          - zachowano Android Auto Music i radio w wariancie Music; Video EXP pozostaje osobnym wariantem z eksperymentalnym wideo podczas postoju,
+          - zachowano automatyczne aktualizacje przez przycisk „Sprawdź aktualizacje” w aplikacji,
+          - versionCode 2429,
           - oba APK są podpisane tym samym stabilnym certyfikatem SmartTube AA co poprzednie wydania.
           EOF
 
@@ -159,8 +160,8 @@ jobs:
 
           if [ -n "$RELEASE_ID" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              production-apk/SmartTube-AA-Music-aa1.44-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk
+              production-apk/SmartTube-AA-Music-aa1.45-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
               -f name="$TITLE" \
               -f body="$(cat "$NOTES_FILE")" \
@@ -170,8 +171,8 @@ jobs:
               -f make_latest=true >/dev/null
           else
             gh release create "$TAG" \
-              production-apk/SmartTube-AA-Music-aa1.44-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.44-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Music-aa1.45-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \

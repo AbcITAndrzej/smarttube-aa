@@ -399,7 +399,7 @@ internal data class MediaItemFormatInfoImpl(private val playerResult: PlayerResu
     /**
      * Age restricted video
      */
-    private fun isAgeRestricted(): Boolean {
+    override fun isAgeRestricted(): Boolean {
         return ServiceHelper.atLeastOneEquals(
             _playabilityStatus,
             STATUS_LOGIN_REQUIRED,

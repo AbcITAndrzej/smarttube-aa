@@ -28,6 +28,9 @@ import android.widget.Toast;
 import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
@@ -227,6 +230,20 @@ public final class MobilePlaybackFragment extends Fragment implements TrackPicke
         }
 
         controls = view.findViewById(R.id.mobile_player_controls);
+        if (controls != null) {
+            final int baseLeft = controls.getPaddingLeft();
+            final int baseTop = controls.getPaddingTop();
+            final int baseRight = controls.getPaddingRight();
+            final int baseBottom = controls.getPaddingBottom();
+            ViewCompat.setOnApplyWindowInsetsListener(controls, (target, insets) -> {
+                Insets safeInsets = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                        | WindowInsetsCompat.Type.displayCutout());
+                target.setPadding(baseLeft + safeInsets.left, baseTop + safeInsets.top,
+                        baseRight + safeInsets.right, baseBottom + safeInsets.bottom);
+                return insets;
+            });
+            ViewCompat.requestApplyInsets(controls);
+        }
         TextView title = view.findViewById(R.id.mobile_player_title);
         TextView subtitle = view.findViewById(R.id.mobile_player_subtitle);
         TextView time = view.findViewById(R.id.mobile_player_time);
