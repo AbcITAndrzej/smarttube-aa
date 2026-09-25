@@ -8,6 +8,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.drawable.Drawable;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
@@ -21,6 +23,11 @@ import androidx.media.session.MediaButtonReceiver;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.liskovsoft.smartyoutubetv2.common.misc.MobileDiagnostics;
 import com.liskovsoft.smartyoutubetv2.tv.R;
 import com.liskovsoft.smartyoutubetv2.tv.ui.mobile.nativeui.host.MobileNativeActivity;
@@ -71,6 +78,9 @@ public final class MobileMediaSessionManager {
     private final BroadcastReceiver noisyReceiver;
     private AudioFocusRequest audioFocusRequest;
     private MobilePlaybackSnapshot snapshot;
+    private Bitmap artworkBitmap;
+    private String requestedArtworkUrl = "";
+    private CustomTarget<Bitmap> artworkTarget;
     private boolean focusRequestOutstanding;
     private boolean focusGranted;
     private boolean released;
@@ -185,6 +195,7 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             snapshot = value;
+            updateArtwork(value == null ? "" : value.getArtworkUrl());
             if (!playerHandlesAudioFocus && value != null && value.isPlaying()
                     && !focusRequestOutstanding) {
                 notificationDismissed = false;
@@ -217,6 +228,11 @@ public final class MobileMediaSessionManager {
             mediaSession.setActive(false);
             mediaSession.setCallback(null);
             mediaSession.release();
+            if (artworkTarget != null) {
+                Glide.with(appContext).clear(artworkTarget);
+                artworkTarget = null;
+            }
+            artworkBitmap = null;
             NotificationManagerCompat.from(appContext).cancel(NOTIFICATION_ID);
             MobileBackgroundPlaybackService.stop(appContext);
             MobileMediaSessionManager current = getActive();
@@ -247,6 +263,7 @@ public final class MobileMediaSessionManager {
         String title = current == null || current.getTitle().trim().isEmpty()
                 ? appContext.getString(R.string.app_name) : current.getTitle();
         String subtitle = current == null ? "" : current.getSubtitle();
+        Bitmap currentArtwork = artworkBitmap;
         PendingIntent stopIntent = servicePendingIntent(ACTION_STOP, 6);
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
@@ -279,6 +296,9 @@ public final class MobileMediaSessionManager {
                         .setShowActionsInCompactView(0, 1, 2)
                         .setShowCancelButton(true)
                         .setCancelButtonIntent(stopIntent));
+        if (currentArtwork != null) {
+            builder.setLargeIcon(currentArtwork);
+        }
         return builder.build();
     }
 
@@ -398,9 +418,47 @@ public final class MobileMediaSessionManager {
         focusGranted = false;
     }
 
+    private void updateArtwork(String artworkUrl) {
+        String url = artworkUrl == null ? "" : artworkUrl.trim();
+        if (url.equals(requestedArtworkUrl)) return;
+
+        requestedArtworkUrl = url;
+        artworkBitmap = null;
+        if (artworkTarget != null) {
+            Glide.with(appContext).clear(artworkTarget);
+            artworkTarget = null;
+        }
+        if (url.isEmpty() || released) return;
+
+        CustomTarget<Bitmap> target = new CustomTarget<Bitmap>(256, 256) {
+            @Override
+            public void onResourceReady(@NonNull Bitmap resource,
+                                        @Nullable Transition<? super Bitmap> transition) {
+                if (released || snapshot == null || !url.equals(requestedArtworkUrl)) return;
+                artworkBitmap = resource;
+                updateSessionMetadata();
+                synchronizeSystemSurface();
+            }
+
+            @Override
+            public void onLoadFailed(@Nullable Drawable errorDrawable) {
+                if (url.equals(requestedArtworkUrl)) {
+                    MobileDiagnostics.debug("MediaSession", "artwork load failed");
+                }
+            }
+
+            @Override
+            public void onLoadCleared(@Nullable Drawable placeholder) {
+                // Keep the current notification/session bitmap until a replacement is ready.
+            }
+        };
+        artworkTarget = target;
+        Glide.with(appContext).asBitmap().load(url).centerCrop().override(256, 256).into(target);
+    }
+
     private void updateSessionMetadata() {
         if (snapshot == null) return;
-        MediaMetadataCompat metadata = new MediaMetadataCompat.Builder()
+        MediaMetadataCompat.Builder builder = new MediaMetadataCompat.Builder()
                 .putString(MediaMetadataCompat.METADATA_KEY_MEDIA_ID, snapshot.getMediaId())
                 .putString(MediaMetadataCompat.METADATA_KEY_TITLE, snapshot.getTitle())
                 .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, snapshot.getSubtitle())
@@ -408,8 +466,13 @@ public final class MobileMediaSessionManager {
                 .putString(MediaMetadataCompat.METADATA_KEY_ALBUM_ART_URI, snapshot.getArtworkUrl())
                 .putString(MediaMetadataCompat.METADATA_KEY_ART_URI, snapshot.getArtworkUrl())
                 .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, snapshot.getDurationMs())
-                .build();
-        mediaSession.setMetadata(metadata);
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, snapshot.getTitle())
+                .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, snapshot.getSubtitle());
+        if (artworkBitmap != null) {
+            builder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, artworkBitmap)
+                    .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, artworkBitmap);
+        }
+        mediaSession.setMetadata(builder.build());
     }
 
     private void updateSessionState() {

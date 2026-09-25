@@ -1,8 +1,21 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.45/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.46/SmartTube-AA-Video-EXP-aa1.46-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.45/SmartTube-AA-Video-EXP-aa1.45-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.46/SmartTube-AA-Video-EXP-aa1.46-arm64-v8a.apk"
+    ]
+  },
+  "aa1.46-video-exp": {
+    "versionCode": 2430,
+    "changelog": [
+      "Lock-screen media controls now receive the album artwork bitmap and complete title/artist metadata.",
+      "Seeking remains available through the Android media session.",
+      "The Video EXP variant and Android Auto Music/radio behavior are retained."
+    ],
+    "changelog_pl": [
+      "Sterowanie na ekranie blokady otrzymuje teraz bitmapę okładki oraz pełne metadane tytułu i wykonawcy.",
+      "Przewijanie pozostaje dostępne przez sesję multimedialną Androida.",
+      "Zachowano wariant Video EXP oraz działanie Android Auto Music i radia."
     ]
   },
   "aa1.45-video-exp": {
