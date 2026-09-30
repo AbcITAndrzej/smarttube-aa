@@ -28,6 +28,7 @@ import com.google.android.exoplayer2.source.sabr.manifest.SabrManifest;
 import com.google.android.exoplayer2.source.sabr.parser.adapter.SabrFragmentedMp4Adapter;
 import com.google.android.exoplayer2.source.sabr.parser.adapter.SabrMatroskaAdapter;
 import com.google.android.exoplayer2.source.sabr.parser.SabrStream;
+import com.google.android.exoplayer2.source.sabr.parser.misc.SabrExtractorInput;
 import com.google.android.exoplayer2.source.sabr.parser.models.AudioSelector;
 import com.google.android.exoplayer2.source.sabr.parser.models.CaptionSelector;
 import com.google.android.exoplayer2.source.sabr.parser.models.FormatSelector;
@@ -443,6 +444,10 @@ public class DefaultSabrChunkSource implements SabrChunkSource {
     @Override
     public boolean onChunkLoadError(Chunk chunk, boolean cancelable, Exception e, long blacklistDurationMs) {
         Log.e(TAG, "Chunk load failed: " + e.getMessage());
+        if (e.getMessage() != null && e.getMessage().contains(SabrExtractorInput.BACKOFF_MARKER)) {
+            Log.e(TAG, "AA143 SABR backoff delegated to retry policy: " + e.getMessage());
+            return false;
+        }
         if (!cancelable) {
             return false;
         }

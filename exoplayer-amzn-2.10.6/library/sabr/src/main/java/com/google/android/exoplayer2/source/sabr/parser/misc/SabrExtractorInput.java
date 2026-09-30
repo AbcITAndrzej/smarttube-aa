@@ -19,6 +19,7 @@ public final class SabrExtractorInput implements ExtractorInput {
     private long startPosition;
     private int remaining;
     private MediaSegmentDataSabrPart data;
+    private boolean mediaSeen;
 
     public SabrExtractorInput(SabrStream sabrStream) {
         this.sabrStream = sabrStream;
@@ -39,6 +40,7 @@ public final class SabrExtractorInput implements ExtractorInput {
         position = input.getPosition();
         startPosition = position;
         remaining = C.LENGTH_UNSET;
+        mediaSeen = false;
     }
 
     public void dispose() {
@@ -152,7 +154,7 @@ public final class SabrExtractorInput implements ExtractorInput {
         return -1;
     }
 
-    private void fetchData() {
+    private void fetchData() throws IOException {
         while (true) {
             if (data != null) {
                 long advance = getAdvance();
@@ -169,6 +171,18 @@ public final class SabrExtractorInput implements ExtractorInput {
             SabrPart sabrPart = sabrStream.parse(input);
 
             if (sabrPart == null) {
+                // Server may return only NextRequestPolicy with no media. Retrying
+                // immediately burns the requested wait window and can create hundreds
+                // of init requests. Surface only this backoff signal to ExoPlayer so
+                // its normal load-error scheduler performs a delayed retry.
+                if (!mediaSeen) {
+                    int backoffMs = sabrStream.getBackoffTimeMs();
+                    if (backoffMs > 0) {
+                        String msg = BACKOFF_MARKER + backoffMs;
+                        Log.e(TAG, "AA143 SABR backoff wait: %s ms", backoffMs);
+                        throw new IOException(msg);
+                    }
+                }
                 break;
             }
 
@@ -183,6 +197,7 @@ public final class SabrExtractorInput implements ExtractorInput {
             if (sabrPart instanceof MediaSegmentDataSabrPart) {
                 data = (MediaSegmentDataSabrPart) sabrPart;
                 startPosition = position;
+                mediaSeen = true;
                 break;
             }
         }
@@ -306,6 +321,8 @@ public final class SabrExtractorInput implements ExtractorInput {
         Log.e(TAG, msg);
         throw new EOFException(msg);
     }
+
+    public static final String BACKOFF_MARKER = "AA143 SABR backoff requested, ms=";
 
     private static void throwShouldNotBeCalled() {
         String msg = "The peek methods shouldn't be called in SABR extractor";

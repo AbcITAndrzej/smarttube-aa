@@ -31,6 +31,11 @@ public class SabrMatroskaAdapter extends MatroskaExtractor {
             extractorInput.init(input);
             result = super.read(extractorInput, seekPosition);
         } catch (Exception e) {
+            if (e instanceof IOException && e.getMessage() != null
+                    && e.getMessage().contains(SabrExtractorInput.BACKOFF_MARKER)) {
+                Log.e(TAG, "AA143 propagating SABR backoff: %s", e.getMessage());
+                throw (IOException) e;
+            }
             Log.e(TAG, "User doing seek? %s: %s", e.getClass().getSimpleName(), e.getMessage());
             e.printStackTrace();
         } finally {

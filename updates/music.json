@@ -1,8 +1,21 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.48/SmartTube-AA-Music-aa1.48-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.49/SmartTube-AA-Music-aa1.49-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.48/SmartTube-AA-Music-aa1.48-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.49/SmartTube-AA-Music-aa1.49-arm64-v8a.apk"
+    ]
+  },
+  "aa1.49": {
+    "versionCode": 2433,
+    "changelog": [
+      "Fixed SABR backoff wait handling preventing ~1-minute playback stalls and request bursts on mobile streams.",
+      "Expanded lock-screen media controls stay open when switching tracks.",
+      "Lock-screen artwork, metadata, seeking, Android Auto Music, and radio are retained."
+    ],
+    "changelog_pl": [
+      "Naprawiono obsługę SABR backoff (NextRequestPolicy) eliminując zawieszanie się odtwarzania po ok. 1 minucie i zapętlenie zapytań.",
+      "Rozwinięty panel sterowania na ekranie blokady pozostaje otwarty podczas zmiany utworu.",
+      "Zachowano okładkę, metadane, przewijanie, Android Auto Music i radio."
     ]
   },
   "aa1.48": {
@@ -13,9 +26,9 @@
       "Lock-screen artwork, metadata, seeking, Android Auto Music, and radio are retained."
     ],
     "changelog_pl": [
-      "Rozwini\u0119ty panel sterowania na ekranie blokady pozostaje otwarty podczas zmiany utworu.",
+      "Rozwinięty panel sterowania na ekranie blokady pozostaje otwarty podczas zmiany utworu.",
       "Zachowano odzyskiwanie odtwarzania VOD po timeoutcie sieciowym.",
-      "Zachowano ok\u0142adk\u0119, metadane, przewijanie, Android Auto Music i radio."
+      "Zachowano okładkę, metadane, przewijanie, Android Auto Music i radio."
     ]
   },
   "aa1.47": {
@@ -26,8 +39,8 @@
       "Android Auto Music and radio behavior are retained."
     ],
     "changelog_pl": [
-      "Po odzyskaniu strumienia po timeoutcie sieciowym VOD wznawia si\u0119 automatycznie.",
-      "Zachowano ok\u0142adk\u0119, metadane tytu\u0142u i wykonawcy oraz przewijanie z sesji multimedialnej.",
+      "Po odzyskaniu strumienia po timeoutcie sieciowym VOD wznawia się automatycznie.",
+      "Zachowano okładkę, metadane tytułu i wykonawcy oraz przewijanie z sesji multimedialnej.",
       "Zachowano Android Auto Music i radio."
     ]
   },

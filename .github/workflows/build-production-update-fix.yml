@@ -1,4 +1,4 @@
-name: Build production aa1.48
+name: Build production aa1.49
 
 on:
   workflow_dispatch:
@@ -33,8 +33,8 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "updates/music.json": (2432, "SmartTube-AA-Music-aa1.48-arm64-v8a.apk"),
-              "updates/video-exp.json": (2432, "SmartTube-AA-Video-EXP-aa1.48-arm64-v8a.apk"),
+              "updates/music.json": (2433, "SmartTube-AA-Music-aa1.49-arm64-v8a.apk"),
+              "updates/video-exp.json": (2433, "SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk"),
           }
 
           for path, (expected_code, expected_asset) in expected.items():
@@ -60,6 +60,8 @@ jobs:
           python3 .github/aa141_apply_lockscreen_media_controls.py
           grep -n 'ACTION_SKIP_TO_PREVIOUS\|ACTION_SKIP_TO_NEXT' smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/tv/ui/mobile/nativeui/background/MobileMediaSessionManager.java
           grep -n 'if (periodEnded && loadPositionUs >= periodDurationUs)' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/DefaultSabrChunkSource.java
+          grep -n 'BACKOFF_MARKER' exoplayer-amzn-2.10.6/library/sabr/src/main/java/com/google/android/exoplayer2/source/sabr/parser/misc/SabrExtractorInput.java
+          grep -n 'BACKOFF_MARKER' common/src/main/java/com/liskovsoft/smartyoutubetv2/common/exoplayer/errors/SabrDefaultLoadErrorHandlingPolicy.java
 
       - name: Set up Java 11
         uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
@@ -94,12 +96,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.48 version
+      - name: Stamp aa1.49 version
         run: |
           set -euxo pipefail
-          sed -i -E 's/versionCode [0-9]+/versionCode 2432/' smarttubetv/build.gradle
-          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.48"/' smarttubetv/build.gradle
-          grep -n 'versionCode\|aa1.48\|carvideo' smarttubetv/build.gradle
+          sed -i -E 's/versionCode [0-9]+/versionCode 2433/' smarttubetv/build.gradle
+          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.49"/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.49\|carvideo' smarttubetv/build.gradle
 
       - name: Build Music and Video EXP production APKs
         run: >-
@@ -116,8 +118,8 @@ jobs:
           MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
           VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
           mkdir -p production-apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.48-arm64-v8a.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.48-arm64-v8a.apk
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.49-arm64-v8a.apk
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk
           ls -lh production-apk
 
       - name: Verify production signing certificate
@@ -135,17 +137,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          TAG="aa1.48"
-          TITLE="SmartTube AA aa1.48 — wersja stabilna"
+          TAG="aa1.49"
+          TITLE="SmartTube AA aa1.49 — wersja stabilna"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          Stabilne wydanie produkcyjne SmartTube AA aa1.48 dla dwóch wariantów: Music oraz Video EXP.
+          Stabilne wydanie produkcyjne SmartTube AA aa1.49 dla dwóch wariantów: Music oraz Video EXP.
 
           Do pobrania:
           - SmartTube AA Music — podstawowy wariant do telefonu i Android Auto,
           - SmartTube AA Video EXP — osobny wariant z eksperymentalnym obrazem w Android Auto podczas postoju.
 
           Najważniejsze poprawki w tej wersji:
+          - naprawiono obsługę SABR backoff (NextRequestPolicy) eliminując zapętlanie zapytań i zawieszanie się odtwarzacza po ok. 1 minucie odtwarzania utworu,
           - poprawiono obsługę filmów, dla których YouTube wymaga zwykłego logowania z powodu ograniczeń wieku; po zalogowaniu aplikacja ponawia odtwarzanie,
           - poprawiono przywracanie zapisanego konta przy starcie usługi logowania,
           - poprawiono pełnoekranowy układ odtwarzacza i obsługę systemowych pasków oraz wycięć ekranu na różnych telefonach,
@@ -156,7 +159,7 @@ jobs:
           - zachowano rozwinięty panel sterowania na ekranie blokady podczas zmiany utworu,
           - zachowano Android Auto Music i radio w wariancie Music; Video EXP pozostaje osobnym wariantem z eksperymentalnym wideo podczas postoju,
           - zachowano automatyczne aktualizacje przez przycisk „Sprawdź aktualizacje” w aplikacji,
-          - versionCode 2432,
+          - versionCode 2433,
           - oba APK są podpisane tym samym stabilnym certyfikatem SmartTube AA co poprzednie wydania.
           EOF
 
@@ -164,8 +167,8 @@ jobs:
 
           if [ -n "$RELEASE_ID" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              production-apk/SmartTube-AA-Music-aa1.48-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.48-arm64-v8a.apk
+              production-apk/SmartTube-AA-Music-aa1.49-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
               -f name="$TITLE" \
               -f body="$(cat "$NOTES_FILE")" \
@@ -175,8 +178,8 @@ jobs:
               -f make_latest=true >/dev/null
           else
             gh release create "$TAG" \
-              production-apk/SmartTube-AA-Music-aa1.48-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.48-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Music-aa1.49-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
