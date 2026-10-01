@@ -1,0 +1,354 @@
+================================================================================
+DOKUMENTACJA PRZEKAZANIA PROJEKTU (HANDOVER REPORT)
+PROJEKT: SmartTube-AA-MAIN (Wersja Mobile & Android Auto)
+TEMAT: Analiza i diagnostyka odtwarzania filmów 18+ (Psy 2), naprawa silnika odtwarzania i instrukcja wdrożeniowa
+DATA RAPORTU: 2026-09-23
+AUTOR: Antigravity AI Assistant
+UZUPEŁNIENIE: 2026-09-24, sekcja 8 (kolejne próby, wynik nieudany)
+================================================================================
+
+1. ŚRODOWISKO TESTOWE I SPRZĘTOWE
+--------------------------------------------------------------------------------
+- Urządzenie testowe: Samsung Galaxy S25 Ultra
+- Identyfikator ADB urządzenia: RFCY1197K8L
+- System operacyjny dewelopera: Windows
+- Lokalizacja repozytorium: D:\APK\_SMARTUBE_\SmartTube-AA-MAIN
+- Narzędzie ADB: C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe
+- Wrapper Gradle: .\gradlew.bat (Gradle 7.5, środowisko JDK 11)
+- Pakiety aplikacji zainstalowane na urządzeniu:
+    1) app.smarttube.mobile.carvideo (Wersja CarVideo / Music dla Android Auto i auta)
+    2) app.smarttube.mobile (Wersja Mobile - standardowa aplikacja mobilna)
+
+--------------------------------------------------------------------------------
+2. CEL PRAC I ZADANIE
+--------------------------------------------------------------------------------
+Głównym zadaniem było:
+1) Uruchomienie odtwarzania filmów z ograniczeniem wiekowym 18+ (jako przypadek testowy służył pełnometrażowy film "Psy 2", Video ID: pQNyiUXEmoY) na zalogowanym koncie użytkownika.
+2) Utrzymanie sprawności odtwarzania wszystkich standardowych materiałów wideo, płynnego przewijania (seek/scrubbing) oraz funkcjonalności interfejsu mobilnego (pasek dolny, tryb pełnoekranowy immersive, logowanie przez przeglądarkę).
+3) Równoległa obsługa i kompilacja obu aplikacji (standardowej mobilnej oraz dedykowanej wersji CarVideo/Music).
+
+--------------------------------------------------------------------------------
+3. CHRONOLOGICZNY PRZEBIEG PRAC (OD POCZĄTKU DO KOŃCA)
+--------------------------------------------------------------------------------
+Krok 1: Wstępna analiza zgłoszenia
+- Film "Psy 2" nie włączał się na zalogowanym koncie, generując błąd odtwarzania i zatrzymując się na czarnym ekranie / buforowaniu.
+- W logach zaobserwowano, że zapytania do endpointów strumieniowania kończą się kodem HTTP 403 Forbidden.
+
+Krok 2: Badanie łańcucha klientów InnerTube (VideoInfoService)
+- Analiza wykazała, że standardowy klient WEB (przeglądarkowy) dla filmów 18+ zwraca status:
+  "LOGIN_REQUIRED" ("Zaloguj się, aby potwierdzić swój wiek").
+- Wynika to z faktu, że mechanizm logowania SmartTube oparty jest na tokenie telewizyjnym (OAuth dla TVHTML5 / youtube.com/activate). YouTube odrzuca token TV przy zapytaniach z nagłówkami klienta WEB (yt_li=0, logged_in=0).
+- Jedynym klientem, który z tokenem TV pomyślnie przechodził weryfikację wieku (age-gate) i zwracał kompletne formaty strumieniowe, był AppClient.TV (TVHTML5).
+
+Krok 3: Problem z serwerami CDN (403 Forbidden)
+- Mimo że API TVHTML5 zwróciło listę formatów i adres SABR (serverAbrStreamingUrl), odtwarzacz ExoPlayer (CronetDataSource) przy próbie pobrania chunków z serwerów strumieniowych (googlevideo.com/videoplayback) otrzymał odpowiedź HTTP 403 Forbidden.
+- Przetestowano usunięcie parametru pot= z adresu SABR – bez rezultatu (nadal 403).
+
+Krok 4: Próba podmiany tożsamości klienta w locie (Client Spoofing)
+- Wysunięto hipotezę, że CDN wymaga ważnego BotGuard poToken. Ponieważ w aplikacji zaimplementowano generator poToken wyłącznie dla klienta WEB (przez moduł WebView/V8), podjęto próbę podmiany parametru w adresie URL z c=TVHTML5 na c=WEB wraz z dołączeniem poTokena WEB.
+- Wymuszono pobieranie WEB poToken w VideoInfoService.java również dla klientów TV.
+
+Krok 5: Efekt uboczny – załamanie odtwarzania normalnych filmów
+- Modyfikacja wymuszająca poToken WEB oraz zmiana warunku isSabr() w YouTubeMediaItemFormatInfo.java spowodowała krytyczną regresję:
+  a) Zwykłe filmy zamiast klienta WEB zaczęły wybierać w pętli awaryjnej klienta iOS.
+  b) Moduł SABR w bibliotece ExoPlayer nie posiadał wartości "iOS" w enumie StreamerContext.ClientName, co wywoływało wyjątek krytyczny:
+     "IllegalArgumentException: No enum constant com.google.android.exoplayer2.source.sabr.protos.videostreaming.StreamerContext.ClientName.iOS".
+  c) Przewijanie (seeking) przestało działać, a aplikacja zawieszała się na buforowaniu.
+
+Krok 6: Ostateczna naprawa – Wdrożenie "Opcji A"
+- Podjęto decyzję o natychmiastowym wycofaniu wszelkich ingerencji w silnik odtwarzania.
+- Przywrócono w 100% czysty stan z Git dla:
+  * MediaServiceCore/ (cały moduł youtubeapi, definicje klientów, nagłówki, parsowanie formatów)
+  * exoplayer-amzn-2.10.6/ (rozszerzenia sieciowe Cronet)
+  * VideoLoaderController.java (oryginalne zarządzanie stanem odtwarzacza)
+- Zachowano wszystkie wartościowe modyfikacje interfejsu użytkownika (MobileNativeActivity, immersive mode, Android Auto, obsługa wyboru przeglądarki Chrome do logowania).
+- Skompilowano od zera i zainstalowano obie paczki (CarVideo i Mobile). Przewijanie i stabilne odtwarzanie normalnych filmów zostało w pełni przywrócone.
+
+--------------------------------------------------------------------------------
+4. NAPOTKANE PROBLEMY I DIAGNOZA TECHNICZNA (ROOT CAUSE)
+--------------------------------------------------------------------------------
+Problem 1: Architektura uwierzytelniania vs Age-Gate 18+
+- Logowanie w SmartTube odbywa się przez kod urządzenia na youtube.com/activate (OAuth2 TV Client ID).
+- Google restrykcyjnie rozdziela uprawnienia: token telewizyjny jest honorowany przez YouTube API wyłącznie dla zapytań oznaczonych jako TV (TVHTML5).
+- Klient WEB (który posiada działający generator BotGuard poToken) traktuje zapytania z tym tokenem jako niezalogowane (logged_in=0) i odbija się od ekranu weryfikacji wieku.
+
+Problem 2: Blokada CDN dla TVHTML5 bez dedykowanej atestacji
+- W ostatnim czasie YouTube wdrożył na serwerach strumieniowych (googlevideo.com) mechanizm weryfikacji integralności również dla klientów TV.
+- Linki wygenerowane przez TVHTML5 dla materiałów z restrykcją wiekową są blokowane błędem 403 Forbidden, jeśli klient nie przedstawi ważnej atestacji powiązanej z sesją TV.
+- Doklejenie poTokena wygenerowanego dla WEB do zapytania TVHTML5 jest natychmiast odrzucane przez CDN (niezgodność sygnatury i klienta).
+
+Problem 3: Protobuf SABR a klient iOS
+- SABR (Stream ABR) korzysta z binarnych struktur Protobuf. Enum ClientName w parserze protobuf SmartTube nie zawiera wartości "iOS". Jakakolwiek logika kierująca strumień SABR na klienta iOS kończy się natychmiastowym crashem odtwarzacza.
+
+--------------------------------------------------------------------------------
+5. JAK NALEŻY TO DOCELOWO ROZWIĄZAĆ W PRZYSZŁOŚCI?
+--------------------------------------------------------------------------------
+Aby w sposób czysty i stabilny rozwiązać problem filmów 18+ (takich jak "Psy 2") bez psucia reszty aplikacji, należy wdrożyć jedno z poniższych rozwiązań architektonicznych:
+
+Rekomendacja 1 (Podejście hybrydowe - Proxy logowania Web):
+- Wdrożyć w aplikacji mechanizm pozyskiwania ciasteczek sesyjnych WEB (np. przez WebView z logowaniem do konta Google) równolegle do kodu TV.
+- Mając ciasteczka konta dla przeglądarki (SAPISID / __Secure-3PAPISID), zapytanie do klienta WEB przejdzie age-gate z flaga logged_in=1, a wygenerowany lokalnie WEB poToken będzie w 100% zgodny z serwerami CDN.
+
+Rekomendacja 2 (Klient ANDROID z atestacją Play Integrity / GMS):
+- Zbadanie klienta ANDROID_TESTSUITE lub ANDROID_EMBEDDED.
+- Klient ANDROID_VR potrafi odtwarzać część materiałów, lecz wymaga dopracowania przekazywania nagłówków autoryzacyjnych lub ciasteczek.
+
+Rekomendacja 3 (Separacja reguł odtwarzania):
+- Wszelkie przyszłe eksperymenty z omijaniem 18+ MUSZĄ być ściśle odizolowane w kodzie i aktywowane TYLKO wtedy, gdy isAgeRestricted() == true lub gdy standardowy łańcuch zakończy się błędem "LOGIN_REQUIRED".
+- Nigdy nie wolno modyfikować globalnych metod takich jak isSabr(), DefaultHeaders czy domyślnej kolejności klientów w VideoInfoService dla wszystkich filmów.
+
+--------------------------------------------------------------------------------
+6. INSTRUKCJA KOMPILACJI I INSTALACJI NA TELEFONIE
+--------------------------------------------------------------------------------
+Środowisko wymaga podłączonego telefonu przez USB z włączonym debugowaniem ADB.
+
+A. Weryfikacja połączenia z telefonem:
+   Komenda (PowerShell):
+   C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe devices
+   Oczekiwany wynik:
+   RFCY1197K8L    device
+
+B. Kompilacja obu paczek (CarVideo oraz Mobile Debug):
+   Przejdź do katalogu głównego projektu:
+   cd D:\APK\_SMARTUBE_\SmartTube-AA-MAIN
+
+   Wykonaj kompilację:
+   .\gradlew.bat :smarttubetv:assembleStmobileCarvideo :smarttubetv:assembleStmobileDebug
+
+   Lokalizacje wyjściowych plików APK:
+   - CarVideo:
+     smarttubetv\build\outputs\apk\stmobile\carvideo\SmartTube_mobile_32.04-mobile-p13-aa1.44-carvideo_universal.apk
+   - Mobile Debug:
+     smarttubetv\build\outputs\apk\stmobile\debug\SmartTube_mobile_32.04-mobile-p13-aa1.44_universal.apk
+
+C. Instalacja na urządzeniu (Samsung S25 Ultra, ID: RFCY1197K8L):
+   1) Wersja CarVideo (Music / Android Auto):
+      C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe -s RFCY1197K8L install -r smarttubetv\build\outputs\apk\stmobile\carvideo\SmartTube_mobile_32.04-mobile-p13-aa1.44-carvideo_universal.apk
+
+   2) Wersja Standardowa Mobilna:
+      C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe -s RFCY1197K8L install -r smarttubetv\build\outputs\apk\stmobile\debug\SmartTube_mobile_32.04-mobile-p13-aa1.44_universal.apk
+
+D. Podgląd logów w czasie rzeczywistym podczas testów odtwarzania:
+   C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe -s RFCY1197K8L logcat -c
+   C:\Users\DELL\AppData\Local\Android\Sdk\platform-tools\adb.exe -s RFCY1197K8L logcat | Select-String "V11_SABR|V13_GLOBAL|CronetDataSource|ErrorFixerController"
+
+--------------------------------------------------------------------------------
+7. LOKALIZACJA PLIKÓW, ARTEFAKTÓW I HISTORII
+--------------------------------------------------------------------------------
+- Niniejszy raport przekazania:
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\RAPORT_PRZEKAZANIA_ZADANIA_SMARTUBE.txt
+
+- Pliki z logami zrzutów ADB z testów:
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\logcat_test.txt
+
+- Transkrypty sesji agenta i pełna historia poleceń:
+  C:\Users\DELL\.gemini\antigravity-cli\brain\f1edf1d5-a264-4166-b35b-d004614f68b3\.system_generated\logs\transcript.jsonl
+  C:\Users\DELL\.gemini\antigravity-cli\brain\f1edf1d5-a264-4166-b35b-d004614f68b3\.system_generated\logs\transcript_full.jsonl
+
+- Kluczowe pliki źródłowe odtwarzacza (obecnie czyste, przywrócone do Git HEAD):
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\videoinfo\V2\VideoInfoService.java
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\videoinfo\VideoInfoServiceBase.java
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\service\data\YouTubeMediaItemFormatInfo.java
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\common\src\main\java\com\liskovsoft\smartyoutubetv2/common/app/models/playback/controllers/VideoLoaderController.java
+
+- Zmodyfikowane i zachowane pliki interfejsu użytkownika (Mobile / Android Auto UI):
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\smarttubetv\src\stmobile\java\com\liskovsoft\smartyoutubetv2\tv\ui\mobile\nativeui\host\MobileNativeActivity.java
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\common\src\main\java\com\liskovsoft\smartyoutubetv2\common\utils\Utils.java (Wybór przeglądarki Chrome do logowania)
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\smarttubetv\src\stmobile\res\layout\mobile_native_activity.xml
+
+================================================================================
+8. KONTYNUACJA 2026-09-23 / 2026-09-24
+   KOLEJNE PRÓBY PO RAPORCIE Z SEKCJI 1-7
+   AUTOR TEJ SEKCJI: Grok (sesja po przekazaniu)
+   WYNIK: NIEUDANY. Film "Psy 2" nadal się nie odtwarza.
+================================================================================
+
+Ta sekcja nie zmienia sekcji 1-7. Dopisuje tylko to, co zostało sprawdzone
+i wdrożone później. Nic z tych prób nie uruchomiło filmu 18+.
+
+8.1. Która ikona jest którą aplikacją
+--------------------------------------------------------------------------------
+Na pulpicie telefonu są dwie ikony obok siebie. Użytkownik testuje lewą.
+
+- Lewa ikona, współrzędne ikony około x=41:
+  pakiet app.smarttube.mobile.carvideo
+  nazwa: SmartTube AA Video EXP
+  To jest aplikacja, na której użytkownik jest zalogowany i na której
+  robi testy. W raporcie z sekcji 1 została opisana jako CarVideo / Music.
+  W praktyce użytkownik nazywa ją Video i to na niej pracuje.
+
+- Prawa ikona, współrzędne ikony około x=290:
+  pakiet app.smarttube.mobile
+  nazwa: SmartTube Mobile
+  To jest druga aplikacja. Użytkownik nazywa ją Music. Wygląda podobnie,
+  ale to nie jest ta, na której prowadzi testy.
+
+Większość prób z tej sesji, do godziny 16:47, była odpalana na prawej
+ikonie. To był błąd. Prawa aplikacja nie miała zapisanego konta SmartTube.
+Lewa, zalogowana, dostała nową paczkę dopiero o 16:55.
+
+8.2. Co zostało potwierdzone na żywo, zanim weszła poprawka na lewą ikonę
+--------------------------------------------------------------------------------
+Na prawej aplikacji, zanim okazało się, że konto jest puste:
+
+- Klient WEB dla Psy 2 jest traktowany jako wylogowany i dostaje
+  LOGIN_REQUIRED: "Zaloguj się, aby potwierdzić swój wiek".
+- Zalogowany klient TVHTML5 dostaje playability OK, logged_in=1,
+  progresywny adres itag 18 oraz adres SABR. Nie ma przy tym poTokena TV.
+- Odtwarzacz nie otwiera SABR dla TV. Schodzi do progresywnego itag 18.
+- Ten adres, już po odszyfrowaniu parametru n, dostaje z googlevideo
+  HTTP 403. To samo przy poprawnym User-Agent TV, po doklejeniu
+  poTokena WEB i po wysłaniu nagłówka Authorization na samo pobieranie
+  pliku.
+- Klient ANDROID z tym samym tokenem TV też jest za bramką wieku
+  i nie ma bezpośredniego adresu pliku.
+- WEB_EMBED zwraca odmowę tożsamości osadzenia (152).
+- Flagi contentCheckOk i racyCheckOk są już wysyłane jako true.
+  Sam przycisk "zgadzam się" w aplikacji nic by nie zmienił.
+- Przy 403 odtwarzacz przechodził na kolejny klient i zapamiętywał go
+  dla następnego, zwykłego filmu. Zwykły film padał do czyszczenia
+  pamięci. To został odcięte flagą tylko dla filmu 18+: przy błędzie
+  klient zwykłych filmów nie jest podmieniany.
+
+Próba nagłówka Authorization na adresie googlevideo, tylko dla filmu 18+,
+też skończyła się 403. Ten kawałek został wycofany ze źródeł.
+
+8.3. Próba zamiany tokenu TV na ciasteczka strony
+--------------------------------------------------------------------------------
+Hipoteza z rekomendacji 1 w sekcji 5: z tokenu już zalogowanego konta
+pobrać ciasteczka YouTube (SAPISID) i zapytać klienta WEB razem z istniejącym
+poTokenem WEB.
+
+Zrobione w kodzie, tylko dla filmu oznaczonego jako 18+:
+- nowy plik WebSessionCookies.java
+- zapytanie playera WEB z ciasteczkiem, bez dokładania tokenu TV
+- jeśli sesja się uda, odtwarzacz ma dostać Cookie i SAPISIDHASH
+  na pobieraniu pliku; zwykłe filmy zostają przy dotychczasowej drodze
+
+Pierwsze wgranie na prawą ikonę nie doszło do wymiany: nagłówek konta
+był pusty, bo lista kont nie była jeszcze wczytana. Dopisane zostało
+wymuszenie wczytania konta przed wymianą.
+
+Drugie wgranie na prawą ikonę, 2026-09-23 16:01:
+- kont SmartTube: 0
+- wymiana ciasteczek pominięta
+- ekran: "Zaloguj się, aby potwierdzić swój wiek"
+- konto Google w systemie telefonu nie jest tym samym co konto w SmartTube
+
+8.4. Wygląd i pomyłka ikon
+--------------------------------------------------------------------------------
+Użytkownik napisał, że wygląd się zmienił i nie może się zalogować.
+Źródła wyglądu mobilnego (immersive, logowanie przez Chrome, ekran kodu)
+zostały cofnięte do ostatniego commita. Kompilacja prawej aplikacji
+z tym cofnięciem została przerwana i nie została zainstalowana.
+
+Dopiero potem zostało ustalone, że testy użytkownika są na lewej ikonie,
+a nie na prawej. Lewej ikony te próby wyglądu nie dotyczyły.
+
+Okno "zaloguj się, żeby potwierdzić wiek" zostało zbudowane dla prawej
+aplikacji, ale nie zostało na nią wgrane. Nie jest to selfie i nie
+uruchamia filmu samo z siebie.
+
+8.5. Test na właściwej, lewej, zalogowanej aplikacji
+--------------------------------------------------------------------------------
+Najpierw stara paczka lewej ikony, ostatnia instalacja 2026-09-23 14:11,
+konto zalogowane. Psy 2 odpalone przez ADB:
+
+- token konta jest
+- klient TVHTML5: direct=true, sabr=true, usable=true
+- odtwarzacz bierze progresywny adres TV
+- googlevideo odpowiada 403, wielokrotnie
+- film nie startuje
+
+Potem zbudowana i wgrana na lewą ikonę paczka z wymianą ciasteczek:
+
+- plik:
+  D:\APK\_SMARTUBE_\SmartTube-AA-MAIN\smarttubetv\build\outputs\apk\stmobile\carvideo\SmartTube_mobile_32.04-mobile-p13-aa1.44-carvideo_arm64-v8a.apk
+- czas pliku: 2026-09-23 16:55:50
+- instalacja: adb install -r, sukces, pakiet app.smarttube.mobile.carvideo
+- zadanie Gradle: :smarttubetv:assembleStmobileCarvideo
+- JDK 11, .\gradlew.bat, --offline, BUILD SUCCESSFUL
+
+Test ADB tego samego filmu, pQNyiUXEmoY, na tej paczce:
+
+- konto: accounts=1, nazwa jest, nagłówek jest, token jest
+- wymiana tokenu TV na sesję strony: HTTP 403, krótka odpowiedź,
+  sesja niedostępna
+- powrót do TVHTML5 i progresywnego adresu
+- googlevideo znowu 403
+- przy błędzie klient zwykłych filmów nie jest podmieniany
+  (log: "V18_AGE_GATE keep ordinary client")
+- pętla 403 została zatrzymana przez force-stop
+
+Google nie zamienia tokenu z youtube.com/activate na ciasteczka strony.
+Bez tych ciasteczek klient WEB dalej widzi film jako niezalogowany,
+a jedyny adres, który TV oddaje, serwer pliku odrzuca.
+
+8.6. Czego nie ruszano
+--------------------------------------------------------------------------------
+- Selfie i weryfikacja tożsamości Google: niepodłączane.
+- Sam lokalny przycisk "OK, mam 18 lat": nie wgrywany jako sposób
+  odblokowania, bo serwer i tak decyduje, a zgoda contentCheckOk
+  jest już wysyłana.
+- Globalne isSabr(), domyślna kolejność klientów i kierowanie SABR
+  na iOS: nie ruszane. Poprzednia próba tego typu wywalała zwykłe filmy.
+- Prawa ikona po 16:01 nie dostała już kolejnej instalacji.
+
+8.7. Stan źródeł po tych próbach
+--------------------------------------------------------------------------------
+Poprawka 18+ jest w drzewie, niescommitowana, i nie działa.
+Leży w paczce lewej ikony z 16:55. Prawa ikona została przy paczce z 16:01.
+
+Niescommitowane pliki silnika:
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\videoinfo\WebSessionCookies.java
+  (nowy plik)
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\videoinfo\V2\VideoInfoService.java
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\videoinfo\V2\VideoInfoApi.java
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\service\YouTubeSignInService.java
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\service\internal\YouTubeAccountManager.java
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\service\data\YouTubeMediaItemFormatInfo.java
+- MediaServiceCore\youtubeapi\src\main\java\com\liskovsoft\youtubeapi\innertube\impl\MediaItemFormatInfoImpl.kt
+- MediaServiceCore\mediaserviceinterfaces\src\main\java\com\liskovsoft\mediaserviceinterfaces\data\MediaItemFormatInfo.java
+- common\src\main\java\com\liskovsoft\smartyoutubetv2\common\exoplayer\ExoMediaSourceFactory.java
+- common\src\main\java\com\liskovsoft\smartyoutubetv2\common\app\models\playback\controllers\VideoLoaderController.java
+- common\src\main\res\values\strings.xml
+- common\src\main\res\values-pl\strings.xml
+- common\src\main\java\com\liskovsoft\smartyoutubetv2\common\app\models\data\Video.java
+  (drobna, wcześniejsza różnica, nie jest przyczyną wyniku)
+
+Pliki wyglądu mobilnego, które sekcja 6 i 7 kazały zachować, zostały
+w tej sesji cofnięte do ostatniego commita. Nie są już na liście zmian.
+
+8.8. Wynik jedną linijką
+--------------------------------------------------------------------------------
+Nic się nie udało. Psy 2 nie gra. Zwykłe filmy nie są tu sukcesem:
+działały już przed tymi próbami.
+
+================================================================================
+9. AKTUALIZACJA I WDROŻENIE: WERSJA aa1.49 (2026-09-30)
+================================================================================
+9.1. Rozwiązana usterka: Zawieszanie odtwarzania utworów po ~1 minucie
+- Objaw: Utwór (np. KaRRamBa - Pocałuj mnie w d*pę) zawieszał się w 66-70s.
+- Diagnoza ADB logcat: Po buforze początkowym YouTube zwracał część SABR
+  NextRequestPolicy (backoff_time_ms: ~4000) z 0 bajtów danych audio.
+  SabrExtractorInput i SabrMatroskaAdapter połykały ten stan, a DefaultSabrChunkSource
+  wysyłał 212 zapytań w 2s, spalając okno throttlingu i zawieszając playera.
+- Wdrożona naprawa:
+  1) SabrExtractorInput.java: rzuca IOException(BACKOFF_MARKER + backoffMs)
+     gdy !mediaSeen i backoffMs > 0.
+  2) SabrMatroskaAdapter.java: re-throw dla wyjątku z BACKOFF_MARKER.
+  3) DefaultSabrChunkSource.java: delegowanie błędu do polityki błędów.
+  4) SabrDefaultLoadErrorHandlingPolicy.java: odczekanie wskazanego czasu w ms
+     przed ponowieniem ładowania chunka.
+- Wynik: Odtwarzacz gra z bufora, odczekuje ~4s throttlingu i pobiera kolejne
+  chunki bez żadnego zawieszenia.
+- Wersja: 32.04-mobile-p13-aa1.49, versionCode 2433.
+- Skompilowano lokalnie, zainstalowano na Samsung S26 Ultra (RFCY1197K8L).
+- Wypchnięto do GitHuba (commit 537c4c94, tag aa1.49).
+- Zbudowano i opublikowano oficjalny Release na GitHub Actions.
+- Pełny opis architektury projektu: zobacz ARCHITEKTURA_I_INSTRUKCJA_PROJEKTU.md.
+
+================================================================================
+KONIEC RAPORTU
+================================================================================
+
