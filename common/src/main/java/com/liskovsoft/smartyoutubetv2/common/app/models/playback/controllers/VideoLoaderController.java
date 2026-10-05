@@ -672,6 +672,18 @@ public class VideoLoaderController extends BasePlayerController {
         reloadVideo(1_000);
     }
 
+    /**
+     * Format info cannot be loaded because the network is gone. One retry every few seconds
+     * replaces the old one-second loop. A later call only moves that single pending retry.
+     */
+    public void reloadVideoWhenNetworkReturns() {
+        if (isProgressiveFallbackActiveForCurrentVideo()) {
+            Log.d(TAG, "V14_FAST_START suppress network backoff while progressive is active");
+            return;
+        }
+        reloadVideo(5_000);
+    }
+
     /** Retry quickly after an expired/forbidden YouTube stream URL was invalidated. */
     public void reloadVideoAfterStreamRefresh() {
         reloadVideo(250);

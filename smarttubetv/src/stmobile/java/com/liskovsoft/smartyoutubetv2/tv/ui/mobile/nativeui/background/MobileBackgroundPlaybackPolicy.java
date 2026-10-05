@@ -7,7 +7,19 @@ public final class MobileBackgroundPlaybackPolicy {
     public static boolean shouldRunForeground(boolean released, boolean dismissed,
                                               boolean prepared, boolean playing,
                                               boolean hasPlayIntent) {
-        if (released || dismissed || !prepared) return false;
+        return shouldRunForeground(released, dismissed, prepared, playing, hasPlayIntent, false);
+    }
+
+    public static boolean shouldRunForeground(boolean released, boolean dismissed,
+                                              boolean prepared, boolean playing,
+                                              boolean hasPlayIntent,
+                                              boolean keepAliveWhileUnprepared) {
+        if (released || dismissed) return false;
+        // A recoverable network error and the gap between playlist tracks both drop ExoPlayer
+        // through STATE_IDLE. Stopping the service there forces a new background start, which
+        // Android 12+ rejects while the screen is off. Hold the service that is already running.
+        if (keepAliveWhileUnprepared) return true;
+        if (!prepared) return false;
         // Keep the service alive from the instant a play command is accepted, rather than waiting
         // for ExoPlayer's asynchronous STATE_READY/playing callback. This closes the Android O+
         // startForegroundService timing window for notification/headset play actions.

@@ -22,4 +22,13 @@ public class MobileBackgroundPlaybackPolicyTest {
         assertFalse(MobileBackgroundPlaybackPolicy.shouldShowNotification(
                 true, false, true));
     }
+
+    @Test public void networkGapKeepsServiceUntilTheUserPauses() {
+        assertTrue(MobileBackgroundPlaybackPolicy.shouldRunForeground(
+                false, false, false, false, false, true));
+        assertFalse(MobileBackgroundPlaybackPolicy.shouldRunForeground(
+                false, false, true, false, false, false));
+        assertFalse(MobileBackgroundPlaybackPolicy.shouldRunForeground(
+                true, false, false, false, false, true));
+    }
 }

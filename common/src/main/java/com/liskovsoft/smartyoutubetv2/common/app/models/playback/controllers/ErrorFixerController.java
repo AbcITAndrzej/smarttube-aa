@@ -18,6 +18,10 @@ import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
 import java.util.List;
 
 public class ErrorFixerController extends BasePlayerController implements OnLongBuffering {
@@ -29,6 +33,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private final BufferingDetector mBufferingDetector = new BufferingDetector(this);
     private final Runnable mStartupProgressiveFallback = this::runStartupProgressiveFallback;
     private VideoLoaderController mVideoLoaderController;
+    private long mNextNetworkBackoffLogMs;
 
     @Override
     public void onInit() {
@@ -391,6 +396,21 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             return;
         }
 
+        if (isTransientNetworkError(error)) {
+            // The screen-off log retried this path about once a second and toasted the stack
+            // each time. The player keeps its position; wait for the network instead of spinning.
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now >= mNextNetworkBackoffLogMs) {
+                MobileDiagnostics.session("FormatError",
+                        "network down; next format reload in 5s, no toast");
+                mNextNetworkBackoffLogMs = now + 30_000L;
+            }
+            if (mVideoLoaderController != null) {
+                mVideoLoaderController.reloadVideoWhenNetworkReturns();
+            }
+            return;
+        }
+
         MobileDiagnostics.sessionError("FormatError", "loadFormatInfo failed", error);
         String message = error.getMessage();
         String className = error.getClass().getSimpleName();
@@ -412,6 +432,35 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             Log.e(TAG, "Probably no internet connection");
             mVideoLoaderController.reloadVideo();
         }
+    }
+
+    private static boolean isTransientNetworkError(Throwable error) {
+        Throwable current = error;
+        for (int depth = 0; current != null && depth < 12; depth++) {
+            if (current instanceof UnknownHostException
+                    || current instanceof SocketTimeoutException
+                    || current instanceof ConnectException
+                    || current instanceof NoRouteToHostException) {
+                return true;
+            }
+            String name = current.getClass().getSimpleName();
+            if ("UnknownHostException".equals(name)
+                    || "SocketTimeoutException".equals(name)
+                    || "ConnectException".equals(name)
+                    || "NoRouteToHostException".equals(name)) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null && (message.contains("Unable to resolve host")
+                    || message.contains("No address associated with hostname")
+                    || message.contains("Network is unreachable"))) {
+                return true;
+            }
+            Throwable cause = current.getCause();
+            if (cause == current) break;
+            current = cause;
+        }
+        return false;
     }
 
     /**

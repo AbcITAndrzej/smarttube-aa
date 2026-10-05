@@ -91,6 +91,7 @@ public final class MobileMediaSessionManager {
     private boolean notificationDismissed;
     private boolean noisyReceiverRegistered;
     private boolean playerHandlesAudioFocus;
+    private boolean playbackKeepAlive;
 
     public MobileMediaSessionManager(Context context, PlaybackControl playback) {
         if (context == null) throw new IllegalArgumentException("context == null");
@@ -149,6 +150,7 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             notificationDismissed = false;
+            playbackKeepAlive = true;
             if (playerHandlesAudioFocus) {
                 playback.playFromSystem();
             } else {
@@ -162,6 +164,7 @@ public final class MobileMediaSessionManager {
     public void pauseByUser() {
         runOnMain(() -> {
             if (released) return;
+            playbackKeepAlive = false;
             if (playerHandlesAudioFocus) {
                 playback.pauseFromSystem();
             } else {
@@ -238,6 +241,15 @@ public final class MobileMediaSessionManager {
         });
     }
 
+    /**
+     * True while the user still wants audio: play was requested, a network retry is pending,
+     * or the engine is waiting to open the next playlist item. Posted before {@link #updatePlayback}
+     * so the service is not torn down on the idle snapshot in between.
+     */
+    public void setPlaybackKeepAlive(boolean keep) {
+        runOnMain(() -> playbackKeepAlive = keep);
+    }
+
     public boolean isBackgroundPlaybackEnabled() { return true; }
     public boolean isHostVisible() { return hostVisible; }
 
@@ -245,6 +257,7 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             released = true;
+            playbackKeepAlive = false;
             commandCoordinator.onStop();
             abandonAudioFocus();
             unregisterNoisyReceiver();
@@ -320,6 +333,9 @@ public final class MobileMediaSessionManager {
         Bitmap currentArtwork = artworkBitmap;
         PendingIntent stopIntent = servicePendingIntent(ACTION_STOP, 6);
 
+        // During a network gap or a track change the player is briefly not "playing", but the
+        // user did not pause. Keep the pause action and a non-dismissible notification.
+        boolean holding = playing || playbackKeepAlive || commandCoordinator.shouldKeepForegroundService();
         NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
                 .setSmallIcon(R.drawable.mobile_ic_notification)
                 .setContentTitle(title)
@@ -330,15 +346,15 @@ public final class MobileMediaSessionManager {
                 .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
-                .setOngoing(playing || commandCoordinator.shouldKeepForegroundService())
+                .setOngoing(holding)
                 .setShowWhen(false)
                 .addAction(android.R.drawable.ic_media_previous,
                         "Poprzedni",
                         servicePendingIntent(ACTION_PREVIOUS, 2))
-                .addAction(playing ? R.drawable.mobile_ic_pause : R.drawable.mobile_ic_play,
-                        appContext.getString(playing
+                .addAction(holding ? R.drawable.mobile_ic_pause : R.drawable.mobile_ic_play,
+                        appContext.getString(holding
                                 ? R.string.mobile_background_pause : R.string.mobile_background_play),
-                        servicePendingIntent(playing ? ACTION_PAUSE : ACTION_PLAY, 3))
+                        servicePendingIntent(holding ? ACTION_PAUSE : ACTION_PLAY, 3))
                 .addAction(android.R.drawable.ic_media_next,
                         "Następny",
                         servicePendingIntent(ACTION_NEXT, 4))
@@ -359,7 +375,8 @@ public final class MobileMediaSessionManager {
     boolean shouldRunForeground() {
         return MobileBackgroundPlaybackPolicy.shouldRunForeground(
                 released, notificationDismissed, snapshot != null && snapshot.isPrepared(),
-                snapshot != null && snapshot.isPlaying(), commandCoordinator.hasPlayIntent());
+                snapshot != null && snapshot.isPlaying(), commandCoordinator.hasPlayIntent(),
+                playbackKeepAlive);
     }
 
     boolean shouldShowNotification() {
@@ -375,6 +392,7 @@ public final class MobileMediaSessionManager {
         runOnMain(() -> {
             if (released) return;
             notificationDismissed = true;
+            playbackKeepAlive = false;
             commandCoordinator.onStop();
             abandonAudioFocus();
             synchronizeSystemSurface();

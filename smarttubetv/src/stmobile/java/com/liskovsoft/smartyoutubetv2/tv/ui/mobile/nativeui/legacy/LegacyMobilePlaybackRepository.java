@@ -1320,9 +1320,20 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
         listenSaveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback,
                 headlessPlaybackAllowed, playlistPlaybackContext);
         tripReserveController.onPlayback(video, snapshot.isPlaying(), radioPlayback, offlinePlayback);
-        if (mediaSessionManager != null) mediaSessionManager.updatePlayback(snapshot);
+        if (mediaSessionManager != null) {
+            mediaSessionManager.setPlaybackKeepAlive(shouldHoldBackgroundPlayback());
+            mediaSessionManager.updatePlayback(snapshot);
+        }
         Listener current = listener;
         if (current != null) current.onPlaybackSnapshot(snapshot);
+    }
+
+    /** Keep the media service across IDLE gaps caused by a network retry or the next track. */
+    private boolean shouldHoldBackgroundPlayback() {
+        if (pendingVodRecoveryResume || radioAutoplayPending) return true;
+        MobilePlaybackEngine engine = activeEngine();
+        if (engine != null && engine.getPlayWhenReady()) return true;
+        return vodPlaybackRequested && !offlinePlayback;
     }
 
     private String currentArtworkUrl() {
