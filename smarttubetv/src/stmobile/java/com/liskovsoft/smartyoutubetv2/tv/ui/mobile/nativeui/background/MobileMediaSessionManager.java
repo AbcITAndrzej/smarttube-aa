@@ -326,16 +326,17 @@ public final class MobileMediaSessionManager {
 
     Notification buildNotification() {
         MobilePlaybackSnapshot current = snapshot;
-        boolean playing = current != null && current.isPlaying();
+        // Keep the pause button while the service is held across a network gap or track change.
+        // The action block below must stay byte-for-byte compatible with aa141.
+        boolean playing = (current != null && current.isPlaying())
+                || playbackKeepAlive
+                || commandCoordinator.shouldKeepForegroundService();
         String title = current == null || current.getTitle().trim().isEmpty()
                 ? appContext.getString(R.string.app_name) : current.getTitle();
         String subtitle = current == null ? "" : current.getSubtitle();
         Bitmap currentArtwork = artworkBitmap;
         PendingIntent stopIntent = servicePendingIntent(ACTION_STOP, 6);
 
-        // During a network gap or a track change the player is briefly not "playing", but the
-        // user did not pause. Keep the pause action and a non-dismissible notification.
-        boolean holding = playing || playbackKeepAlive || commandCoordinator.shouldKeepForegroundService();
         NotificationCompat.Builder builder = new NotificationCompat.Builder(appContext, CHANNEL_ID)
                 .setSmallIcon(R.drawable.mobile_ic_notification)
                 .setContentTitle(title)
@@ -346,15 +347,15 @@ public final class MobileMediaSessionManager {
                 .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
-                .setOngoing(holding)
+                .setOngoing(playing || commandCoordinator.shouldKeepForegroundService())
                 .setShowWhen(false)
                 .addAction(android.R.drawable.ic_media_previous,
                         "Poprzedni",
                         servicePendingIntent(ACTION_PREVIOUS, 2))
-                .addAction(holding ? R.drawable.mobile_ic_pause : R.drawable.mobile_ic_play,
-                        appContext.getString(holding
+                .addAction(playing ? R.drawable.mobile_ic_pause : R.drawable.mobile_ic_play,
+                        appContext.getString(playing
                                 ? R.string.mobile_background_pause : R.string.mobile_background_play),
-                        servicePendingIntent(holding ? ACTION_PAUSE : ACTION_PLAY, 3))
+                        servicePendingIntent(playing ? ACTION_PAUSE : ACTION_PLAY, 3))
                 .addAction(android.R.drawable.ic_media_next,
                         "Następny",
                         servicePendingIntent(ACTION_NEXT, 4))
