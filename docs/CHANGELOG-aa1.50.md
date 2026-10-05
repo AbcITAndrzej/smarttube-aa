@@ -1,6 +1,6 @@
 # aa1.50 (versionCode 2434) — odtwarzanie przy zgaszonym ekranie
 
-Paczka testowa. Publiczna aktualizacja w aplikacji zostaje na aa1.49 / 2433, dopóki ten build nie zostanie sprawdzony na telefonie. Pliki `updates/music.json` i `updates/video-exp.json` celowo się nie zmieniają.
+Aktualizacja w aplikacji idzie z gita: `updates/music.json` dla Music i `updates/video-exp.json` dla Video EXP. Obie paczki arm64 leżą w `updates/apk/`, żeby przycisk „Sprawdź aktualizacje” miał skąd je pobrać. Opis wydania i pliki na stronie Releases zostają przy aa1.49, dopóki ten build nie zostanie potwierdzony na telefonie.
 
 ## Co się psuło
 
@@ -25,13 +25,13 @@ Android Auto nie dostaje drugiej sesji multimediów. Ta poprawka dotyczy odtwarz
 ## Czego ta paczka nie robi
 
 - Nie łączy tego forka z nowszym oficjalnym SmartTube.
-- Nie publikuje aa1.50 jako aktualizacji w aplikacji. Do sprawdzenia jest APK z ręcznego budowania na GitHubie (workflow „Build SmartTube AA APKs”), nie przycisk „Sprawdź aktualizacje”.
-- Nie zastępuje opublikowanych plików wydania aa1.49. To wydanie zostaje poprzednią stabilną paczką.
+- Nie zmienia opisu ani plików na stronie Releases. Tam zostaje aa1.49, dopóki telefon nie potwierdzi tej wersji.
+- Sprawdzenie idzie przyciskiem „Sprawdź aktualizacje”: Music bierze swój manifest, Video EXP swój. To są dwie osobne paczki.
 
 ## Jak sprawdzić
 
-Zainstalować arm64 Music nad obecną aplikacją, puścić tę samą playlistę przy zgaszonym ekranie i nie włączać telefonu przez kilka utworów. Oczekiwane: brak wielominutowej ciszy i samodzielne przejście do kolejnego utworu. Krótki przystanek przy twardym błędzie strumienia nadal może się zdarzyć. Jeśli usterka wróci, zebrać log tak jak poprzednio.
+W Music nacisnąć „Sprawdź aktualizacje” i wziąć aa1.50. To samo osobno w Video EXP, bo to druga paczka. Potem puścić tę samą playlistę przy zgaszonym ekranie i nie włączać telefonu przez kilka utworów. Oczekiwane: brak wielominutowej ciszy i samodzielne przejście do kolejnego utworu. Krótki przystanek przy twardym błędzie strumienia nadal może się zdarzyć. Jeśli usterka wróci, zebrać log tak jak poprzednio.
 
 ## English
 
-Phone playback dropped its foreground service on ExoPlayer IDLE (network timeout or the gap before the next playlist item). Android 16 then refused to start that service again with the screen off, the Wi-Fi radio slept, and format info was reloaded every second. aa1.50 keeps the service, a partial wake lock and a Wi-Fi lock until pause or the end of the queue, and slows real network retries to 5 seconds without a toast. versionCode 2434 installs over 2433. The in-app updater stays on aa1.49 until this build is confirmed.
+Phone playback dropped its foreground service on ExoPlayer IDLE (network timeout or the gap before the next playlist item). Android 16 then refused to start that service again with the screen off, the Wi-Fi radio slept, and format info was reloaded every second. aa1.50 keeps the service, a partial wake lock and a Wi-Fi lock until pause or the end of the queue, and slows real network retries to 5 seconds without a toast. versionCode 2434 installs over 2433 through the in-app updater. Music and Video EXP each have their own manifest and APK. The GitHub Releases page stays on aa1.49 until this build is confirmed.

@@ -1,8 +1,21 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.49/SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk",
+    "downloadUrl": "https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/apk/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.49/SmartTube-AA-Video-EXP-aa1.49-arm64-v8a.apk"
+      "https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/apk/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk"
+    ]
+  },
+  "aa1.50-video-exp": {
+    "versionCode": 2434,
+    "changelog": [
+      "Phone playback keeps the music service, wake lock and Wi-Fi lock while the screen is off, including the gap between playlist tracks.",
+      "A real network outage retries slowly and without a repeated toast.",
+      "Video EXP stays a separate package with experimental Android Auto video while parked. Music and radio stay in the Music package."
+    ],
+    "changelog_pl": [
+      "Przy zgaszonym ekranie usługa muzyki, blokada procesora i blokada Wi-Fi zostają na czas grania i zmiany utworu.",
+      "Gdy naprawdę nie ma sieci, aplikacja ponawia próbę rzadziej i bez powtarzanego komunikatu.",
+      "Video EXP zostaje osobną paczką z eksperymentalnym wideo w Android Auto podczas postoju. Music i radio zostają w paczce Music."
     ]
   },
   "aa1.49-video-exp": {
