@@ -5,7 +5,7 @@ Helper zawsze pracuje wzgledem folderu, w ktorym sam sie znajduje.
 
 ## Najwazniejsze opcje
 
-- `9` - buduje Music oraz Video EXP, kazde jako arm64 i universal.
+- `9` - buduje Music oraz Video EXP na GitHubie (arm64 i universal). Ten komputer tylko czeka i pobiera APK.
 - `10` - tworzy lokalny katalog wydania z obydwoma wariantami, zrodlami i SHA256.
 - `11` - publikuje jeden GitHub Release zawierajacy obie aplikacje.
 - `12` - wykonuje lokalna kopie Git oraz dolacza znalezione APK obu wariantow.

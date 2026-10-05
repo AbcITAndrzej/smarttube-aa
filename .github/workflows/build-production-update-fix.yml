@@ -10,7 +10,6 @@ on:
       - "smarttubetv/**"
       - "MediaServiceCore/**"
       - "exoplayer-amzn-2.10.6/**"
-      - ".github/**"
 
 permissions:
   contents: write

@@ -64,7 +64,7 @@ echo 10 - EMULATOR: build APK + instalacja i start ^(NIE instaluje na telefonie^
 echo 11 - Diagnostyka ADB i wersji aplikacji
 echo 12 - Synchronizuj + commit + push
 echo 13 - Pull --ff-only z GitHub
-echo 14 - Zbuduj Music + Video EXP lokalnie
+echo 14 - Zbuduj Music + Video EXP na GitHubie
 echo 15 - Utworz lokalna paczke release obu aplikacji
 echo 16 - Opublikuj GitHub Release: Music + Video EXP + zrodla
 echo 17 - Pelna lokalna kopia Git: bundle + snapshot + patche
@@ -497,29 +497,9 @@ goto MENU
 :RUN_LOCAL_BUILD
 call :CHECK_SOURCE
 if errorlevel 1 exit /b 1
-set "JAVA11_HOME="
-if defined SMARTUBE_JAVA_HOME if exist "%SMARTUBE_JAVA_HOME%\bin\java.exe" set "JAVA11_HOME=%SMARTUBE_JAVA_HOME%"
-if not defined JAVA11_HOME if exist "C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot\bin\java.exe" set "JAVA11_HOME=C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot"
-if not defined JAVA11_HOME (
-  echo [BLAD] Nie znaleziono Java 11. Ustaw SMARTUBE_JAVA_HOME.
-  exit /b 1
-)
-set "JAVA_HOME=!JAVA11_HOME!"
-set "PATH=!JAVA_HOME!\bin;!PATH!"
-set "GRADLE_CACHE=%LOCALAPPDATA%\SmartTubeGithubHelper\gradle-project-cache"
-if not exist "!GRADLE_CACHE!" mkdir "!GRADLE_CACHE!"
-echo Buduje Music arm64/universal...
-pushd "%SOURCE_DIR%"
-call gradlew.bat :smarttubetv:assembleStmobileDebug --console=plain --no-daemon --max-workers=1 --no-parallel --project-cache-dir "!GRADLE_CACHE!"
-set "BUILD_CODE=!errorlevel!"
-if "!BUILD_CODE!"=="0" (
-  echo.
-  echo Buduje Video EXP arm64/universal...
-  call gradlew.bat :smarttubetv:assembleStmobileCarvideo --console=plain --no-daemon --max-workers=1 --no-parallel --project-cache-dir "!GRADLE_CACHE!"
-  set "BUILD_CODE=!errorlevel!"
-)
-popd
-if not "!BUILD_CODE!"=="0" exit /b !BUILD_CODE!
+echo Kompilacja Music i Video EXP idzie na GitHubie, nie na tym komputerze.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SOURCE_DIR%\tools\build-on-github.ps1" -Repo "%REPO%" -MusicDir "%BUILD_APK_DIR%" -VideoDir "%BUILD_VIDEO_APK_DIR%"
+if errorlevel 1 exit /b 1
 call :FIND_LATEST_APK
 if not defined LATEST_APK (
   echo [BLAD] Build zakonczony, ale nie znaleziono arm64 APK.
@@ -1132,24 +1112,10 @@ exit /b 0
 :RUN_MOBILE_BUILD_ONLY
 call :CHECK_SOURCE
 if errorlevel 1 exit /b 1
-set "JAVA11_HOME="
-if defined SMARTUBE_JAVA_HOME if exist "%SMARTUBE_JAVA_HOME%\bin\java.exe" set "JAVA11_HOME=%SMARTUBE_JAVA_HOME%"
-if not defined JAVA11_HOME if exist "C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot\bin\java.exe" set "JAVA11_HOME=C:\Program Files\Eclipse Adoptium\jdk-11.0.31.11-hotspot"
-if not defined JAVA11_HOME (
-  echo [BLAD] Nie znaleziono Java 11. Ustaw SMARTUBE_JAVA_HOME.
-  exit /b 1
-)
-set "JAVA_HOME=!JAVA11_HOME!"
-set "PATH=!JAVA_HOME!\bin;!PATH!"
-set "GRADLE_CACHE=%LOCALAPPDATA%\SmartTubeGithubHelper\gradle-project-cache"
-if not exist "!GRADLE_CACHE!" mkdir "!GRADLE_CACHE!"
 echo.
-echo [INFO] Buduje SmartTube Mobile Debug ^(arm64-v8a + universal + x86^)...
-pushd "%SOURCE_DIR%"
-call gradlew.bat :smarttubetv:assembleStmobileDebug --console=plain --no-daemon --max-workers=1 --no-parallel --project-cache-dir "!GRADLE_CACHE!"
-set "BUILD_CODE=!errorlevel!"
-popd
-if not "!BUILD_CODE!"=="0" exit /b !BUILD_CODE!
+echo [INFO] Kompilacja idzie na GitHubie, nie na tym komputerze.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%SOURCE_DIR%\tools\build-on-github.ps1" -Repo "%REPO%" -MusicDir "%BUILD_APK_DIR%" -VideoDir "%BUILD_VIDEO_APK_DIR%"
+if errorlevel 1 exit /b 1
 call :FIND_LATEST_APK
 if not defined LATEST_APK (
   echo [BLAD] Build zakonczony, ale nie znaleziono APK arm64-v8a w:

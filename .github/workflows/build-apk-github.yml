@@ -1,0 +1,93 @@
+name: Build SmartTube AA APKs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Apply production playback patches
+        run: |
+          set -euxo pipefail
+          python3 .github/aa140_apply_vod_eos_guard.py
+          python3 .github/aa141_apply_lockscreen_media_controls.py
+
+      - name: Set up Java 11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: gradle
+
+      - name: Restore stable SmartTube AA signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SMARTTUBE_AA_SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${SIGNING_KEYSTORE_B64:-}"
+          KEYSTORE="$RUNNER_TEMP/smarttube-aa-signing.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+
+          EXPECTED_FP="50:B0:29:CB:A8:6A:91:58:51:B0:64:0C:B0:DF:42:83:BB:EE:12:EA:7E:DB:C0:06:1C:9B:D4:C6:1C:0E:C9:C5"
+          ACTUAL_FP="$(keytool -list -v -keystore "$KEYSTORE" -storepass android -alias androiddebugkey | awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+          test "$ACTUAL_FP" = "$EXPECTED_FP"
+
+          cat > keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          chmod 600 keystore.properties
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Stamp aa1.49 version
+        run: |
+          set -euxo pipefail
+          sed -i -E 's/versionCode [0-9]+/versionCode 2433/' smarttubetv/build.gradle
+          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.49"/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.49' smarttubetv/build.gradle
+
+      - name: Build Music and Video EXP
+        run: >-
+          ./gradlew :smarttubetv:assembleStmobileDebug :smarttubetv:assembleStmobileCarvideo
+          --stacktrace
+          --console=plain
+          --no-daemon
+          --max-workers=1
+          --no-parallel
+
+      - name: Check required APKs
+        run: |
+          set -euxo pipefail
+          test -n "$(find smarttubetv/build/outputs/apk/stmobile/debug -maxdepth 1 -name '*_arm64-v8a.apk' -print -quit)"
+          test -n "$(find smarttubetv/build/outputs/apk/stmobile/debug -maxdepth 1 -name '*_universal.apk' -print -quit)"
+          test -n "$(find smarttubetv/build/outputs/apk/stmobile/carvideo -maxdepth 1 -name '*_arm64-v8a.apk' -print -quit)"
+          test -n "$(find smarttubetv/build/outputs/apk/stmobile/carvideo -maxdepth 1 -name '*_universal.apk' -print -quit)"
+          find smarttubetv/build/outputs/apk/stmobile -maxdepth 2 -type f -name '*.apk' -printf '%s %p\n'
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: smarttube-aa-apks
+          if-no-files-found: error
+          path: |
+            smarttubetv/build/outputs/apk/stmobile/debug/*_arm64-v8a.apk
+            smarttubetv/build/outputs/apk/stmobile/debug/*_universal.apk
+            smarttubetv/build/outputs/apk/stmobile/debug/*_x86.apk
+            smarttubetv/build/outputs/apk/stmobile/carvideo/*_arm64-v8a.apk
+            smarttubetv/build/outputs/apk/stmobile/carvideo/*_universal.apk
+            smarttubetv/build/outputs/apk/stmobile/carvideo/*_x86.apk
