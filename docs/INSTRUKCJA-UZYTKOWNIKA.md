@@ -1,12 +1,14 @@
 # SmartTube AA — krótka instrukcja
 
-Instrukcja dotyczy wersji `32.04-mobile-p13-aa1.18`. Jest to eksperymentalny, nieoficjalny fork SmartTube przeznaczony głównie do muzyki, playlist YouTube, radia i odtwarzania audio offline.
+Instrukcja dotyczy wersji `32.04-mobile-p13-aa1.50`. Jest to nieoficjalny fork SmartTube na telefon: muzyka, playlisty YouTube, radio, filmy i audio offline. Android Auto jest dodatkiem. Aplikacja działa bez samochodu.
 
 ## Pierwsze uruchomienie
 
-1. Pobierz i zainstaluj [najnowszy uniwersalny APK](https://github.com/AbcITAndrzej/smarttube-aa/releases/latest/download/SmartTube-AA-latest.apk).
+1. Pobierz [SmartTube AA Music aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk) i zainstaluj go na telefonie.
 2. Zaloguj się do YouTube, jeśli chcesz korzystać ze swoich playlist, historii i polubień.
 3. Ustawienia aplikacji są dostępne z dolnego paska ekranu głównego.
+
+Video EXP jest drugą, nieobowiązkową aplikacją. Instaluj ją tylko wtedy, gdy chcesz eksperymentalny obraz na ekranie samochodu podczas postoju: [SmartTube AA Video EXP aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk).
 
 ## Android Auto
 
@@ -21,7 +23,7 @@ W Android Auto dostępne są przede wszystkim:
 - `Offline` — lokalnie zapisane audio, jeśli sekcja została włączona w ustawieniach;
 - `Automatyczne` i `Więcej` — historia, polubiona muzyka oraz pozostałe źródła.
 
-Aplikacja zapamiętuje ostatni utwór i kolejkę. Interfejs Android Auto działa wyłącznie jako odtwarzacz audio — oglądanie filmów na ekranie samochodu nie jest obecnie obsługiwane.
+Aplikacja zapamiętuje ostatni utwór i kolejkę. Wariant Music w Android Auto jest odtwarzaczem audio. Obraz na ekranie samochodu wymaga osobnej aplikacji Video EXP, działa eksperymentalnie i tylko na postoju. Bez samochodu wystarczy sam Music.
 
 Pełną procedurę uruchomienia opisuje [instrukcja Android Auto](ANDROID-AUTO.md).
 

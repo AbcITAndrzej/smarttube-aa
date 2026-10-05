@@ -1,8 +1,8 @@
 {
   "package": {
-    "downloadUrl": "https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/apk/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://raw.githubusercontent.com/AbcITAndrzej/smarttube-aa/main/updates/apk/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk"
     ]
   },
   "aa1.50-video-exp": {

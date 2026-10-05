@@ -6,34 +6,30 @@ Repozytorium zawiera **jeden wspólny kod źródłowy**, z którego powstają dw
 
 - Pakiet: `app.smarttube.mobile`
 - Wariant Gradle: `StmobileDebug`
-- Aktualna linia: **aa1.39-test15**
-- Przeznaczenie: muzyka YouTube, playlisty, radio internetowe, biblioteka offline i normalna obsługa multimedialna Android Auto.
+- Aktualna linia: **aa1.50** (versionCode 2434)
+- Przeznaczenie: muzyka YouTube, playlisty, radio internetowe, biblioteka offline i — opcjonalnie — Android Auto.
 - Android Auto korzysta z `SmartTubeAutoMusicService`.
 - Jest to podstawowy, zalecany wariant projektu.
 
-Bezpośrednie APK:
+Bezpośredni APK:
 
-- [Music UNIVERSAL](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-main/SmartTube-AA-Music-universal.apk)
-- [Music ARM64-v8a](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-main/SmartTube-AA-Music-arm64-v8a.apk)
-- [Music armeabi-v7a](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-main/SmartTube-AA-Music-armeabi-v7a.apk)
-- [Release `latest-main`](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/latest-main)
+- [Music ARM64-v8a aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk)
+- [Wydanie aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50)
 
 ## SmartTube AA Video EXP
 
 - Pakiet: `app.smarttube.mobile.carvideo`
 - Wariant Gradle: `StmobileCarvideo`
-- Aktualna linia: **aa1.39-test15**
-- Przeznaczenie: eksperymentalny ekran aplikacji i obrazu na wyświetlaczu Android Auto podczas postoju.
+- Aktualna linia: **aa1.50** (versionCode 2434)
+- Przeznaczenie: eksperymentalny obraz na wyświetlaczu Android Auto podczas postoju. Nie jest potrzebny do słuchania muzyki.
 - Nie zastępuje Music i może być zainstalowany obok niego.
 - Ma osobne dane aplikacji dzięki innemu identyfikatorowi pakietu.
 - Funkcja zależy od wersji Androida, Android Auto oraz polityki konkretnego samochodu/urządzenia.
 
-Bezpośrednie APK:
+Bezpośredni APK:
 
-- [Video EXP UNIVERSAL](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-video-exp/SmartTube-AA-Video-EXP-universal.apk)
-- [Video EXP ARM64-v8a](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-video-exp/SmartTube-AA-Video-EXP-arm64-v8a.apk)
-- [Video EXP armeabi-v7a](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/latest-video-exp/SmartTube-AA-Video-EXP-armeabi-v7a.apk)
-- [Release `latest-video-exp`](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/latest-video-exp)
+- [Video EXP ARM64-v8a aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk)
+- [Wydanie aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50)
 
 ## Co jest wspólne
 
@@ -60,21 +56,14 @@ Music i Video EXP korzystają obecnie z tego samego spójnego, przewijanego ekra
 
 Nie ma już osobnego bloku kolorowych przycisków nad drugą listą ustawień.
 
-## Automatyczne buildy
+## Gdzie jest aktualna paczka
 
-Po zmianie na `main` uruchamiają się dwa osobne workflowy:
-
-- [Build SmartTube AA Music APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa.yml) → `latest-main`,
-- [Build SmartTube AA Video EXP APK](https://github.com/AbcITAndrzej/smarttube-aa/actions/workflows/build-smarttube-aa-video-exp.yml) → `latest-video-exp`.
-
-Oba publikują zwykłe pliki `.apk`, bez konieczności rozpakowywania ZIP-a.
+Publiczne pliki są na wydaniu [aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50). Starsze tagi `latest-main` i `latest-video-exp` nie są tym wydaniem.
 
 ## Który APK pobrać
 
-- Zwykły użytkownik: **SmartTube AA Music UNIVERSAL**.
-- Nowszy telefon ARM64: można wybrać mniejszy wariant **ARM64-v8a**.
-- Starsze urządzenia 32-bit: **armeabi-v7a**.
-- **Video EXP**: tylko do dodatkowych testów obrazu na postoju.
+- Zwykły użytkownik: **SmartTube AA Music ARM64-v8a** z wydania aa1.50.
+- **Video EXP**: tylko wtedy, gdy chcesz eksperymentalny obraz na postoju. Do muzyki nie jest potrzebny.
 
 ## Ważne
 
