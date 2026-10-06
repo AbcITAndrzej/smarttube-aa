@@ -653,6 +653,14 @@
     <string name="hide_watched_from_watch_later">Remove watched videos from Watch later playlist</string>
     <string name="remote_control_permission">Background Remote control requires Overlay permission</string>
     <string name="login_from_browser">Login from browser</string>
+    <string name="mobile_signin_two_accounts">Two Google accounts on this phone? The YouTube app opens the normal link, so the second account cannot be chosen there. Copy the address, open it in Chrome, paste the code, and pick the account in Chrome.</string>
+    <string name="mobile_signin_open_chrome">Open in Chrome</string>
+    <string name="mobile_signin_copy_code">Copy code</string>
+    <string name="mobile_signin_copy_address">Copy address</string>
+    <string name="mobile_signin_copied_code">Code copied. In Chrome, long-press the field and choose Paste.</string>
+    <string name="mobile_signin_copied_address">Address copied. In Chrome, long-press the address bar and choose Paste.</string>
+    <string name="mobile_signin_chrome_opened">The code is on the clipboard. In Chrome, paste it if the page asks, then choose the right Google account.</string>
+    <string name="mobile_signin_no_browser">Chrome was not found. The address is on the clipboard. Paste it into Chrome yourself.</string>
     <string name="disable_remote_history">Disable history when using remote control</string>
     <string name="keyboard_fix">Prevent OK button from opening the keyboard (G20s and others)</string>
     <string name="nothing_found">Nothing found</string>

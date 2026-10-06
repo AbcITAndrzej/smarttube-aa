@@ -3,6 +3,12 @@
           xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="com.android.chrome" />
+        <package android:name="com.chrome.beta" />
+        <package android:name="com.chrome.dev" />
+        <package android:name="com.chrome.canary" />
+        <package android:name="org.mozilla.firefox" />
+        <package android:name="org.mozilla.firefox_beta" />
         <package android:name="com.google.android.projection.gearhead" />
         <intent>
             <action android:name="android.settings.ANDROID_AUTO_SETTINGS" />

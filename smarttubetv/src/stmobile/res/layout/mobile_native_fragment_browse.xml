@@ -15,7 +15,6 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
-        app:logo="@mipmap/app_icon"
         app:menu="@menu/mobile_native_home_toolbar"
         app:title="@string/app_name" />
 

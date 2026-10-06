@@ -58,6 +58,7 @@ public class MobileNativeActivity extends AppCompatActivity implements MobileNav
     private AlertDialog signInDialog;
     private boolean startupFlowHandled;
     private boolean waitingForSignInReturn;
+    private boolean pendingSignedHomeReload;
     private boolean startupUpdateStarted;
     private View mobileRoot;
     private int originalSystemUiVisibility;
@@ -144,7 +145,29 @@ public class MobileNativeActivity extends AppCompatActivity implements MobileNav
         ViewManager.instance(this).addTop(this);
         if (waitingForSignInReturn) {
             waitingForSignInReturn = false;
+            pendingSignedHomeReload = true;
+            reloadHomeIfSigned();
+            startupHandler.postDelayed(this::reloadHomeIfSigned, 1500L);
+            startupHandler.postDelayed(this::reloadHomeIfSigned, 4000L);
             startupHandler.postDelayed(this::startAutomaticUpdateIfEnabled, 350L);
+        }
+    }
+
+    /** The first home load can start while signed out and then stay on the spinner. */
+    private void reloadHomeIfSigned() {
+        if (!pendingSignedHomeReload || navigator == null || isFinishing()) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed()) return;
+        if (!isSignedInQuietly()) return;
+        pendingSignedHomeReload = false;
+        navigator.reloadBrowse("home");
+    }
+
+    private boolean isSignedInQuietly() {
+        try {
+            return YouTubeServiceManager.instance().getSignInService().isSigned();
+        } catch (RuntimeException error) {
+            MobileDiagnostics.error("StartupAuth", "unable to read sign-in state after return", error);
+            return false;
         }
     }
 

@@ -52,10 +52,24 @@ public final class MobileFragmentNavigator implements MobileNavigator {
     }
 
     @Override public void openBrowse(String pageId) {
-        int destination = R.id.mobile_nav_home;
-        if ("shorts".equals(pageId)) destination = R.id.mobile_nav_shorts;
-        else if ("subscriptions".equals(pageId)) destination = R.id.mobile_nav_subscriptions;
-        showTopLevel(MobileBrowseFragment.newInstance(pageId), destination);
+        showTopLevel(MobileBrowseFragment.newInstance(pageId), destinationForPage(pageId));
+    }
+
+    /** Home opened before sign-in must be replaced. The same page is otherwise skipped. */
+    public void reloadBrowse(String pageId) {
+        Fragment fragment = MobileBrowseFragment.newInstance(pageId);
+        host.setPlaybackWindowMode(false);
+        manager.popBackStack(null, FragmentManager.POP_BACK_STACK_INCLUSIVE);
+        manager.beginTransaction()
+                .replace(R.id.mobile_native_fragment_container, fragment, fragment.getClass().getSimpleName())
+                .commit();
+        host.updateChrome(destinationForPage(pageId), true);
+    }
+
+    private int destinationForPage(String pageId) {
+        if ("shorts".equals(pageId)) return R.id.mobile_nav_shorts;
+        if ("subscriptions".equals(pageId)) return R.id.mobile_nav_subscriptions;
+        return R.id.mobile_nav_home;
     }
 
     @Override public void openBrowseItem(String itemId) {

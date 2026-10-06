@@ -630,6 +630,14 @@
   <string name="hide_watched_from_watch_later">Ukryj obejrzane wideo na liście Do obejrzenia</string>
   <string name="remote_control_permission">Zdalne sterowanie w tle wymaga uprawnienia Wyświetlanie nad innymi aplikacjami</string>
   <string name="login_from_browser">Zaloguj przy użyciu przeglądarki</string>
+  <string name="mobile_signin_two_accounts">Dwa konta Google w telefonie? Zwykły link otwiera aplikację YouTube i nie da się tam wybrać drugiego konta. Skopiuj adres, otwórz go w Chrome, wklej kod i dopiero tam wybierz konto.</string>
+  <string name="mobile_signin_open_chrome">Otwórz w Chrome</string>
+  <string name="mobile_signin_copy_code">Kopiuj kod</string>
+  <string name="mobile_signin_copy_address">Kopiuj adres</string>
+  <string name="mobile_signin_copied_code">Kod skopiowany. W Chrome przytrzymaj pole i wybierz Wklej.</string>
+  <string name="mobile_signin_copied_address">Adres skopiowany. W Chrome przytrzymaj pasek adresu i wybierz Wklej.</string>
+  <string name="mobile_signin_chrome_opened">Kod jest w schowku. W Chrome wklej go, jeśli strona o niego pyta, i wybierz właściwe konto.</string>
+  <string name="mobile_signin_no_browser">Nie znaleziono Chrome. Adres jest w schowku. Wklej go w Chrome ręcznie.</string>
   <string name="disable_remote_history">Wyłącz historię w trakcie korzystania ze zdalnego sterowania</string>
   <string name="keyboard_fix">Napraw wyświetlanie klawiatury po naciśnięciu klawisza OK (G20s i inne)</string>
   <string name="nothing_found">Nic nie znaleziono</string>

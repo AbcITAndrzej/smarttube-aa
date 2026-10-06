@@ -1,6 +1,13 @@
 package com.liskovsoft.smartyoutubetv2.tv.ui.signin;
 
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -10,6 +17,7 @@ import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -31,12 +39,23 @@ import com.liskovsoft.smartyoutubetv2.tv.util.ViewUtil;
 /** Touch-friendly sign-in presentation used only by the mobile flavor. */
 public class MobileSignInFragment extends Fragment implements SignInView {
     private static final String TAG = MobileSignInFragment.class.getSimpleName();
+    /** YouTube device login works in these browsers. A generic view intent lets the YouTube app win. */
+    private static final String[] SIGN_IN_BROWSERS = {
+            "com.android.chrome",
+            "com.chrome.beta",
+            "com.chrome.dev",
+            "com.chrome.canary",
+            "org.mozilla.firefox",
+            "org.mozilla.firefox_beta"
+    };
 
     private SignInPresenter mSignInPresenter;
     private ImageView mQrCodeView;
     private TextView mUserCodeView;
     private TextView mDescriptionView;
     private Button mOpenBrowserButton;
+    private Button mCopyCodeButton;
+    private Button mCopyAddressButton;
     private String mUserCode;
     private String mSignInUrl;
     private String mFullSignInUrl;
@@ -63,14 +82,20 @@ public class MobileSignInFragment extends Fragment implements SignInView {
         mUserCodeView = view.findViewById(R.id.mobile_signin_user_code);
         mDescriptionView = view.findViewById(R.id.mobile_signin_description);
         mOpenBrowserButton = view.findViewById(R.id.mobile_signin_open_browser);
+        mCopyCodeButton = view.findViewById(R.id.mobile_signin_copy_code);
+        mCopyAddressButton = view.findViewById(R.id.mobile_signin_copy_address);
 
         ImageButton backButton = view.findViewById(R.id.mobile_signin_back);
         Button continueButton = view.findViewById(R.id.mobile_signin_continue);
 
         backButton.setOnClickListener(v -> requireActivity().finish());
         continueButton.setOnClickListener(v -> mSignInPresenter.onActionClicked());
-        mOpenBrowserButton.setOnClickListener(v -> openBrowser());
+        mOpenBrowserButton.setOnClickListener(v -> openInChrome());
+        mCopyCodeButton.setOnClickListener(v -> copyCode());
+        mCopyAddressButton.setOnClickListener(v -> copyAddress());
         mOpenBrowserButton.setEnabled(false);
+        mCopyCodeButton.setEnabled(false);
+        mCopyAddressButton.setEnabled(false);
 
         renderCode();
         mSignInPresenter.onViewInitialized();
@@ -83,6 +108,8 @@ public class MobileSignInFragment extends Fragment implements SignInView {
         mUserCodeView = null;
         mDescriptionView = null;
         mOpenBrowserButton = null;
+        mCopyCodeButton = null;
+        mCopyAddressButton = null;
         super.onDestroyView();
     }
 
@@ -105,7 +132,10 @@ public class MobileSignInFragment extends Fragment implements SignInView {
         }
 
         mUserCodeView.setText(mUserCode);
-        mOpenBrowserButton.setEnabled(!TextUtils.isEmpty(mFullSignInUrl));
+        boolean hasAddress = !TextUtils.isEmpty(mFullSignInUrl);
+        mOpenBrowserButton.setEnabled(hasAddress);
+        mCopyCodeButton.setEnabled(true);
+        mCopyAddressButton.setEnabled(hasAddress);
 
         Glide.with(this)
                 .load(Utils.toQrCodeLink(mFullSignInUrl))
@@ -126,10 +156,45 @@ public class MobileSignInFragment extends Fragment implements SignInView {
         }
     }
 
-    private void openBrowser() {
-        if (!TextUtils.isEmpty(mFullSignInUrl)) {
-            Utils.openLinkExt(requireContext(), mFullSignInUrl);
+    private void copyCode() {
+        if (TextUtils.isEmpty(mUserCode) || !putOnClipboard(mUserCode)) return;
+        Toast.makeText(requireContext(), R.string.mobile_signin_copied_code, Toast.LENGTH_LONG).show();
+    }
+
+    private void copyAddress() {
+        if (TextUtils.isEmpty(mFullSignInUrl) || !putOnClipboard(mFullSignInUrl)) return;
+        Toast.makeText(requireContext(), R.string.mobile_signin_copied_address, Toast.LENGTH_LONG).show();
+    }
+
+    /** Opens Chrome (then Firefox) with the code already on the clipboard. Never uses a generic view. */
+    private void openInChrome() {
+        if (TextUtils.isEmpty(mFullSignInUrl)) return;
+        putOnClipboard(mUserCode);
+        Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(mFullSignInUrl));
+        PackageManager packages = requireContext().getPackageManager();
+        for (String browser : SIGN_IN_BROWSERS) {
+            Intent targeted = new Intent(view);
+            targeted.setPackage(browser);
+            if (targeted.resolveActivity(packages) == null) continue;
+            try {
+                startActivity(targeted);
+                Toast.makeText(requireContext(), R.string.mobile_signin_chrome_opened, Toast.LENGTH_LONG).show();
+                return;
+            } catch (ActivityNotFoundException ignored) {
+                // The next listed browser is tried. A generic intent would open the YouTube app.
+            }
         }
+        putOnClipboard(mFullSignInUrl);
+        Toast.makeText(requireContext(), R.string.mobile_signin_no_browser, Toast.LENGTH_LONG).show();
+    }
+
+    private boolean putOnClipboard(String value) {
+        if (TextUtils.isEmpty(value)) return false;
+        ClipboardManager clipboard = (ClipboardManager) requireContext()
+                .getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return false;
+        clipboard.setPrimaryClip(ClipData.newPlainText("waveaa", value));
+        return true;
     }
 
     @Override

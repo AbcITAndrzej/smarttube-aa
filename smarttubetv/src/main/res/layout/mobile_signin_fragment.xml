@@ -29,7 +29,7 @@
             android:layout_weight="1"
             android:text="@string/dialog_add_account"
             android:textColor="?android:attr/textColorPrimary"
-            android:textSize="20sp"
+            android:textSize="22sp"
             android:textStyle="bold" />
     </LinearLayout>
 
@@ -52,8 +52,8 @@
 
             <ImageView
                 android:id="@+id/mobile_signin_qr_code"
-                android:layout_width="240dp"
-                android:layout_height="240dp"
+                android:layout_width="180dp"
+                android:layout_height="180dp"
                 android:adjustViewBounds="true"
                 android:contentDescription="@string/dialog_add_account"
                 android:scaleType="fitCenter"
@@ -63,42 +63,73 @@
                 android:id="@+id/mobile_signin_user_code"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="12dp"
                 android:fontFamily="sans-serif-medium"
                 android:gravity="center"
-                android:letterSpacing="0.08"
+                android:letterSpacing="0.06"
                 android:text="@string/signin_view_title"
                 android:textColor="?android:attr/textColorPrimary"
                 android:textIsSelectable="true"
-                android:textSize="30sp" />
+                android:textSize="40sp" />
 
             <TextView
                 android:id="@+id/mobile_signin_description"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
+                android:layout_marginTop="10dp"
                 android:gravity="center"
-                android:lineSpacingExtra="3dp"
+                android:lineSpacingExtra="4dp"
                 android:text="@string/signin_view_description"
                 android:textColor="?android:attr/textColorSecondary"
-                android:textSize="15sp" />
+                android:textSize="18sp" />
 
-            <Button
-                android:id="@+id/mobile_signin_continue"
+            <TextView
+                android:id="@+id/mobile_signin_two_accounts"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:minHeight="48dp"
-                android:text="@string/signin_view_action_text" />
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:lineSpacingExtra="4dp"
+                android:text="@string/mobile_signin_two_accounts"
+                android:textColor="?android:attr/textColorPrimary"
+                android:textSize="18sp" />
 
             <Button
                 android:id="@+id/mobile_signin_open_browser"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:minHeight="52dp"
+                android:text="@string/mobile_signin_open_chrome"
+                android:textSize="17sp" />
+
+            <Button
+                android:id="@+id/mobile_signin_copy_address"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="52dp"
+                android:text="@string/mobile_signin_copy_address"
+                android:textSize="17sp" />
+
+            <Button
+                android:id="@+id/mobile_signin_copy_code"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:minHeight="52dp"
+                android:text="@string/mobile_signin_copy_code"
+                android:textSize="17sp" />
+
+            <Button
+                android:id="@+id/mobile_signin_continue"
                 style="?android:attr/borderlessButtonStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:minHeight="48dp"
-                android:text="@string/login_from_browser" />
+                android:minHeight="52dp"
+                android:text="@string/signin_view_action_text"
+                android:textSize="17sp" />
         </LinearLayout>
     </ScrollView>
 </LinearLayout>
