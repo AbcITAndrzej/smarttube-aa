@@ -400,23 +400,26 @@ public class VideoLoaderController extends BasePlayerController {
             if (resumeMs > 0) {
                 player.setPositionMs(Math.max(0, resumeMs - 750));
             }
-        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()) {
-            MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
-            Log.d(TAG, "V11_SABR_POT selected client=%s potLen=%s",
-                    clientInfo != null ? clientInfo.getClientName() : "unknown",
-                    formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0);
-            MobileDiagnostics.session("V11_SABR_POT", "selected client="
-                    + (clientInfo != null ? clientInfo.getClientName() : "unknown")
-                    + " potLen=" + (formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0));
-            player.openSabr(formatInfo);
         } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsDashFormats()) {
-            Log.d(TAG, "Loading regular video in dash format...");
+            // Match upstream SmartTube 32.38: prefer DASH whenever a normal adaptive
+            // DASH source is available. SABR remains a fallback for responses where
+            // DASH is unavailable. This avoids routing ordinary VOD through SABR first.
+            Log.d(TAG, "DASH_FIRST_TEST selected DASH; SABR kept as fallback");
 
             if (getPlayerTweaksData().isHighBitrateFormatsEnabled() && formatInfo.hasExtendedHlsFormats()) {
                 player.openMerged(formatInfo, formatInfo.getHlsManifestUrl());
             } else {
                 player.openDash(formatInfo);
             }
+        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()) {
+            MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
+            Log.d(TAG, "V11_SABR_POT fallback selected client=%s potLen=%s",
+                    clientInfo != null ? clientInfo.getClientName() : "unknown",
+                    formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0);
+            MobileDiagnostics.session("V11_SABR_POT", "fallback selected client="
+                    + (clientInfo != null ? clientInfo.getClientName() : "unknown")
+                    + " potLen=" + (formatInfo.getPoToken() != null ? formatInfo.getPoToken().length() : 0));
+            player.openSabr(formatInfo);
         } else if (acceptDashLive(formatInfo)) {
             Log.d(TAG, "Loading live video (current or past live stream) in dash format...");
             player.openDashUrl(formatInfo.getDashManifestUrl());
