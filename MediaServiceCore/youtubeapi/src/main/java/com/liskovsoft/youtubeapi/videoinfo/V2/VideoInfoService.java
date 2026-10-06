@@ -18,43 +18,43 @@ import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfo;
 import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfoHls;
 import com.liskovsoft.youtubeapi.videoinfo.models.VideoInfoReel;
 
+import java.util.Arrays;
 import java.util.List;
 
 import retrofit2.Call;
 
 public class VideoInfoService extends VideoInfoServiceBase {
     private static final String TAG = VideoInfoService.class.getSimpleName();
+    private static final AppClient IOS_CLIENT = AppClient.VISIONOS;
+    private static final AppClient TV_CLIENT = AppClient.TV_DOWNGRADED;
+    private static final AppClient WEB_CLIENT = AppClient.WEB_EMBED;
     private static VideoInfoService sInstance;
     private final VideoInfoApi mVideoInfoApi;
-    // V11: prefer the same WEB + SABR + content-bound PoToken path that passed
-    // the full reference download. A WEB result is accepted only when the
-    // complete SABR transport and its video-bound token are available; otherwise
-    // firstInfoWith continues to the direct iOS fallback.
+    // TODO: tv clients are fully broken because of '-tcl' player
     private final static AppClient[] VIDEO_INFO_TYPE_LIST = {
-            AppClient.WEB,
-            AppClient.IOS,
-            AppClient.WEB_EMBED, // Web CONTENT PoToken when this fallback is used
+            AppClient.WEB_EMBED, // Restricted (18+) videos
+            AppClient.VISIONOS, // no url formats
+            //AppClient.TV_DOWNGRADED, // probably unplayable (weird potoken format?)
+            //AppClient.TV, // Supports auth. Fixes "please sign in" bug! (the best for Premium users)
+            //AppClient.ANDROID_REEL, // doesn't require pot and cipher (hangs on all engines)
+            AppClient.WEB, // Fix video clip blocked in current location
             AppClient.WEB_SAFARI,
-            AppClient.GEO,
-            AppClient.MWEB,
-            AppClient.ANDROID_VR,
-            AppClient.TV,
-            AppClient.ANDROID_REEL,
-            AppClient.TV_LEGACY,
-            AppClient.TV_DOWNGRADED,
-            AppClient.TV_EMBED,
-            AppClient.TV_SIMPLY,
-            //AppClient.ANDROID_SDK_LESS,
+            AppClient.IOS,
+            AppClient.GEO, // Fix video clip blocked in current location
+            AppClient.MWEB, // single audio language
+            //AppClient.TV_LEGACY,
+            //AppClient.TV_EMBED, // single audio language
+            AppClient.ANDROID_VR, // doesn't require pot and cipher (often hangs?)
+            //AppClient.TV_SIMPLY, // hangs?
+            //AppClient.ANDROID_SDK_LESS, // doesn't require pot (hangs on Cronet!)
     };
     @Nullable
     private AppClient mActualInfoType = null;
     @Nullable
     private AppClient mNextInfoType = null;
-    private boolean mAuthBlock;
+    private boolean mUseAuth;
     private List<TranslationLanguage> mCachedTranslationLanguages;
     private boolean mIsUnplayable;
-    /** Age-gate playback must not move the client used by ordinary videos. */
-    private boolean mAgeGateSticky;
 
     private VideoInfoService() {
         mVideoInfoApi = RetrofitHelper.create(VideoInfoApi.class);
@@ -74,10 +74,11 @@ public class VideoInfoService extends VideoInfoServiceBase {
         }
 
         //initInfoTypeIfNeeded();
+        //reorderTypeListIfNeeded();
 
         AppService.instance().resetClientPlaybackNonce(); // unique value per each video info
 
-        mAuthBlock = true;
+        mUseAuth = true;
 
         VideoInfo result = firstPlayable(videoId, clickTrackingParams);
 
@@ -97,106 +98,35 @@ public class VideoInfoService extends VideoInfoServiceBase {
         return result;
     }
 
+    private void reorderTypeListIfNeeded() {
+        if (getData().isFormatEnabled(MediaServiceData.FORMATS_EXTENDED_HLS)) {
+            moveFirst(IOS_CLIENT);
+        } else {
+            moveFirst(WEB_CLIENT);
+        }
+    }
+
+    private void moveFirst(AppClient client) {
+        if (VIDEO_INFO_TYPE_LIST[0] != client) {
+            Helpers.move(VIDEO_INFO_TYPE_LIST, Arrays.asList(VIDEO_INFO_TYPE_LIST).indexOf(client), 0);
+        }
+    }
+
     public VideoInfo getAuthVideoInfo(String videoId, String clickTrackingParams) {
         if (videoId == null) {
             return null;
         }
 
-        mAuthBlock = true;
+        mUseAuth = true;
 
-        // Only the tv client supports auth features
+        // Only the TV client supports auth features
         return getVideoInfo(AppClient.TV, videoId, clickTrackingParams);
     }
 
     private VideoInfo firstPlayable(String videoId, String clickTrackingParams) {
-        VideoInfo result = firstInfoWith(videoId, clickTrackingParams,
-                info -> isUsablePlaybackResult(info, videoId));
+        VideoInfo result = firstInfoWith(videoId, clickTrackingParams, info -> !info.isUnplayable());
 
-        // Do not feed a nominally "OK" but media-empty response to the player.
-        // Keep an unplayable response only so the UI can still show YouTube's reason.
-        return result != null ? result : firstInfoWith(videoId, clickTrackingParams,
-                info -> info != null && info.isUnplayable());
-    }
-
-    private boolean isUsablePlaybackResult(VideoInfo info, String videoId) {
-        if (info == null || info.isUnplayable()) {
-            return false;
-        }
-
-        AppClient client = info.getClient();
-        if (client == null) {
-            return false;
-        }
-
-        boolean directMedia = hasDirectPlaybackMedia(info);
-        boolean completeSabr = info.getAdaptiveFormats() != null
-                && !info.getAdaptiveFormats().isEmpty()
-                && hasText(info.getServerAbrStreamingUrl())
-                && hasText(info.getVideoPlaybackUstreamerConfig());
-
-        // The legacy SABR implementation in this app is validated only for the
-        // WEB-family PoToken path. URL-less SABR returned by another client can
-        // look playable to the model and still produce "Empty format info".
-        if (!client.isWebPotRequired()) {
-            Log.d(TAG, "V13_GLOBAL_FALLBACK candidate client=%s direct=%s sabr=%s usable=%s",
-                    client.getClientName(), directMedia, completeSabr, directMedia);
-            return directMedia;
-        }
-
-        String poToken = null;
-        if (directMedia || completeSabr) {
-            try {
-                poToken = PoTokenGate.getPoToken(client, videoId);
-            } catch (RuntimeException error) {
-                Log.w(TAG, "V11_SABR_POT token rejected client=%s error=%s",
-                        client.getClientName(), error.getClass().getSimpleName());
-            }
-        }
-
-        boolean usable = (directMedia || completeSabr) && hasText(poToken);
-        Log.d(TAG, "V13_GLOBAL_FALLBACK candidate client=%s direct=%s completeSabr=%s pot=%s potLen=%s usable=%s",
-                client.getClientName(), directMedia, completeSabr, hasText(poToken),
-                poToken != null ? poToken.length() : 0, usable);
-
-        if (usable) {
-            // Reused by transformFormats; PoTokenGate also keeps the matching
-            // videoId-bound token cached for this request/session.
-            info.setPoToken(poToken);
-        }
-
-        return usable;
-    }
-
-    private static boolean hasDirectPlaybackMedia(VideoInfo info) {
-        if (info == null) {
-            return false;
-        }
-
-        if (hasText(info.getDashManifestUrl()) || hasText(info.getHlsManifestUrl())) {
-            return true;
-        }
-
-        if (info.getRegularFormats() != null) {
-            for (com.liskovsoft.youtubeapi.videoinfo.models.formats.RegularVideoFormat format : info.getRegularFormats()) {
-                if (format != null && !format.isBroken() && hasText(format.getMimeType())) {
-                    return true;
-                }
-            }
-        }
-
-        if (info.getAdaptiveFormats() != null) {
-            for (com.liskovsoft.youtubeapi.videoinfo.models.formats.AdaptiveVideoFormat format : info.getAdaptiveFormats()) {
-                if (format != null && !format.isBroken() && hasText(format.getMimeType())) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private static boolean hasText(String value) {
-        return value != null && !value.isEmpty();
+        return result != null ? result : firstInfoWith(videoId, clickTrackingParams, info -> info.getRegularFormats() != null);
     }
 
     private interface InfoTester {
@@ -207,45 +137,11 @@ public class VideoInfoService extends VideoInfoServiceBase {
         //final AppClient beginType = getDefaultClient();
         final AppClient beginType = mNextInfoType != null ? mNextInfoType : VIDEO_INFO_TYPE_LIST[0];
         AppClient nextType = beginType;
-        boolean sawAgeGate = false;
-        boolean triedAgeGateFallback = false;
 
         do {
-            VideoInfo result = null;
-            try {
-                result = getVideoInfoWithRentFix(nextType, videoId, clickTrackingParams);
-            } catch (RuntimeException error) {
-                Log.w(TAG, "V11_SABR_POT client fallback client=%s error=%s",
-                        nextType.getClientName(), error.getClass().getSimpleName());
-            }
-
-            if (result != null && result.isAgeRestricted()) {
-                sawAgeGate = true;
-            }
-
-            // Current YouTube TV player identities can return stream URLs that
-            // the CDN rejects. Retry only age-gated videos with the known
-            // WEB_EMBED and legacy Cobalt TV identities from SmartTube 32.45.
-            if (sawAgeGate && !triedAgeGateFallback) {
-                triedAgeGateFallback = true;
-                for (AppClient fallbackClient : new AppClient[]{AppClient.WEB_EMBED, AppClient.TV_DOWNGRADED}) {
-                    try {
-                        VideoInfo fallback = getVideoInfoWithRentFix(fallbackClient, videoId, clickTrackingParams);
-                        if (fallback != null && infoTester.test(fallback)) {
-                            mAgeGateSticky = true;
-                            return fallback;
-                        }
-                    } catch (RuntimeException error) {
-                        Log.w(TAG, "V18_AGE_GATE fallback client=%s error=%s",
-                                fallbackClient.getClientName(), error.getClass().getSimpleName());
-                    }
-                }
-            }
+            VideoInfo result = getVideoInfoWithRentFix(nextType, videoId, clickTrackingParams);
 
             if (result != null && infoTester.test(result)) {
-                if (sawAgeGate) {
-                    mAgeGateSticky = true;
-                }
                 return result;
             }
 
@@ -264,14 +160,6 @@ public class VideoInfoService extends VideoInfoServiceBase {
     //}
 
     public void switchNextFormat() {
-        // An age-restricted failure must not drag the next ordinary video onto another client.
-        if (mAgeGateSticky) {
-            mAgeGateSticky = false;
-            mNextInfoType = null;
-            Log.d(TAG, "V18_AGE_GATE keep ordinary client");
-            return;
-        }
-
         //initInfoTypeIfNeeded();
 
         // Try to reset pot cache for the last video
@@ -317,7 +205,7 @@ public class VideoInfoService extends VideoInfoServiceBase {
         VideoInfo result;
 
         if (client == AppClient.INITIAL) {
-            result = InitialResponseService.getVideoInfo(videoId, mAuthBlock);
+            result = InitialResponseService.getVideoInfo(videoId, client.isAuthSupported() && mUseAuth);
         } else {
             String videoInfoQuery = VideoInfoApiHelper.getVideoInfoQuery(client, videoId, clickTrackingParams);
             result = getVideoInfo(client, videoInfoQuery);
@@ -331,26 +219,15 @@ public class VideoInfoService extends VideoInfoServiceBase {
     }
 
     private VideoInfo getVideoInfo(AppClient client, String videoInfoQuery) {
-        boolean auth = client.isAuthSupported() && mAuthBlock;
-        // A WEB PoToken is bound to the visitorData returned by BotGuard. Send
-        // the same value in X-Goog-Visitor-Id as in the JSON request context.
-        String visitorData = PoTokenGate.getVisitorData(client);
-        boolean usesPoTokenVisitor = visitorData != null && !visitorData.isEmpty();
-
-        if (!usesPoTokenVisitor) {
-            visitorData = mAppService.getVisitorData();
-        }
-
-        Log.d(TAG, "V11_SABR_POT request identity client=%s visitorSource=%s",
-                client, usesPoTokenVisitor ? "poToken" : "app");
+        boolean auth = client.isAuthSupported() && mUseAuth;
 
         if (client.isReelClient()) {
-            Call<VideoInfoReel> wrapper = mVideoInfoApi.getVideoInfoReel(videoInfoQuery, visitorData,
+            Call<VideoInfoReel> wrapper = mVideoInfoApi.getVideoInfoReel(videoInfoQuery, mAppService.getVisitorData(),
                     client.getUserAgent(), client.getInnerTubeName(), client.getClientVersion());
             return getVideoInfoReel(wrapper, auth);
         }
 
-        Call<VideoInfo> wrapper = mVideoInfoApi.getVideoInfo(videoInfoQuery, visitorData,
+        Call<VideoInfo> wrapper = mVideoInfoApi.getVideoInfo(videoInfoQuery, mAppService.getVisitorData(),
                 client.getUserAgent(), client.getInnerTubeName(), client.getClientVersion());
         return getVideoInfo(wrapper, auth);
     }
@@ -380,15 +257,15 @@ public class VideoInfoService extends VideoInfoServiceBase {
     }
 
     private VideoInfoHls getVideoInfoIOSHls(String videoId, String clickTrackingParams) {
-        String videoInfoQuery = VideoInfoApiHelper.getVideoInfoQuery(AppClient.IOS, videoId, clickTrackingParams);
-        return getVideoInfoHls(AppClient.IOS, videoInfoQuery);
+        String videoInfoQuery = VideoInfoApiHelper.getVideoInfoQuery(IOS_CLIENT, videoId, clickTrackingParams);
+        return getVideoInfoHls(IOS_CLIENT, videoInfoQuery);
     }
 
     private VideoInfoHls getVideoInfoHls(AppClient client, String videoInfoQuery) {
         Call<VideoInfoHls> wrapper = mVideoInfoApi.getVideoInfoHls(videoInfoQuery, mAppService.getVisitorData(),
                 client.getUserAgent(), client.getInnerTubeName(), client.getClientVersion());
 
-        return RetrofitHelper.get(wrapper, client.isAuthSupported() && mAuthBlock);
+        return RetrofitHelper.get(wrapper, client.isAuthSupported() && mUseAuth);
     }
 
     private void applyFixesIfNeeded(VideoInfo result, String videoId, String clickTrackingParams) {
@@ -396,38 +273,43 @@ public class VideoInfoService extends VideoInfoServiceBase {
             return;
         }
 
-        if (shouldObtainExtendedFormats(result)) {
+        boolean oldUseAuth = mUseAuth;
+
+        if (shouldObtainExtendedFormats(result) || result.isStoryboardBroken()) {
             Log.d(TAG, "Enable high bitrate formats...");
-            mAuthBlock = false;
+            mUseAuth = false;
             VideoInfoHls videoInfoHls = getVideoInfoIOSHls(videoId, clickTrackingParams);
-            if (videoInfoHls != null) {
+            if (videoInfoHls != null && shouldObtainExtendedFormats(result)) {
                 result.setHlsManifestUrl(videoInfoHls.getHlsManifestUrl());
-                if (result.isStoryboardBroken()) {
-                    result.setStoryboardSpec(videoInfoHls.getStoryboardSpec());
-                }
+            }
+            if (videoInfoHls != null && result.isStoryboardBroken()) {
+                result.setStoryboardSpec(videoInfoHls.getStoryboardSpec());
             }
         }
 
-        // Translation languages for auto-generated subtitles:
-        // Cache them once and do not block startup on redundant duplicate WEB calls.
-        if (result.hasSubtitles()) {
-            if (result.getTranslationLanguages() != null && result.getTranslationLanguages().size() >= 100) {
-                mCachedTranslationLanguages = result.getTranslationLanguages();
-            } else if (mCachedTranslationLanguages != null) {
-                result.setTranslationLanguages(mCachedTranslationLanguages);
-            } else if (result.getClient() != AppClient.WEB) {
-                mAuthBlock = false;
+        // TV and others has a limited number of auto generated subtitles
+        if (needMoreSubtitles(result)) {
+            Log.d(TAG, "Enable full list of auto generated subtitles...");
+
+            if (mCachedTranslationLanguages == null || mCachedTranslationLanguages.size() < 100) {
+                mUseAuth = false;
+                VideoInfo webInfo = null;
                 try {
-                    VideoInfo webInfo = getVideoInfo(AppClient.WEB, videoId, clickTrackingParams);
-                    if (webInfo != null && webInfo.getTranslationLanguages() != null) {
-                        mCachedTranslationLanguages = webInfo.getTranslationLanguages();
-                        result.setTranslationLanguages(mCachedTranslationLanguages);
-                    }
+                    webInfo = getVideoInfo(AppClient.WEB, videoId, clickTrackingParams);
                 } catch (Exception e) {
-                    Log.w(TAG, "Subtitles cache fetch failed: %s", e.getMessage());
+                    e.printStackTrace();
+                }
+                if (webInfo != null) {
+                    mCachedTranslationLanguages = webInfo.getTranslationLanguages();
                 }
             }
+
+            if (mCachedTranslationLanguages != null) {
+                result.setTranslationLanguages(mCachedTranslationLanguages);
+            }
         }
+
+        mUseAuth = oldUseAuth;
     }
 
     //private void restoreVideoInfoType() {
@@ -457,10 +339,6 @@ public class VideoInfoService extends VideoInfoServiceBase {
     }
 
     private void persistRecentTypeIfNeeded(VideoInfo videoInfo) {
-        if (mAgeGateSticky) {
-            mNextInfoType = null;
-            return;
-        }
         if (videoInfo == null || videoInfo.isUnplayable() || videoInfo.getClient() == mActualInfoType) {
             return;
         }
