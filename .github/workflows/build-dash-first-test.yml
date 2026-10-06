@@ -1,0 +1,63 @@
+name: Build DASH-first test APK
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout test branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+
+      - name: Apply production playback patches
+        run: |
+          set -euxo pipefail
+          python3 .github/aa140_apply_vod_eos_guard.py
+          python3 .github/aa141_apply_lockscreen_media_controls.py
+
+      - name: Set up Java 11
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654
+        with:
+          distribution: temurin
+          java-version: "11"
+          cache: gradle
+
+      - name: Restore signing key
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SMARTTUBE_AA_SIGNING_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "${SIGNING_KEYSTORE_B64:-}"
+          KEYSTORE="$RUNNER_TEMP/smarttube-aa-signing.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          chmod 600 "$KEYSTORE"
+          cat > keystore.properties <<EOF
+          storeFile=$KEYSTORE
+          storePassword=android
+          keyAlias=androiddebugkey
+          keyPassword=android
+          EOF
+          chmod 600 keystore.properties
+
+      - name: Build isolated test APK
+        run: |
+          set -euxo pipefail
+          chmod +x gradlew
+          ./gradlew :smarttubetv:assembleStmobileCarvideo --stacktrace --console=plain --no-daemon --max-workers=1 --no-parallel
+          APK="$(find smarttubetv/build/outputs/apk/stmobile/carvideo -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)"
+          test -n "$APK"
+          cp "$APK" SmartTube-DASH-first-test-arm64-v8a.apk
+          ls -lh SmartTube-DASH-first-test-arm64-v8a.apk
+
+      - name: Upload isolated APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: SmartTube-DASH-first-test
+          path: SmartTube-DASH-first-test-arm64-v8a.apk
+          if-no-files-found: error
