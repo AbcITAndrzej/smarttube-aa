@@ -16,6 +16,7 @@ import com.liskovsoft.smartyoutubetv2.common.misc.BufferingDetector.OnLongBuffer
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerData;
 import com.liskovsoft.smartyoutubetv2.common.prefs.PlayerTweaksData;
 import com.liskovsoft.smartyoutubetv2.common.utils.Utils;
+import com.google.android.exoplayer2.source.sabr.parser.misc.SabrExtractorInput;
 import com.liskovsoft.youtubeapi.service.YouTubeServiceManager;
 
 import java.net.ConnectException;
@@ -34,6 +35,8 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     private final Runnable mStartupProgressiveFallback = this::runStartupProgressiveFallback;
     private VideoLoaderController mVideoLoaderController;
     private long mNextNetworkBackoffLogMs;
+    private String mProgressiveFailureVideoId;
+    private int mProgressivePrePlayFailures;
 
     @Override
     public void onInit() {
@@ -67,13 +70,20 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             disableSubtitles();
             mVideoLoaderController.reloadVideo();
         } else if (!mBufferingDetector.isPlayable()
+                && SabrExtractorInput.shouldDeferProgressiveFallback()) {
+            Log.d(TAG, "AA143 long buffer is a SABR backoff; keep the client");
+            MobileDiagnostics.session("AA143", "long-buffer deferred backoffCount="
+                    + SabrExtractorInput.getConsecutiveBackoffs());
+        } else if (!mBufferingDetector.isPlayable()
                 && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
-            // The one-shot muxed recovery also stalled. Disable it before client rotation,
-            // otherwise the sticky fallback flag would select the same URL again.
-            Log.d(TAG, "V13_GLOBAL_FALLBACK progressive long-buffer failed; rotate client");
-            MobileDiagnostics.session("V13_GLOBAL_FALLBACK", "progressive long-buffer failed");
+            // The muxed file stalled before play. Drop it and return to SABR.
+            // Rotating the client here looped every client without ever starting audio.
+            Log.d(TAG, "V13_GLOBAL_FALLBACK progressive long-buffer failed; return to SABR");
+            MobileDiagnostics.session("V13_GLOBAL_FALLBACK", "progressive long-buffer return to SABR");
             mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
-            YouTubeServiceManager.instance().applyNoPlaybackFix();
+            if (shouldRotateAfterRepeatedProgressiveFailure()) {
+                YouTubeServiceManager.instance().applyNoPlaybackFix();
+            }
             mVideoLoaderController.reloadVideo();
         } else if (!mBufferingDetector.isPlayable()
                 && mVideoLoaderController.tryPreserveMultiAudioRecovery("long-buffer")) {
@@ -133,6 +143,7 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
     @Override
     public void onNewVideo(Video item) {
         Utils.removeCallbacks(mStartupProgressiveFallback);
+        SabrExtractorInput.clearBackoffWait();
         mBufferingDetector.start();
         // Arm recovery from the media lifecycle itself, not only from a buffering
         // callback. Some legacy ExoPlayer/SABR stalls never deliver that callback
@@ -156,6 +167,14 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
         if (getPlayer() == null || !getPlayer().isLoading()
                 || mVideoLoaderController == null
                 || mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+            return;
+        }
+
+        if (SabrExtractorInput.shouldDeferProgressiveFallback()) {
+            Log.d(TAG, "AA143 defer startup progressive fallback during SABR backoff");
+            MobileDiagnostics.session("AA143", "defer startup progressive backoffCount="
+                    + SabrExtractorInput.getConsecutiveBackoffs());
+            Utils.postDelayed(mStartupProgressiveFallback, STARTUP_PROGRESSIVE_FALLBACK_MS);
             return;
         }
 
@@ -221,6 +240,16 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             } else {
                 restartEngine = false;
             }
+        } else if (Helpers.contains(errorContent, SabrExtractorInput.BACKOFF_MARKER)) {
+            // The wait leaked out of the loader. Do not treat it as a bad URL.
+            Log.d(TAG, "AA143 SABR backoff surfaced; reload without client rotation");
+            MobileDiagnostics.session("AA143", "backoff surfaced; reload SABR without rotation");
+            showMessage = false;
+            restartEngine = false;
+            if (mVideoLoaderController != null
+                    && mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
+                mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
+            }
         } else if (type == PlayerEventListener.ERROR_TYPE_SOURCE && rendererIndex == PlayerEventListener.RENDERER_INDEX_UNKNOWN) {
             // NOTE: Starts with any (url deciphered incorrectly)
             // "Response code: 403" (poToken error, forbidden)
@@ -256,12 +285,17 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
                 getPlayerTweaksData().setHighBitrateFormatsEnabled(false); // Response code: 429
             } else if (!mBufferingDetector.isPlayable()) {
                 if (mVideoLoaderController.isProgressiveFallbackActiveForCurrentVideo()) {
-                    // The muxed fallback itself failed before becoming playable. Do not loop it,
-                    // regardless of whether the failure surfaced as 403, 404, parser error, etc.
-                    Log.d(TAG, "V13_GLOBAL_FALLBACK progressive rejected before play; rotate client");
-                    MobileDiagnostics.session("V13_GLOBAL_FALLBACK", "progressive rejected before play");
+                    // The muxed fallback itself failed before becoming playable. Do not loop it.
+                    // One or two failures go back to SABR. Only a repeated failure rotates the client.
+                    boolean rotate = shouldRotateAfterRepeatedProgressiveFailure();
+                    Log.d(TAG, "V13_GLOBAL_FALLBACK progressive rejected before play; rotate=" + rotate);
+                    MobileDiagnostics.session("V13_GLOBAL_FALLBACK",
+                            rotate ? "progressive rejected before play; rotate client"
+                                    : "progressive rejected before play; return to SABR");
                     mVideoLoaderController.disableProgressiveFallbackForCurrentVideo();
-                    YouTubeServiceManager.instance().applyNoPlaybackFix();
+                    if (rotate) {
+                        YouTubeServiceManager.instance().applyNoPlaybackFix();
+                    }
                 } else if (mVideoLoaderController.activateProgressiveFallbackForCurrentVideo("source-error")) {
                     // Any startup source failure gets one direct/muxed attempt before engine/client
                     // rotation. Open it from cached metadata immediately and stop this error action
@@ -432,6 +466,17 @@ public class ErrorFixerController extends BasePlayerController implements OnLong
             Log.e(TAG, "Probably no internet connection");
             mVideoLoaderController.reloadVideo();
         }
+    }
+
+    private boolean shouldRotateAfterRepeatedProgressiveFailure() {
+        Video video = getVideo();
+        String videoId = video != null ? video.videoId : "";
+        if (!videoId.equals(mProgressiveFailureVideoId)) {
+            mProgressiveFailureVideoId = videoId;
+            mProgressivePrePlayFailures = 0;
+        }
+        mProgressivePrePlayFailures++;
+        return mProgressivePrePlayFailures >= 3;
     }
 
     private static boolean isTransientNetworkError(Throwable error) {

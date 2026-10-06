@@ -179,6 +179,7 @@ public final class SabrExtractorInput implements ExtractorInput {
                     int backoffMs = sabrStream.getBackoffTimeMs();
                     if (backoffMs > 0) {
                         String msg = BACKOFF_MARKER + backoffMs;
+                        noteBackoffWait();
                         Log.e(TAG, "AA143 SABR backoff wait: %s ms", backoffMs);
                         throw new IOException(msg);
                     }
@@ -198,6 +199,7 @@ public final class SabrExtractorInput implements ExtractorInput {
                 data = (MediaSegmentDataSabrPart) sabrPart;
                 startPosition = position;
                 mediaSeen = true;
+                clearBackoffWait();
                 break;
             }
         }
@@ -323,6 +325,38 @@ public final class SabrExtractorInput implements ExtractorInput {
     }
 
     public static final String BACKOFF_MARKER = "AA143 SABR backoff requested, ms=";
+    // A server wait is not a broken URL. Keep it visible so playback recovery
+    // does not abandon SABR after a few seconds, but not forever.
+    private static final int DEFER_FALLBACK_BACKOFFS = 8;
+    private static final long DEFER_FALLBACK_WINDOW_MS = 8_000L;
+    private static volatile int sConsecutiveBackoffs;
+    private static volatile long sLastBackoffRealtimeMs;
+
+    public static void noteBackoffWait() {
+        sLastBackoffRealtimeMs = android.os.SystemClock.elapsedRealtime();
+        if (sConsecutiveBackoffs < Integer.MAX_VALUE) {
+            sConsecutiveBackoffs++;
+        }
+    }
+
+    public static void clearBackoffWait() {
+        sConsecutiveBackoffs = 0;
+        sLastBackoffRealtimeMs = 0L;
+    }
+
+    public static int getConsecutiveBackoffs() {
+        return sConsecutiveBackoffs;
+    }
+
+    /** True while YouTube is still asking us to wait and we have not waited long enough. */
+    public static boolean shouldDeferProgressiveFallback() {
+        int count = sConsecutiveBackoffs;
+        if (count <= 0 || count >= DEFER_FALLBACK_BACKOFFS) {
+            return false;
+        }
+        long ageMs = android.os.SystemClock.elapsedRealtime() - sLastBackoffRealtimeMs;
+        return ageMs >= 0L && ageMs < DEFER_FALLBACK_WINDOW_MS;
+    }
 
     private static void throwShouldNotBeCalled() {
         String msg = "The peek methods shouldn't be called in SABR extractor";

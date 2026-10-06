@@ -519,7 +519,9 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
               loadable.type, loadDurationMs, error, errorCount);
       loadErrorAction =
           retryDelayMs != C.TIME_UNSET
-              ? Loader.createRetryAction(/* resetErrorCount= */ false, retryDelayMs)
+              // A SABR server wait must not accumulate toward maybeThrowError.
+              // Four honoured 4s waits were becoming a fatal player error.
+              ? Loader.createRetryAction(/* resetErrorCount= */ isSabrServerBackoff(error), retryDelayMs)
               : Loader.DONT_RETRY_FATAL;
     }
 
@@ -821,6 +823,18 @@ public class ChunkSampleStream<T extends ChunkSource> implements SampleStream, S
         notifiedDownstreamFormat = true;
       }
     }
+  }
+
+  private static boolean isSabrServerBackoff(IOException error) {
+    Throwable current = error;
+    for (int depth = 0; current != null && depth < 4; depth++) {
+      String message = current.getMessage();
+      if (message != null && message.contains("AA143 SABR backoff requested")) {
+        return true;
+      }
+      current = current.getCause();
+    }
+    return false;
   }
 
 }
