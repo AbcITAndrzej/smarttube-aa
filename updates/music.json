@@ -1,8 +1,21 @@
 {
   "package": {
-    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk",
+    "downloadUrl": "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Music-aa1.51-arm64-v8a.apk",
     "downloadUrlList_arm64-v8a": [
-      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk"
+      "https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Music-aa1.51-arm64-v8a.apk"
+    ]
+  },
+  "aa1.51": {
+    "versionCode": 2435,
+    "changelog": [
+      "A YouTube SABR server wait no longer kills playback or rotates the client in a loop.",
+      "Screen-off playlist playback from aa1.50 stays.",
+      "Android Auto remains optional. Video EXP stays a separate package."
+    ],
+    "changelog_pl": [
+      "Czekanie serwera YouTube (SABR) nie ubija już odtwarzania i nie przełącza klienta w kółko.",
+      "Zostaje odtwarzanie playlisty przy zgaszonym ekranie z aa1.50.",
+      "Android Auto nadal jest dodatkiem. Video EXP zostaje osobną paczką."
     ]
   },
   "aa1.50": {

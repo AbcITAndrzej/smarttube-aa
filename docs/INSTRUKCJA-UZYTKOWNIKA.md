@@ -1,14 +1,14 @@
 # SmartTube AA — krótka instrukcja
 
-Instrukcja dotyczy wersji `32.04-mobile-p13-aa1.50`. Jest to nieoficjalny fork SmartTube na telefon: muzyka, playlisty YouTube, radio, filmy i audio offline. Android Auto jest dodatkiem. Aplikacja działa bez samochodu.
+Instrukcja dotyczy wersji `32.04-mobile-p13-aa1.51`. Jest to nieoficjalny fork SmartTube na telefon: muzyka, playlisty YouTube, radio, filmy i audio offline. Android Auto jest dodatkiem. Aplikacja działa bez samochodu.
 
 ## Pierwsze uruchomienie
 
-1. Pobierz [SmartTube AA Music aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk) i zainstaluj go na telefonie.
+1. Pobierz [SmartTube AA Music aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Music-aa1.51-arm64-v8a.apk) i zainstaluj go na telefonie.
 2. Zaloguj się do YouTube, jeśli chcesz korzystać ze swoich playlist, historii i polubień.
 3. Ustawienia aplikacji są dostępne z dolnego paska ekranu głównego.
 
-Video EXP jest drugą, nieobowiązkową aplikacją. Instaluj ją tylko wtedy, gdy chcesz eksperymentalny obraz na ekranie samochodu podczas postoju: [SmartTube AA Video EXP aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk).
+Video EXP jest drugą, nieobowiązkową aplikacją. Instaluj ją tylko wtedy, gdy chcesz eksperymentalny obraz na ekranie samochodu podczas postoju: [SmartTube AA Video EXP aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Video-EXP-aa1.51-arm64-v8a.apk).
 
 ## Android Auto
 

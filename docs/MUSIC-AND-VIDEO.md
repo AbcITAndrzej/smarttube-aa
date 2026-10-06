@@ -6,21 +6,21 @@ Repozytorium zawiera **jeden wspólny kod źródłowy**, z którego powstają dw
 
 - Pakiet: `app.smarttube.mobile`
 - Wariant Gradle: `StmobileDebug`
-- Aktualna linia: **aa1.50** (versionCode 2434)
+- Aktualna linia: **aa1.51** (versionCode 2435)
 - Przeznaczenie: muzyka YouTube, playlisty, radio internetowe, biblioteka offline i — opcjonalnie — Android Auto.
 - Android Auto korzysta z `SmartTubeAutoMusicService`.
 - Jest to podstawowy, zalecany wariant projektu.
 
 Bezpośredni APK:
 
-- [Music ARM64-v8a aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk)
-- [Wydanie aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50)
+- [Music ARM64-v8a aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Music-aa1.51-arm64-v8a.apk)
+- [Wydanie aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.51)
 
 ## SmartTube AA Video EXP
 
 - Pakiet: `app.smarttube.mobile.carvideo`
 - Wariant Gradle: `StmobileCarvideo`
-- Aktualna linia: **aa1.50** (versionCode 2434)
+- Aktualna linia: **aa1.51** (versionCode 2435)
 - Przeznaczenie: eksperymentalny obraz na wyświetlaczu Android Auto podczas postoju. Nie jest potrzebny do słuchania muzyki.
 - Nie zastępuje Music i może być zainstalowany obok niego.
 - Ma osobne dane aplikacji dzięki innemu identyfikatorowi pakietu.
@@ -28,8 +28,8 @@ Bezpośredni APK:
 
 Bezpośredni APK:
 
-- [Video EXP ARM64-v8a aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk)
-- [Wydanie aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50)
+- [Video EXP ARM64-v8a aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Video-EXP-aa1.51-arm64-v8a.apk)
+- [Wydanie aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.51)
 
 ## Co jest wspólne
 
@@ -58,11 +58,11 @@ Nie ma już osobnego bloku kolorowych przycisków nad drugą listą ustawień.
 
 ## Gdzie jest aktualna paczka
 
-Publiczne pliki są na wydaniu [aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50). Starsze tagi `latest-main` i `latest-video-exp` nie są tym wydaniem.
+Publiczne pliki są na wydaniu [aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.51). Starsze tagi `latest-main` i `latest-video-exp` nie są tym wydaniem. aa1.50 zostaje w historii.
 
 ## Który APK pobrać
 
-- Zwykły użytkownik: **SmartTube AA Music ARM64-v8a** z wydania aa1.50.
+- Zwykły użytkownik: **SmartTube AA Music ARM64-v8a** z wydania aa1.51.
 - **Video EXP**: tylko wtedy, gdy chcesz eksperymentalny obraz na postoju. Do muzyki nie jest potrzebny.
 
 ## Ważne

@@ -6,9 +6,9 @@ This is an unofficial phone fork of SmartTube for YouTube music, playlists, radi
 
 Projekt nie jest aplikacją Google ani YouTube.
 
-## Aktualna wersja: aa1.50
+## Aktualna wersja: aa1.51
 
-Wersja stabilna **aa1.50**, versionCode **2434**, architektura **arm64-v8a**. To ta wersja, którą widać na stronie wydań.
+Wersja stabilna **aa1.51**, versionCode **2435**, architektura **arm64-v8a**. To ta wersja, którą widać na stronie wydań.
 
 Są dwie osobne aplikacje, bo tak wymaga Android: muzyka w samochodzie i eksperymentalny obraz nie mogą być tym samym pakietem. Można zainstalować jedną albo obie. Mają osobne ikony, osobne dane i osobny przycisk „Sprawdź aktualizacje”.
 
@@ -16,11 +16,11 @@ Są dwie osobne aplikacje, bo tak wymaga Android: muzyka w samochodzie i ekspery
 | --- | --- | --- |
 | Do czego | Telefon oraz, opcjonalnie, muzyka w Android Auto | Tylko wtedy, gdy chcesz eksperymentalny obraz na ekranie samochodu podczas postoju |
 | Pakiet | `app.smarttube.mobile` | `app.smarttube.mobile.carvideo` |
-| Plik | [SmartTube AA Music aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Music-aa1.50-arm64-v8a.apk) | [SmartTube AA Video EXP aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.50/SmartTube-AA-Video-EXP-aa1.50-arm64-v8a.apk) |
+| Plik | [SmartTube AA Music aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Music-aa1.51-arm64-v8a.apk) | [SmartTube AA Video EXP aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/download/aa1.51/SmartTube-AA-Video-EXP-aa1.51-arm64-v8a.apk) |
 
 Większości osób wystarczy **Music**. Video EXP nie jest potrzebne do słuchania.
 
-Oba pliki są podpisane tym samym certyfikatem co wcześniejsze wydania SmartTube AA, więc wchodzą na poprzednią wersję tego samego wariantu bez odinstalowania. Strona wydania: [aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50).
+Oba pliki są podpisane tym samym certyfikatem co wcześniejsze wydania SmartTube AA, więc wchodzą na poprzednią wersję tego samego wariantu bez odinstalowania. Strona wydania: [aa1.51](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.51). Poprzednie [aa1.50](https://github.com/AbcITAndrzej/smarttube-aa/releases/tag/aa1.50) zostaje w historii.
 
 ## Na telefonie, bez samochodu
 
@@ -44,9 +44,10 @@ Android nie pozwala aplikacji włączyć tych dwóch przełączników za użytko
 
 Przełącznik `Włącz SmartTube w Android Auto` wyłącza wyłącznie samochód. Odtwarzanie w telefonie i konto YouTube zostają. Szerszy opis playlist, radia i trybu offline jest w [instrukcji Android Auto](docs/ANDROID-AUTO.md).
 
-## Co jest w aa1.50
+## Co jest w aa1.51
 
-- Playlista gra dalej przy zgaszonym ekranie, także przy przejściu do kolejnego utworu.
+- Gdy YouTube każe chwilę poczekać na strumień, utwór nie staje i aplikacja nie zmienia klienta w kółko.
+- Playlista nadal gra przy zgaszonym ekranie, także przy przejściu do kolejnego utworu.
 - Krótka przerwa sieci nie gasi odtwarzania i nie zasypuje komunikatami.
 - Zostają konto YouTube, radio, ekran blokady, napisy i wybór ścieżki audio, jeśli YouTube ją udostępnia.
 - Music i Video EXP aktualizują się osobno przyciskiem „Sprawdź aktualizacje”.
