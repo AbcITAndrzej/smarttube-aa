@@ -17,7 +17,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:logo="@mipmap/app_icon"
         app:menu="@menu/mobile_native_home_toolbar"
-        app:title="SmartTube" />
+        app:title="@string/app_name" />
 
     <HorizontalScrollView
         android:id="@+id/mobile_category_scroll"

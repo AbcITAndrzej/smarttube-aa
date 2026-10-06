@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="mobile_native_preview_app_name">SmartTube Native Preview</string>
+    <string name="mobile_native_preview_app_name">WaveAA Native Preview</string>
     <string name="mobile_native_home">Home</string>
     <string name="mobile_native_search">Search</string>
     <string name="mobile_native_search_hint">Search videos and channels</string>
@@ -8,14 +8,14 @@
     <string name="mobile_aa_title">Android Auto</string>
     <string name="mobile_aa_settings_entry">Android Auto</string>
     <string name="mobile_aa_access_section">Enable Android Auto access</string>
-    <string name="mobile_aa_access_summary">SmartTube can expose its media service to Android Auto. Protected Android Auto developer options must still be enabled by you.</string>
-    <string name="mobile_aa_access_enabled">Enable SmartTube in Android Auto</string>
+    <string name="mobile_aa_access_summary">WaveAA can expose its media service to Android Auto. Protected Android Auto developer options must still be enabled by you.</string>
+    <string name="mobile_aa_access_enabled">Enable WaveAA in Android Auto</string>
     <string name="mobile_aa_developer_confirmed">I confirm Android Auto developer mode is enabled</string>
     <string name="mobile_aa_unknown_sources_confirmed">I confirm Unknown sources is enabled in Android Auto</string>
     <string name="mobile_aa_open_settings">Open Android Auto settings</string>
     <string name="mobile_aa_guide_button">Instructions</string>
     <string name="mobile_aa_check_button">Add / check</string>
-    <string name="mobile_aa_status_format">Android Auto detected: %1$s\nSmartTube media service: %2$s\nInstall source: %3$s\nRequired steps confirmed: %4$s\nStatus: %5$s</string>
+    <string name="mobile_aa_status_format">Android Auto detected: %1$s\nWaveAA media service: %2$s\nInstall source: %3$s\nRequired steps confirmed: %4$s\nStatus: %5$s</string>
     <string name="mobile_aa_yes">yes</string>
     <string name="mobile_aa_no">no</string>
     <string name="mobile_aa_install_manual">manual installation</string>
@@ -23,13 +23,13 @@
     <string name="mobile_aa_status_ready">ready — reconnect Android Auto</string>
     <string name="mobile_aa_status_action_required">action required</string>
     <string name="mobile_aa_ready_title">Android Auto is ready</string>
-    <string name="mobile_aa_ready_message">SmartTube is enabled as a media app. Reconnect the phone to the car or restart Android Auto to refresh its app list.</string>
+    <string name="mobile_aa_ready_message">WaveAA is enabled as a media app. Reconnect the phone to the car or restart Android Auto to refresh its app list.</string>
     <string name="mobile_aa_not_ready_title">More steps are required</string>
-    <string name="mobile_aa_not_ready_message">Review the status and complete the unchecked steps. Android security does not allow SmartTube to enable protected Android Auto developer options automatically.</string>
+    <string name="mobile_aa_not_ready_message">Review the status and complete the unchecked steps. Android security does not allow WaveAA to enable protected Android Auto developer options automatically.</string>
     <string name="mobile_aa_guide_title">Android Auto setup</string>
-    <string name="mobile_aa_guide_text">1. Open Android Auto settings.\n2. Tap Version and permission info 10 times to enable developer settings.\n3. Open Developer settings from the menu.\n4. Enable Unknown sources.\n5. Return here and confirm both steps.\n6. Tap Add / check, then reconnect Android Auto.\n\nSmartTube cannot change these protected settings automatically.</string>
+    <string name="mobile_aa_guide_text">1. Open Android Auto settings.\n2. Tap Version and permission info 10 times to enable developer settings.\n3. Open Developer settings from the menu.\n4. Enable Unknown sources.\n5. Return here and confirm both steps.\n6. Tap Add / check, then reconnect Android Auto.\n\nWaveAA cannot change these protected settings automatically.</string>
     <string name="mobile_aa_disable_title">Disable Android Auto access?</string>
-    <string name="mobile_aa_disable_message">SmartTube will disappear from Android Auto after the next refresh. Phone playback and YouTube data will not be changed.</string>
+    <string name="mobile_aa_disable_message">WaveAA will disappear from Android Auto after the next refresh. Phone playback and YouTube data will not be changed.</string>
     <string name="mobile_aa_disable_confirm">Disable</string>
     <string name="mobile_aa_video_section">Experimental car video</string>
     <string name="mobile_aa_video_summary">Optional parked-car surface built separately from the stable Android Auto audio service. Normal AA music and radio playback are not modified.</string>
@@ -39,7 +39,7 @@
     <string name="mobile_aa_video_confirm_message">This exposes a separate CAR_LAUNCHER activity and reuses the normal mobile player when Android Auto allows parked apps. It does not change the stable AA media service and does not bypass driving restrictions.</string>
     <string name="mobile_aa_video_confirm_enable">Enable experimentally</string>
     <string name="mobile_aa_playlists_section">Android Auto playlist layout</string>
-    <string name="mobile_aa_playlists_summary">Change the order or hide playlists only on the SmartTube Android Auto screen. Your YouTube account is never modified.</string>
+    <string name="mobile_aa_playlists_summary">Change the order or hide playlists only on the WaveAA Android Auto screen. Your YouTube account is never modified.</string>
     <string name="mobile_aa_playlist_empty">No YouTube playlists are currently available.</string>
     <string name="mobile_aa_playlist_error">Could not load playlists.</string>
     <string name="mobile_aa_playlist_refresh">Refresh playlists</string>
@@ -65,7 +65,7 @@
     <string name="mobile_native_playlists">Playlists</string>
     <string name="mobile_native_history">History</string>
     <string name="mobile_native_classic">Classic interface</string>
-    <string name="mobile_native_classic_summary">Open the previous SmartTube home screen</string>
+    <string name="mobile_native_classic_summary">Open the previous WaveAA home screen</string>
     <string name="mobile_native_classic_confirm_title">Enable the classic interface?</string>
     <string name="mobile_native_classic_confirm_message">The classic interface is intended mainly for TVs and remote controls. The mobile screen returns after the app is fully closed and opened again.</string>
     <string name="mobile_native_classic_yes">Yes</string>
@@ -76,12 +76,12 @@
     <string name="mobile_update_available_message">The APK has been downloaded. Install it now?\n\n%1$s</string>
     <string name="mobile_update_install">Install</string>
     <string name="mobile_update_later">Later</string>
-    <string name="mobile_update_latest_title">SmartTube is up to date</string>
+    <string name="mobile_update_latest_title">WaveAA is up to date</string>
     <string name="mobile_update_latest_message">You already have the latest available version.</string>
     <string name="mobile_update_error_title">Update failed</string>
     <string name="mobile_update_error_message">Could not check or download the update.\n\n%1$s</string>
     <string name="mobile_update_permission_title">Allow update installation</string>
-    <string name="mobile_update_permission_message">Enable “Allow from this source” for SmartTube, then return to continue installation.</string>
+    <string name="mobile_update_permission_message">Enable “Allow from this source” for WaveAA, then return to continue installation.</string>
     <string name="mobile_update_permission_open">Open settings</string>
     <string name="mobile_update_disable_startup">Disable update checks at startup</string>
     <string name="mobile_startup_signin_title">Sign in to YouTube</string>
@@ -151,13 +151,13 @@
     <string name="mobile_native_forward_10">+10 s</string>
     <string name="mobile_native_video_surface">Video playback surface</string>
     <string name="mobile_background_channel_name">Background playback</string>
-    <string name="mobile_background_channel_description">Controls for SmartTube audio and video playing in the background</string>
+    <string name="mobile_background_channel_description">Controls for WaveAA audio and video playing in the background</string>
     <string name="mobile_background_play">Play</string>
     <string name="mobile_background_pause">Pause</string>
     <string name="mobile_background_rewind">Rewind 10 seconds</string>
     <string name="mobile_background_forward">Forward 10 seconds</string>
     <string name="mobile_background_stop">Stop playback</string>
-    <string name="aa_app_name">SmartTube Music</string>
+    <string name="aa_app_name">WaveAA</string>
 
     <!-- Mobile player personalization (phone/tablet only; Android Auto does not read these prefs). -->
     <string name="mobile_player_settings_entry">Player</string>
@@ -241,7 +241,7 @@
 
     <!-- Stage 2: mobile-only Instant Play startup/recovery. -->
     <string name="mobile_player_instant_play_section">Instant Play</string>
-    <string name="mobile_player_instant_play_summary">Smart startup applies only to mobile VOD/Shorts. It lets SmartTube’s normal recovery run first, then adds a delayed safety fallback. Radio and Android Auto are not changed.</string>
+    <string name="mobile_player_instant_play_summary">Smart startup applies only to mobile VOD/Shorts. It lets WaveAA’s normal recovery run first, then adds a delayed safety fallback. Radio and Android Auto are not changed.</string>
     <string name="mobile_player_instant_play">Enable smart video startup</string>
     <string name="mobile_player_instant_403_recovery">Extra fallback after a transient 403</string>
     <string name="mobile_player_startup_watchdog">Watchdog: retry startup when player is stuck before READY</string>
@@ -346,7 +346,7 @@
     <string name="mobile_offline_cleanup_now">Run storage cleanup now</string>
     <string name="mobile_offline_clear_all">Clear all offline data</string>
     <string name="mobile_offline_clear_title">Clear offline storage?</string>
-    <string name="mobile_offline_clear_message">This removes offline metadata, partial downloads and completed offline audio managed by the new subsystem. It does not change playlists, Radio or normal SmartTube playback.</string>
+    <string name="mobile_offline_clear_message">This removes offline metadata, partial downloads and completed offline audio managed by the new subsystem. It does not change playlists, Radio or normal WaveAA playback.</string>
     <string name="mobile_offline_clear_confirm">Clear</string>
     <string name="mobile_offline_cleared">Offline storage cleared</string>
     <string name="mobile_offline_working">Updating offline storage…</string>
@@ -366,7 +366,7 @@ Device free: %9$s</string>
 
     <!-- Stage 7: passive listen-and-save -->
     <string name="mobile_offline_listen_section">Listen and save</string>
-    <string name="mobile_offline_listen_summary">After the selected listening time, SmartTube can save an audio-only copy in the background. The default accepts only playlist tracks playing through Android Auto. Radio, live streams, Shorts and already-offline items are always excluded.</string>
+    <string name="mobile_offline_listen_summary">After the selected listening time, WaveAA can save an audio-only copy in the background. The default accepts only playlist tracks playing through Android Auto. Radio, live streams, Shorts and already-offline items are always excluded.</string>
     <string name="mobile_offline_listen_enabled">Automatically save listened audio</string>
     <string name="mobile_offline_listen_mode_title">Automatic save mode</string>
     <string name="mobile_offline_listen_mode_button">Save mode: %1$s</string>
