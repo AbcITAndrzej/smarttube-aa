@@ -535,6 +535,31 @@ public class VideoLoaderController extends BasePlayerController {
         return true;
     }
 
+    /**
+     * Recover a stalled VOD through a fresh adaptive player response. This deliberately does not
+     * select a muxed/progressive URL: that URL has only its embedded default audio and no external
+     * subtitle tracks, whereas SABR/DASH exposes YouTube's complete audio and caption catalogue.
+     */
+    public boolean recoverAdaptiveForCurrentVideo(String reason) {
+        Video video = getVideo();
+        if (getPlayer() == null || video == null || video.isLive) {
+            return false;
+        }
+
+        // A process restored from an older build can still carry this in-memory flag. Clear it
+        // before requesting new format information so processFormatInfo cannot reopen the muxed URL.
+        disableProgressiveFallbackForCurrentVideo();
+
+        String why = reason != null ? reason : "unknown";
+        Log.d(TAG, "V17_ADAPTIVE_RECOVERY refresh adaptive source reason=%s", why);
+        MobileDiagnostics.session("V17_ADAPTIVE", "refresh-adaptive reason=" + why);
+        // In this fork the service interface exposes the next format/client selection through
+        // applyNoPlaybackFix(). It fetches fresh adaptive metadata rather than a direct file.
+        YouTubeServiceManager.instance().applyNoPlaybackFix();
+        reloadVideo(250);
+        return true;
+    }
+
     private boolean shouldUseProgressiveFallback(MediaItemFormatInfo formatInfo) {
         Video video = getVideo();
         if (video == null || video.isLive || formatInfo == null
