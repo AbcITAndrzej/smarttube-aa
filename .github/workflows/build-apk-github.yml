@@ -54,12 +54,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.52 version
+      - name: Stamp aa1.53 version
         run: |
           set -euxo pipefail
-          sed -i -E 's/versionCode [0-9]+/versionCode 2436/' smarttubetv/build.gradle
-          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.52"/' smarttubetv/build.gradle
-          grep -n 'versionCode\|aa1.52' smarttubetv/build.gradle
+          sed -i -E 's/versionCode [0-9]+/versionCode 2437/' smarttubetv/build.gradle
+          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.53"/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.53' smarttubetv/build.gradle
 
       - name: Build Music and Video EXP
         run: >-

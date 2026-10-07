@@ -1,4 +1,4 @@
-name: Build production aa1.52
+name: Build production aa1.53
 
 on:
   workflow_dispatch:
@@ -32,8 +32,8 @@ jobs:
           from pathlib import Path
 
           expected = {
-              "updates/music.json": (2436, "SmartTube-AA-Music-aa1.52-arm64-v8a.apk"),
-              "updates/video-exp.json": (2436, "SmartTube-AA-Video-EXP-aa1.52-arm64-v8a.apk"),
+              "updates/music.json": (2437, "SmartTube-AA-Music-aa1.53-arm64-v8a.apk"),
+              "updates/video-exp.json": (2437, "SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk"),
           }
 
           for path, (expected_code, expected_asset) in expected.items():
@@ -95,12 +95,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.52 version
+      - name: Stamp aa1.53 version
         run: |
           set -euxo pipefail
-          sed -i -E 's/versionCode [0-9]+/versionCode 2436/' smarttubetv/build.gradle
-          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.52"/' smarttubetv/build.gradle
-          grep -n 'versionCode\|aa1.52\|carvideo' smarttubetv/build.gradle
+          sed -i -E 's/versionCode [0-9]+/versionCode 2437/' smarttubetv/build.gradle
+          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.53"/' smarttubetv/build.gradle
+          grep -n 'versionCode\|aa1.53\|carvideo' smarttubetv/build.gradle
 
       - name: Build Music and Video EXP production APKs
         run: >-
@@ -117,8 +117,8 @@ jobs:
           MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
           VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
           mkdir -p production-apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.52-arm64-v8a.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.52-arm64-v8a.apk
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk
           ls -lh production-apk
 
       - name: Verify production signing certificate
@@ -136,27 +136,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euxo pipefail
-          TAG="aa1.52"
-          TITLE="WaveAA aa1.52"
-          test "$TAG" = "aa1.52"
+          TAG="aa1.53"
+          TITLE="WaveAA aa1.53"
+          test "$TAG" = "aa1.53"
           NOTES_FILE="$(mktemp)"
           cat > "$NOTES_FILE" <<'EOF'
-          WaveAA aa1.52 to nieoficjalny fork SmartTube na telefon. Muzyka, playlisty, radio i filmy działają bez samochodu. Android Auto jest dodatkiem.
+          WaveAA aa1.53 to nieoficjalny fork SmartTube na telefon. Muzyka, playlisty, radio i filmy działają bez samochodu. Android Auto jest dodatkiem.
 
           Dwie osobne aplikacje, bo Android tak rozdziela dźwięk i eksperymentalny obraz:
 
           - WaveAA (`app.smarttube.mobile`) — telefon oraz opcjonalnie muzyka w Android Auto,
           - WaveAA Video (`app.smarttube.mobile.carvideo`) — tylko eksperymentalny obraz na ekranie samochodu podczas postoju. Do słuchania nie jest potrzebny.
 
-          W tej wersji aplikacje na telefonie nazywają się WaveAA i WaveAA Video i mają nowe ikony. Po zalogowaniu do YouTube strona główna ładuje się ponownie. Drugie konto Google można otworzyć w Chrome. versionCode 2436. Wydanie aa1.51 zostaje w historii i nie jest nadpisywane. Oba pliki są podpisane tym samym certyfikatem co wcześniejsze wydania SmartTube AA.
+          Odtwarzanie najpierw wybiera stabilnego klienta TV, zgodnie z aktualnym SmartTube upstream. Przywraca to szybki start oraz pełny katalog ścieżek audio i napisów. Android Auto Music, radio oraz osobny wariant Video EXP pozostają bez zmian. versionCode 2437. Wydanie aa1.52 zostaje w historii i nie jest nadpisywane. Oba pliki są podpisane tym samym certyfikatem co wcześniejsze wydania SmartTube AA.
           EOF
 
           RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1 || true)"
 
           if [ -n "$RELEASE_ID" ]; then
             gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              production-apk/SmartTube-AA-Music-aa1.52-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.52-arm64-v8a.apk
+              production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
               -f name="$TITLE" \
               -f body="$(cat "$NOTES_FILE")" \
@@ -166,8 +166,8 @@ jobs:
               -f make_latest=true >/dev/null
           else
             gh release create "$TAG" \
-              production-apk/SmartTube-AA-Music-aa1.52-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.52-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk \
+              production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "$TITLE" \
