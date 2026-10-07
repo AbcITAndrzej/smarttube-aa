@@ -264,11 +264,24 @@ public class VideoInfoService extends VideoInfoServiceBase {
     //}
 
     public void switchNextFormat() {
+        switchNextFormat(false);
+    }
+
+    /**
+     * {@code force} follows upstream's immediate recovery path: skip a PoToken
+     * refresh for the failing client and start the next client right away.
+     */
+    public void switchNextFormat(boolean force) {
         // An age-restricted failure must not drag the next ordinary video onto another client.
         if (mAgeGateSticky) {
             mAgeGateSticky = false;
             mNextInfoType = null;
             Log.d(TAG, "V18_AGE_GATE keep ordinary client");
+            return;
+        }
+
+        if (force) {
+            nextVideoInfoType();
             return;
         }
 

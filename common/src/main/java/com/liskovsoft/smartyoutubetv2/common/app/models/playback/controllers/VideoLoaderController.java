@@ -530,7 +530,10 @@ public class VideoLoaderController extends BasePlayerController {
                 tracks, mMultiAudioRecoveryAttempts, why);
         MobileDiagnostics.session("V16_MULTI_AUDIO", "preserve tracks=" + tracks
                 + " attempt=" + mMultiAudioRecoveryAttempts + " reason=" + why);
-        YouTubeServiceManager.instance().applyNoPlaybackFix();
+        // A startup stall is a failed client, not merely stale metadata. Move to
+        // the next adaptive client now so the mobile watchdog cannot spend a
+        // second full timeout retrying the same WEB/SABR response.
+        YouTubeServiceManager.instance().switchNextClientNow();
         reloadVideo(250);
         return true;
     }
@@ -553,9 +556,10 @@ public class VideoLoaderController extends BasePlayerController {
         String why = reason != null ? reason : "unknown";
         Log.d(TAG, "V17_ADAPTIVE_RECOVERY refresh adaptive source reason=%s", why);
         MobileDiagnostics.session("V17_ADAPTIVE", "refresh-adaptive reason=" + why);
-        // In this fork the service interface exposes the next format/client selection through
-        // applyNoPlaybackFix(). It fetches fresh adaptive metadata rather than a direct file.
-        YouTubeServiceManager.instance().applyNoPlaybackFix();
+        // Match upstream's immediate stalled-client recovery. Unlike applyNoPlaybackFix(),
+        // this bypasses a PoToken refresh for the currently stalled client and starts the
+        // next client immediately; the player remains on adaptive formats.
+        YouTubeServiceManager.instance().switchNextClientNow();
         reloadVideo(250);
         return true;
     }
