@@ -26,22 +26,21 @@ public class VideoInfoService extends VideoInfoServiceBase {
     private static final String TAG = VideoInfoService.class.getSimpleName();
     private static VideoInfoService sInstance;
     private final VideoInfoApi mVideoInfoApi;
-    // V11: prefer the same WEB + SABR + content-bound PoToken path that passed
-    // the full reference download. A WEB result is accepted only when the
-    // complete SABR transport and its video-bound token are available; otherwise
-    // firstInfoWith continues to the direct iOS fallback.
+    // Keep the same client priority as current upstream SmartTube. In particular,
+    // MWEB is deliberately late because it often exposes only one audio language;
+    // TV_DOWNGRADED is the stable first choice for the full audio/caption catalogue.
     private final static AppClient[] VIDEO_INFO_TYPE_LIST = {
+            AppClient.TV_DOWNGRADED,
+            AppClient.WEB_EMBED,
             AppClient.WEB,
-            AppClient.IOS,
-            AppClient.WEB_EMBED, // Web CONTENT PoToken when this fallback is used
             AppClient.WEB_SAFARI,
+            AppClient.IOS,
             AppClient.GEO,
             AppClient.MWEB,
             AppClient.ANDROID_VR,
             AppClient.TV,
             AppClient.ANDROID_REEL,
             AppClient.TV_LEGACY,
-            AppClient.TV_DOWNGRADED,
             AppClient.TV_EMBED,
             AppClient.TV_SIMPLY,
             //AppClient.ANDROID_SDK_LESS,
