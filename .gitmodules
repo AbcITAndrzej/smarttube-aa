@@ -1,0 +1,3 @@
+[submodule "experiments/aasuite"]
+	path = experiments/aasuite
+	url = https://github.com/iAlias/AASuite.git
