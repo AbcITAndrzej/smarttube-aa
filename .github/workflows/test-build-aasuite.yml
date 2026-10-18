@@ -28,7 +28,11 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Install Android API 35 and 36
-        run: sdkmanager --install "platforms;android-35" "platforms;android-36" "build-tools;36.0.0"
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "platforms;android-36" "build-tools;36.0.0"
       - name: Compile original AA Suite and companion debug APKs
         working-directory: experiments/aasuite
         run: |
