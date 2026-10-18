@@ -27,10 +27,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
       - name: Install Android API 35 and 36
-        run: sdkmanager "platforms;android-35" "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager --install "platforms;android-35" "platforms;android-36" "build-tools;36.0.0"
       - name: Compile original AA Suite and companion debug APKs
         working-directory: experiments/aasuite
         run: |
