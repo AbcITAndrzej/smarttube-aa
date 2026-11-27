@@ -1,18 +1,10 @@
-name: Build production aa1.53
+name: Build WaveAA release APKs
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "updates/**"
-      - "smarttubetv/**"
-      - "MediaServiceCore/**"
-      - "exoplayer-amzn-2.10.6/**"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-production:
@@ -29,27 +21,30 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import os
+          import re
           from pathlib import Path
 
-          expected = {
-              "updates/music.json": (2437, "SmartTube-AA-Music-aa1.53-arm64-v8a.apk"),
-              "updates/video-exp.json": (2437, "SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk"),
-          }
+          gradle = Path("smarttubetv/build.gradle").read_text(encoding="utf-8")
+          code = int(re.search(r"^\s*versionCode (\d+)$", gradle, re.MULTILINE)[1])
+          tag = re.search(r'versionNameSuffix "-mobile-p13-(aa\d+\.\d+)"', gradle)[1]
+          base = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}"
+          for channel, variant, key in [
+              ("music", "Music", tag),
+              ("video-exp", "Video-EXP", f"{tag}-video-exp"),
+          ]:
+              path = Path(f"updates/{channel}.json")
+              data = json.loads(path.read_text(encoding="utf-8"))
+              package = data.pop("package")
+              expected_url = f"{base}/SmartTube-AA-{variant}-{tag}-arm64-v8a.apk"
+              assert data[key]["versionCode"] == code, path
+              assert max(item["versionCode"] for item in data.values()) == code, path
+              assert package["downloadUrl"] == expected_url, path
+              assert package["downloadUrlList_arm64-v8a"] == [expected_url], path
+              print(f"OK: {path} -> {expected_url}")
 
-          for path, (expected_code, expected_asset) in expected.items():
-              data = json.loads(Path(path).read_text(encoding="utf-8"))
-              assert isinstance(data, dict) and isinstance(data.get("package"), dict), path
-              versions = [(name, value) for name, value in data.items() if name != "package"]
-              assert versions, path
-              for name, value in versions:
-                  assert isinstance(value, dict), f"{path}: {name} must be an object"
-                  assert isinstance(value.get("versionCode"), int), f"{path}: invalid versionCode"
-              assert max(value["versionCode"] for _, value in versions) == expected_code, path
-              package = data["package"]
-              assert expected_asset in package.get("downloadUrl", ""), path
-              abi_urls = package.get("downloadUrlList_arm64-v8a")
-              assert isinstance(abi_urls, list) and abi_urls and expected_asset in abi_urls[0], path
-              print(f"OK: {path}")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              print(f"RELEASE_TAG={tag}", file=env)
           PY
 
       - name: Apply aa1.41 production patches
@@ -95,13 +90,6 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Stamp aa1.53 version
-        run: |
-          set -euxo pipefail
-          sed -i -E 's/versionCode [0-9]+/versionCode 2437/' smarttubetv/build.gradle
-          sed -i -E 's/versionNameSuffix "-mobile-p13-[^"]+"/versionNameSuffix "-mobile-p13-aa1.53"/' smarttubetv/build.gradle
-          grep -n 'versionCode\|aa1.53\|carvideo' smarttubetv/build.gradle
-
       - name: Build Music and Video EXP production APKs
         run: >-
           ./gradlew :smarttubetv:assembleStmobileDebug :smarttubetv:assembleStmobileCarvideo
@@ -117,8 +105,8 @@ jobs:
           MUSIC_OUT=smarttubetv/build/outputs/apk/stmobile/debug
           VIDEO_OUT=smarttubetv/build/outputs/apk/stmobile/carvideo
           mkdir -p production-apk
-          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk
-          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk
+          cp "$(find "$MUSIC_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" "production-apk/SmartTube-AA-Music-${RELEASE_TAG}-arm64-v8a.apk"
+          cp "$(find "$VIDEO_OUT" -maxdepth 1 -type f -name '*_arm64-v8a.apk' -print -quit)" "production-apk/SmartTube-AA-Video-EXP-${RELEASE_TAG}-arm64-v8a.apk"
           ls -lh production-apk
 
       - name: Verify production signing certificate
@@ -131,46 +119,9 @@ jobs:
             test "$ACTUAL_FP" = "$EXPECTED_FP"
           done
 
-      - name: Publish stable production release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euxo pipefail
-          TAG="aa1.53"
-          TITLE="WaveAA aa1.53"
-          test "$TAG" = "aa1.53"
-          NOTES_FILE="$(mktemp)"
-          cat > "$NOTES_FILE" <<'EOF'
-          WaveAA aa1.53 to nieoficjalny fork SmartTube na telefon. Muzyka, playlisty, radio i filmy działają bez samochodu. Android Auto jest dodatkiem.
-
-          Dwie osobne aplikacje, bo Android tak rozdziela dźwięk i eksperymentalny obraz:
-
-          - WaveAA (`app.smarttube.mobile`) — telefon oraz opcjonalnie muzyka w Android Auto,
-          - WaveAA Video (`app.smarttube.mobile.carvideo`) — tylko eksperymentalny obraz na ekranie samochodu podczas postoju. Do słuchania nie jest potrzebny.
-
-          Odtwarzanie najpierw wybiera stabilnego klienta TV, zgodnie z aktualnym SmartTube upstream. Przywraca to szybki start oraz pełny katalog ścieżek audio i napisów. Android Auto Music, radio oraz osobny wariant Video EXP pozostają bez zmian. versionCode 2437. Wydanie aa1.52 zostaje w historii i nie jest nadpisywane. Oba pliki są podpisane tym samym certyfikatem co wcześniejsze wydania SmartTube AA.
-          EOF
-
-          RELEASE_ID="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1 || true)"
-
-          if [ -n "$RELEASE_ID" ]; then
-            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-              production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk
-            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
-              -f name="$TITLE" \
-              -f body="$(cat "$NOTES_FILE")" \
-              -f target_commitish="$GITHUB_SHA" \
-              -F draft=false \
-              -F prerelease=false \
-              -f make_latest=true >/dev/null
-          else
-            gh release create "$TAG" \
-              production-apk/SmartTube-AA-Music-aa1.53-arm64-v8a.apk \
-              production-apk/SmartTube-AA-Video-EXP-aa1.53-arm64-v8a.apk \
-              --repo "$GITHUB_REPOSITORY" \
-              --target "$GITHUB_SHA" \
-              --title "$TITLE" \
-              --notes-file "$NOTES_FILE" \
-              --latest
-          fi
+      - name: Upload signed release APKs for device testing
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: waveaa-release-apks
+          if-no-files-found: error
+          path: production-apk/*.apk
