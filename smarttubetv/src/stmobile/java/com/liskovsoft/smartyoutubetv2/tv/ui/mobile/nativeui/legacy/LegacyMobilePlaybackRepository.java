@@ -349,7 +349,7 @@ public final class LegacyMobilePlaybackRepository implements MobilePlaybackRepos
                                     "mobile watchdog preserved adaptive multi-audio");
                             return true;
                         }
-                        if (loader.activateProgressiveFallbackForCurrentVideo("mobile-watchdog")) {
+                        if (loader.recoverAdaptiveForCurrentVideo("mobile-watchdog")) {
                             return true;
                         }
 

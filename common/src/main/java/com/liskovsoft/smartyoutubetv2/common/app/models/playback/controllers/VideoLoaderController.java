@@ -530,7 +530,36 @@ public class VideoLoaderController extends BasePlayerController {
                 tracks, mMultiAudioRecoveryAttempts, why);
         MobileDiagnostics.session("V16_MULTI_AUDIO", "preserve tracks=" + tracks
                 + " attempt=" + mMultiAudioRecoveryAttempts + " reason=" + why);
-        YouTubeServiceManager.instance().applyNoPlaybackFix();
+        // A startup stall is a failed client, not merely stale metadata. Move to
+        // the next adaptive client now so the mobile watchdog cannot spend a
+        // second full timeout retrying the same WEB/SABR response.
+        YouTubeServiceManager.instance().switchNextClientNow();
+        reloadVideo(250);
+        return true;
+    }
+
+    /**
+     * Recover a stalled VOD through a fresh adaptive player response. This deliberately does not
+     * select a muxed/progressive URL: that URL has only its embedded default audio and no external
+     * subtitle tracks, whereas SABR/DASH exposes YouTube's complete audio and caption catalogue.
+     */
+    public boolean recoverAdaptiveForCurrentVideo(String reason) {
+        Video video = getVideo();
+        if (getPlayer() == null || video == null || video.isLive) {
+            return false;
+        }
+
+        // A process restored from an older build can still carry this in-memory flag. Clear it
+        // before requesting new format information so processFormatInfo cannot reopen the muxed URL.
+        disableProgressiveFallbackForCurrentVideo();
+
+        String why = reason != null ? reason : "unknown";
+        Log.d(TAG, "V17_ADAPTIVE_RECOVERY refresh adaptive source reason=%s", why);
+        MobileDiagnostics.session("V17_ADAPTIVE", "refresh-adaptive reason=" + why);
+        // Match upstream's immediate stalled-client recovery. Unlike applyNoPlaybackFix(),
+        // this bypasses a PoToken refresh for the currently stalled client and starts the
+        // next client immediately; the player remains on adaptive formats.
+        YouTubeServiceManager.instance().switchNextClientNow();
         reloadVideo(250);
         return true;
     }
