@@ -117,7 +117,9 @@ public class TrackSelectorManager implements TrackSelectorCallback {
      * @param parameters supplied externally from {@link RestoreTrackSelector}
      */
     private void initRenderer(int rendererIndex, TrackGroupArray groups, Parameters parameters) {
-        if (mRenderers[rendererIndex] != null && mRenderers[rendererIndex].mediaTracks != null) {
+        Renderer renderer = mRenderers[rendererIndex];
+        // A snapshot can rebuild the old renderer while the next source is still preparing.
+        if (renderer != null && renderer.mediaTracks != null && groups.equals(renderer.trackGroups)) {
             return;
         }
 

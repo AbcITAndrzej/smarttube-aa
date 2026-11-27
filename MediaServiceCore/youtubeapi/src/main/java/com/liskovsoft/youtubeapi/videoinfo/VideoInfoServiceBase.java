@@ -194,12 +194,12 @@ public abstract class VideoInfoServiceBase {
         List<VideoUrlHolder> urlHolders = new ArrayList<>();
         boolean isSabr = videoInfo.getServerAbrStreamingUrl() != null && !videoInfo.getServerAbrStreamingUrl().isEmpty();
 
-        // When SABR streaming is active, adaptive video and audio chunks are fetched via protobuf
-        // POST to serverAbrStreamingUrl using poToken; their individual URLs are never accessed.
-        // Skipping deciphering on 50+ adaptive formats saves seconds of startup delay.
-        if (!isSabr && adaptiveFormats != null) {
+        // A response can provide both SABR and usable DASH URLs. Prepare the DASH URLs too.
+        if (adaptiveFormats != null) {
             for (VideoFormat videoFormat : adaptiveFormats) {
-                urlHolders.add(videoFormat.getUrlHolder());
+                if (!videoFormat.isBroken()) {
+                    urlHolders.add(videoFormat.getUrlHolder());
+                }
             }
         }
         if (regularFormats != null) {
@@ -215,7 +215,9 @@ public abstract class VideoInfoServiceBase {
                 isSabr, urlHolders.size(), countNonNull(inputN), countNonNull(inputS));
         logAuthState("before", urlHolders);
 
-        Pair<List<String>, List<String>> result = mAppService.bulkSigExtract(inputN, inputS);
+        Pair<List<String>, List<String>> result = videoInfo.getClient() != null && videoInfo.getClient().isTvPotRequired()
+                ? mAppService.bulkTvSigExtract(inputN)
+                : mAppService.bulkSigExtract(inputN, inputS);
 
         if (result != null) {
             List<String> nParams = result.getFirst();

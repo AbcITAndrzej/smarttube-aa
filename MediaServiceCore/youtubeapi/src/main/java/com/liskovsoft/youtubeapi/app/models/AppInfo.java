@@ -32,6 +32,13 @@ public class AppInfo {
     @RegExp("\"visitorData\":\"(.*?)\"")
     private String mVisitorData;
 
+    @RegExp("\"LIVING_ROOM_PO_TOKEN_ID\":\"(.*?)\"")
+    private String mLivingRoomPoTokenId;
+
+    public String getLivingRoomPoTokenId() {
+        return mLivingRoomPoTokenId != null ? mLivingRoomPoTokenId.replace("\\u003d", "=") : null;
+    }
+
     public String getPlayerUrl() {
         return ServiceHelper.tidyUrl(mPlayerUrl);
     }

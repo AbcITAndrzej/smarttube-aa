@@ -1,12 +1,18 @@
 package com.liskovsoft.youtubeapi.app;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 
+import com.liskovsoft.googlecommon.common.helpers.DefaultHeaders;
+import com.liskovsoft.googlecommon.common.helpers.RetrofitHelper;
 import com.liskovsoft.sharedutils.helpers.Helpers;
 import com.liskovsoft.sharedutils.prefs.GlobalPreferences;
 import com.liskovsoft.youtubeapi.auth.V1.AuthApi;
+import com.liskovsoft.youtubeapi.app.models.AppInfo;
+import com.liskovsoft.youtubeapi.app.models.TvConfig;
+import com.liskovsoft.youtubeapi.app.playerdata.TvPlayerData;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -18,6 +24,11 @@ public class AppService {
     private static AppService sInstance;
     private final AppServiceInt mAppServiceInt;
     private String mClientPlaybackNonce;
+    private final AppApi mTvAppApi = RetrofitHelper.create(AppApi.class);
+    private final Object mTvConfigLock = new Object();
+    private TvConfig mTvConfig;
+    private TvPlayerData mTvPlayerData;
+    private long mTvConfigExpiresAt;
 
     private AppService() {
         mAppServiceInt = new AppServiceIntCached();
@@ -71,6 +82,40 @@ public class AppService {
         }
 
         return mAppServiceInt.getPlayerDataExtractor().bulkSigExtract(nParams, sParams);
+    }
+
+    public TvConfig getTvConfig() {
+        synchronized (mTvConfigLock) {
+            long now = SystemClock.elapsedRealtime();
+            if (now >= mTvConfigExpiresAt) {
+                mTvConfig = RetrofitHelper.get(mTvAppApi.getTvConfig());
+                String url = mTvConfig != null ? mTvConfig.getJsUrl() : null;
+                mTvPlayerData = TvConfig.isTclPlayerUrl(url) ? new TvPlayerData(url) : null;
+                mTvConfigExpiresAt = now + (mTvConfig != null ? 3_600_000 : 60_000);
+            }
+            return mTvConfig;
+        }
+    }
+
+    public AppInfo getTvAppInfo() {
+        return RetrofitHelper.get(mTvAppApi.getAppInfo(DefaultHeaders.USER_AGENT_TV_PLAYBACK));
+    }
+
+    private TvPlayerData getTvPlayerData() {
+        synchronized (mTvConfigLock) {
+            getTvConfig();
+            return mTvPlayerData;
+        }
+    }
+
+    public Pair<List<String>, List<String>> bulkTvSigExtract(List<String> nParams) {
+        TvPlayerData player = getTvPlayerData();
+        return player != null ? new Pair<>(player.extractN(nParams), null) : null;
+    }
+
+    public String getTvSignatureTimestamp() {
+        TvPlayerData player = getTvPlayerData();
+        return player != null ? player.getSignatureTimestamp() : null;
     }
 
     public List<String> extractNSig(List<String> nParams) {

@@ -400,7 +400,8 @@ public class VideoLoaderController extends BasePlayerController {
             if (resumeMs > 0) {
                 player.setPositionMs(Math.max(0, resumeMs - 750));
             }
-        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()) {
+        } else if (acceptAdaptiveFormats(formatInfo) && formatInfo.containsSabrFormats()
+                && (formatInfo.isLive() || !formatInfo.containsDashFormats())) {
             MediaItemFormatInfo.ClientInfo clientInfo = formatInfo.getClientInfo();
             Log.d(TAG, "V11_SABR_POT selected client=%s potLen=%s",
                     clientInfo != null ? clientInfo.getClientName() : "unknown",

@@ -3,6 +3,7 @@ package com.liskovsoft.youtubeapi.app;
 import com.liskovsoft.youtubeapi.app.models.AppInfo;
 import com.liskovsoft.youtubeapi.app.models.ClientData;
 import com.liskovsoft.youtubeapi.app.models.PlayerData;
+import com.liskovsoft.youtubeapi.app.models.TvConfig;
 import com.liskovsoft.googlecommon.common.converters.regexp.WithRegExp;
 
 import retrofit2.Call;
@@ -20,6 +21,9 @@ public interface AppApi {
      */
     @GET("https://www.youtube.com/tv")
     Call<AppInfo> getAppInfo(@Header("User-Agent") String userAgent);
+
+    @GET("https://www.youtube.com/tv_config?action_get_config=true&client=lb4&theme=cl")
+    Call<TvConfig> getTvConfig();
 
     /**
      * Get player version that associated with specified user agent.<br/>

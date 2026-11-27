@@ -71,6 +71,7 @@ object DefaultHeaders {
     //const val USER_AGENT_TV = USER_AGENT_SAMSUNG_3 // no buffering (only 320x180 thumbs)
     //const val USER_AGENT_TV = USER_AGENT_ATV_COMBINED // buffering badly even with protobuf params (see videoinfo)
     const val USER_AGENT_TV = USER_AGENT_TV_DOWNGRADED
+    const val USER_AGENT_TV_PLAYBACK = USER_AGENT_FIRE_TV
     const val USER_AGENT_WEB = USER_AGENT_CHROME
     const val USER_AGENT_MOBILE_WEB = USER_AGENT_MOBILE_CHROME_2
     const val USER_AGENT_ANDROID = USER_AGENT_ANDROID_20

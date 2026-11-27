@@ -34,6 +34,8 @@ import java.util.regex.Pattern
 
 internal class PoTokenWebView4 private constructor(
     context: Context,
+    private val requestKey: String,
+    private val attClient: AppClient?,
     private var onInitDone: () -> Unit
 ) : PoTokenGenerator {
     private val webView = WebView(context)
@@ -127,7 +129,9 @@ internal class PoTokenWebView4 private constructor(
 
         // YouTube now ties the BotGuard challenge to homepage ytcfg/EVENT_ID.
         // The old /att/get-only challenge can mint a token that looks valid but GVS later rejects.
-        val challenge = getChallengeFromHomepage() ?: getLegacyChallengeData() ?: return
+        val challenge = if (attClient != null) getLegacyChallengeData(attClient)
+                else getChallengeFromHomepage() ?: getLegacyChallengeData(AppClient.WEB)
+        if (challenge == null) return
         val parsedChallengeData = challenge.first
         val ytcfg = challenge.second
 
@@ -194,8 +198,7 @@ internal class PoTokenWebView4 private constructor(
     }
 
     /** Fallback used only if the homepage challenge cannot be obtained. */
-    private fun getLegacyChallengeData(): Pair<String, String?>? {
-        val client = AppClient.WEB
+    private fun getLegacyChallengeData(client: AppClient): Pair<String, String?>? {
         val responseBody = makeBotguardServiceRequest(
             "https://www.youtube.com/youtubei/v1/att/get?prettyPrint=false",
             """
@@ -236,7 +239,7 @@ internal class PoTokenWebView4 private constructor(
 
         val responseBody = makeBotguardServiceRequest(
             "https://www.youtube.com/api/jnn/v1/GenerateIT",
-            "[ \"${REQUEST_KEY}\", \"$botguardResponse\" ]",
+            "[ \"${requestKey}\", \"$botguardResponse\" ]",
         ) ?: return
 
         Log.d(TAG, "GenerateIT response received, len=${responseBody.length}")
@@ -466,7 +469,10 @@ internal class PoTokenWebView4 private constructor(
         private const val JS_INTERFACE = "PoTokenWebView"
         private const val BASE_URL = "https://jnn-pa.googleapis.com"
 
-        override fun newPoTokenGenerator(context: Context): PoTokenGenerator {
+        override fun newPoTokenGenerator(context: Context): PoTokenGenerator =
+            newPoTokenGenerator(context, REQUEST_KEY, null)
+
+        fun newPoTokenGenerator(context: Context, requestKey: String, attClient: AppClient?): PoTokenGenerator {
             if (hasThermalServiceBug(context)) {
                 throw BadWebViewException("ThermalService isn't available")
             }
@@ -482,7 +488,7 @@ internal class PoTokenWebView4 private constructor(
 
             runOnMainThread {
                 potWv = try {
-                    PoTokenWebView4(context) { latch.countDown() }
+                    PoTokenWebView4(context, requestKey, attClient) { latch.countDown() }
                 } catch (e: Throwable) {
                     initError = BadWebViewException("${e::class.simpleName}: ${e.message}")
                     latch.countDown()

@@ -3,6 +3,7 @@ package com.liskovsoft.youtubeapi.app
 import com.liskovsoft.youtubeapi.app.potoken.PoTokenService
 import com.liskovsoft.youtubeapi.app.potokencloud.PoTokenCloudService
 import com.liskovsoft.youtubeapi.app.potokennp2.PoTokenProviderImpl
+import com.liskovsoft.youtubeapi.app.potokennp2.TvPoTokenProvider
 import com.liskovsoft.youtubeapi.app.potokennp2.core.PoTokenResult
 import com.liskovsoft.youtubeapi.app.potokennp2.misc.selectFactory
 import com.liskovsoft.youtubeapi.common.helpers.AppClient
@@ -59,9 +60,17 @@ internal object PoTokenGate {
     fun getPoToken(client: AppClient, videoId: String? = null): String? {
         return when {
             client.isWebPotRequired -> if (videoId != null) getWebContentPoToken(videoId) else getWebSessionPoToken()
+            client.isTvPotRequired -> TvPoTokenProvider.getSession()?.token
             else -> null
         }
     }
+
+    @JvmStatic
+    fun getLivingRoomPoTokenId(client: AppClient): String? =
+        if (client.isTvPotRequired) TvPoTokenProvider.currentSession()?.id else null
+
+    @JvmStatic
+    fun isTvPotExpired(): Boolean = TvPoTokenProvider.currentSession() == null
 
     @JvmStatic
     fun getColdStartPoToken(client: AppClient, videoId: String): String? =
@@ -71,6 +80,7 @@ internal object PoTokenGate {
     fun getVisitorData(client: AppClient): String? {
         return when {
             client.isWebPotRequired -> getWebVisitorData()
+            client.isTvPotRequired -> TvPoTokenProvider.currentSession()?.visitorData
             else -> null
         }
     }
@@ -92,6 +102,7 @@ internal object PoTokenGate {
     @JvmStatic
     fun resetCache() {
         resetWebCache()
+        TvPoTokenProvider.reset()
     }
 
     fun getWebVisitorData(): String? {

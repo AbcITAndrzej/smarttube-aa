@@ -26,10 +26,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
     private static final String TAG = VideoInfoService.class.getSimpleName();
     private static VideoInfoService sInstance;
     private final VideoInfoApi mVideoInfoApi;
-    // Keep the same client priority as current upstream SmartTube. In particular,
-    // MWEB is deliberately late because it often exposes only one audio language;
-    // TV_DOWNGRADED is the stable first choice for the full audio/caption catalogue.
+    // Try the TV clients from SmartTube before the legacy and single-audio fallbacks.
     private final static AppClient[] VIDEO_INFO_TYPE_LIST = {
+            AppClient.TV_PLAYBACK,
+            AppClient.TV_SAMSUNG,
             AppClient.TV_DOWNGRADED,
             AppClient.WEB_EMBED,
             AppClient.WEB,
@@ -136,6 +136,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
         // The legacy SABR implementation in this app is validated only for the
         // WEB-family PoToken path. URL-less SABR returned by another client can
         // look playable to the model and still produce "Empty format info".
+        if (client.isTvPotRequired()) {
+            return (directMedia || completeSabr) && hasText(PoTokenGate.getLivingRoomPoTokenId(client));
+        }
+
         if (!client.isWebPotRequired()) {
             Log.d(TAG, "V13_GLOBAL_FALLBACK candidate client=%s direct=%s sabr=%s usable=%s",
                     client.getClientName(), directMedia, completeSabr, directMedia);
@@ -331,6 +335,10 @@ public class VideoInfoService extends VideoInfoServiceBase {
         if (client == AppClient.INITIAL) {
             result = InitialResponseService.getVideoInfo(videoId, mAuthBlock);
         } else {
+            if (client.isTvPotRequired() && PoTokenGate.getPoToken(client, videoId) == null) {
+                Log.d(TAG, "TV playback session unavailable for %s", client);
+                return null;
+            }
             String videoInfoQuery = VideoInfoApiHelper.getVideoInfoQuery(client, videoId, clickTrackingParams);
             result = getVideoInfo(client, videoInfoQuery);
         }

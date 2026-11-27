@@ -70,7 +70,12 @@ internal enum class AppClient(
     IOS(CLIENTS.IOS.NAME, CLIENTS.IOS.VERSION, CLIENT_NAME_IDS[CLIENTS.IOS.NAME],
         userAgent = CLIENTS.IOS.USER_AGENT!!, referer = null, postData = String.format(POST_DATA_IOS_MODEL, CLIENTS.IOS.DEVICE_MODEL, CLIENTS.IOS.OS_VERSION)),
     INITIAL(WEB),
-    GEO(WEB);
+    GEO(WEB),
+    TV_PLAYBACK(TV, clientVersion = "7.20260901.15.00", userAgent = DefaultHeaders.USER_AGENT_TV_PLAYBACK),
+    TV_SAMSUNG(TV, clientVersion = "5.20260707",
+        userAgent = "Mozilla/5.0 (SMART-TV; Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1");
+
+    val isTvPotRequired: Boolean get() = this == TV_PLAYBACK || this == TV_SAMSUNG
 
     constructor(baseClient: AppClient, clientVersion: String? = null, userAgent: String? = null, postData: String? = null, postDataBrowse: String? = null):
             this(baseClient.clientName, clientVersion ?: baseClient.clientVersion, baseClient.innerTubeName,
@@ -104,7 +109,7 @@ internal enum class AppClient(
     val baseTemplate by lazy { String.format(JSON_POST_DATA_BASE, clientName, clientVersion, clientScreen, userAgent,
         (postDataBrowser ?: "") + (postData ?: "")) }
 
-    val isAuthSupported by lazy { Helpers.equalsAny(this, TV, TV_LEGACY, TV_EMBED, TV_KIDS, TV_DOWNGRADED) } // NOTE: TV_SIMPLY doesn't support auth
+    val isAuthSupported by lazy { isTvPotRequired || Helpers.equalsAny(this, TV, TV_LEGACY, TV_EMBED, TV_KIDS, TV_DOWNGRADED) } // NOTE: TV_SIMPLY doesn't support auth
     val isWebPotRequired by lazy { Helpers.equalsAny(this, WEB, MWEB, WEB_EMBED, WEB_SAFARI, INITIAL, GEO) }
     // TODO: remove after implement SABR
     val isPlaybackBroken by lazy { Helpers.equalsAny(this, INITIAL, WEB, WEB_CREATOR, WEB_MUSIC, WEB_SAFARI, ANDROID_VR, GEO, MWEB, WEB_EMBED, TV_EMBED, IOS) }
